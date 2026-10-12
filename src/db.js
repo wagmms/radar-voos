@@ -120,6 +120,7 @@ function initSchema(db) {
   try { db.exec('ALTER TABLE rotas ADD COLUMN melhor_opcao_flexivel TEXT;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN sem_data INTEGER DEFAULT 0;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN dias_estadia INTEGER DEFAULT 10;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN destino_real TEXT;'); } catch (_) {}
 }
 
 /**
@@ -289,6 +290,7 @@ export const rotasRepo = {
         detalhes_voo = ?,
         dica_stopover = ?,
         link_google_flights = ?,
+        destino_real = COALESCE(?, destino_real),
         clima_destino_resumo = COALESCE(?, clima_destino_resumo),
         clima_temp_media = COALESCE(?, clima_temp_media),
         melhor_opcao_flexivel = COALESCE(?, melhor_opcao_flexivel),
@@ -307,6 +309,7 @@ export const rotasRepo = {
       resultado.detalhes_voo ?? null,
       resultado.dica_stopover ?? null,
       linkNovo,
+      resultado.destino_real ?? resultado.destinoReal ?? null,
       resultado.clima_destino_resumo ?? null,
       resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
       melhorFlexivelStr,

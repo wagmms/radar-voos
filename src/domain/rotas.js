@@ -201,21 +201,48 @@ export function validarPeriodo(dataIdaStr, dataVoltaStr, tipo, semData = false) 
   return { ok: true };
 }
 
+export const KGMID_PARA_NOME = {
+  "/m/02j9z": "Europe",
+  "/m/09c7w0": "United States",
+  "/m/05r4w": "Portugal",
+  "/m/06mkj": "Spain",
+  "/m/0f8l9c": "France",
+  "/m/03rjj": "Italy",
+  "/m/01n7q": "Chile",
+  "/m/06_1": "South America"
+};
+
 /**
- * Gera link direto e estruturado para o Google Flights
+ * Converte códigos IATA, KGMIDs ou nomes com parênteses em termos aceitos pelo Google Flights
+ */
+export function resolverCodigoParaLink(cod) {
+  if (!cod) return 'SAO';
+  const str = String(cod).trim();
+  const matchIata = str.match(/\(([A-Z]{3})\)/);
+  if (matchIata) return matchIata[1];
+  if (KGMID_PARA_NOME[str]) return KGMID_PARA_NOME[str];
+  if (str.startsWith('/m/') || str.startsWith('/g/')) return str.replace(/^\/[mg]\//, '');
+  return str;
+}
+
+/**
+ * Gera link direto e estruturado para o Google Flights que abre direto no voo / rota
  */
 export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta) {
-  const origemParam = encodeURIComponent(origemCod);
-  const destinoParam = encodeURIComponent(destinoCod);
+  const origemRes = resolverCodigoParaLink(origemCod);
+  const destinoRes = resolverCodigoParaLink(destinoCod);
+
+  const origemParam = encodeURIComponent(origemRes);
+  const destinoParam = encodeURIComponent(destinoRes);
 
   if (!dataIda) {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}`;
+    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}&hl=pt-BR&curr=BRL`;
   }
 
   if (dataVolta) {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20through%20${dataVolta}`;
+    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20through%20${dataVolta}&hl=pt-BR&curr=BRL`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20one-way`;
+    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20one-way&hl=pt-BR&curr=BRL`;
   }
 }
 

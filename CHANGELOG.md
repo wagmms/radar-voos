@@ -7,6 +7,21 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.5.2] - 2026-10-12
+
+### 🔗 Correção de Links Diretos do Google Flights e Captura Canônica de Destino Real
+- **Eliminação de Links Quebrados com KGMID (`src/domain/rotas.js`)**:
+  - `gerarLinkGoogleFlights` agora resolve códigos internos como `/m/02j9z` (Europa), `/m/09c7w0` (EUA) para termos de busca semântica em inglês válidos (`Europe`, `United States`) com `hl=pt-BR&curr=BRL`.
+  - Links nunca mais são descartados pelo Google Flights, eliminando o redirecionamento indevido para a tela inicial vazia.
+- **Rastreamento e Persistência do Destino Específico em Rotas Regionais**:
+  - Em buscas abrangentes (ex: São Paulo ➔ Europa), os provedores agora capturam o aeroporto e cidade reais de chegada (ex: `Aeroporto Humberto Delgado (LIS)`).
+  - A coluna `destino_real` foi adicionada na tabela `rotas` do SQLite e persistida via `atualizarResultadoChecagem`.
+  - O card no Cockpit PWA agora exibe claramente o destino verificado (ex: `📍 Aeroporto Humberto Delgado (LIS)`).
+  - O link do Google Flights aponta diretamente para o voo encontrado no aeroporto de destino final ou usa a URL canônica com parâmetros `tfs` da SerpAPI.
+- **Saneamento e Correção de Bug Fares**:
+  - Removidos registros espúrios antigos de Bug Fare que apontavam para links quebrados.
+  - Alertas de Bug Fare agora trazem o destino real da oferta (ex: `São Paulo ➔ Aeroporto Humberto Delgado (LIS) (Europa)`).
+
 ## [2.5.1] - 2026-10-12
 
 ### 🥷 Evasão Stealth e Parser Multicamada do Google Flights (Custo Zero Real)

@@ -336,7 +336,10 @@ function renderizarRotas() {
             <span class="airport-badge">${escapeHtml(rota.codigo_origem || 'SAO')}</span>
             <span class="route-arrow">➔</span>
             <span class="airport-badge">${escapeHtml(rota.codigo_destino || 'DEST')}</span>
-            <div class="city-names">${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}</div>
+            <div class="city-names">
+              ${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}
+              ${rota.destino_real && rota.destino_real !== rota.destino && rota.destino_real !== rota.codigo_destino ? `<span style="display:block; font-size:0.75rem; color:#10b981; font-weight:600; margin-top:2px;">📍 ${escapeHtml(rota.destino_real)}</span>` : ''}
+            </div>
           </div>
           <span class="trip-type-tag ${rota.sem_data === 1 ? 'tag-flexivel' : ''}">${tipoViagem}${flexTag}${cabineTag}</span>
         </div>

@@ -135,11 +135,13 @@ export class SerpApiProvider extends FlightProviderInterface {
         if (duracaoMinutos > duracaoMaxMinutos) continue;
 
         let destinoFinal = destinoCod;
+        let codigoDestinoReal = destinoCod;
         const segmentos = Array.isArray(voo.flights) ? voo.flights : [];
         if (segmentos.length > 0) {
           const ult = segmentos[segmentos.length - 1];
           if (ult && ult.arrival_airport) {
             destinoFinal = `${ult.arrival_airport.name} (${ult.arrival_airport.id})`;
+            codigoDestinoReal = ult.arrival_airport.id;
           }
         }
 
@@ -152,16 +154,22 @@ export class SerpApiProvider extends FlightProviderInterface {
         const escalas = Math.max(0, segmentos.length - 1);
         const { dicaStopover } = analisarLayoversEStopover(voo);
 
+        // Se o destino da rota era uma região/KGMID, o link deve apontar direto para o aeroporto do voo encontrado
+        const linkVooEspecifico = (json.search_metadata && json.search_metadata.google_flights_url)
+          ? json.search_metadata.google_flights_url
+          : gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta);
+
         if (!melhorOpcao || preco < melhorOpcao.preco) {
           melhorOpcao = {
             preco,
             duracaoHoras: duracaoMinutos / 60,
             destinoReal: destinoFinal,
+            codigoDestinoReal,
             termometro,
             nivelPreco,
             detalhes: `${escalas} escala(s) | ${cias}`,
             dicaStopover,
-            link: linkWebEstruturado,
+            link: linkVooEspecifico,
             provedor: this.nome
           };
         }

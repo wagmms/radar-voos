@@ -200,7 +200,10 @@ export class FlightScanner {
     });
 
     if (analiseBug.ehBugFare) {
-      const tituloBug = `🚨 BUG FARE: ${rota.origem} ➔ ${rota.destino} por R$ ${oferta.preco.toFixed(0)}! (${analiseBug.motivo})`;
+      const destinoExibicao = (oferta.destinoReal && oferta.destinoReal !== rota.codigo_destino && oferta.destinoReal !== rota.destino)
+        ? `${oferta.destinoReal} (${rota.destino})`
+        : (rota.destino);
+      const tituloBug = `🚨 BUG FARE: ${rota.origem} ➔ ${destinoExibicao} por R$ ${oferta.preco.toFixed(0)}! (${analiseBug.motivo})`;
       bugFaresRepo.inserir(tituloBug, oferta.link, analiseBug.tipo);
 
       telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
@@ -209,7 +212,7 @@ export class FlightScanner {
         preco: oferta.preco,
         rotaId: rota.id,
         origem: rota.origem,
-        destino: rota.destino
+        destino: destinoExibicao
       });
 
       // Alerta de urgência máxima no Telegram (quebra modo noturno)
@@ -230,6 +233,7 @@ export class FlightScanner {
       detalhes_voo: `${oferta.duracaoHoras.toFixed(1)}h | ${oferta.detalhes}`,
       dica_stopover: oferta.dicaStopover,
       link_google_flights: oferta.link,
+      destino_real: oferta.destinoReal || undefined,
       clima_destino_resumo: clima.ok ? clima.resumo : null,
       clima_temp_media: clima.ok ? clima.tempMedia : null,
       melhor_opcao_flexivel: melhorOpcaoFlexivel

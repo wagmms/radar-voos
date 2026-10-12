@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.5.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.5.2)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.5.1 operacional (60/60 testes passando), com motor stealth multicamada de extração direta do Google Flights em custo zero, failover instantâneo para o pool SerpAPI e Two-Way Sync bidirecional com GitHub ativo.
-- **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas aéreas com custo zero de API, evasão stealth e paridade total de dados.
-- **Última Tarefa Concluída**: Implementação do parser multicamada stealth em `src/services/providers/google_flights_direct_provider.js` extraindo voos completos, companhias aéreas, durações e preços em Reais diretamente dos atributos `aria-label` do Google Flights sem gastar cotas da SerpAPI.
+- **Estado Geral**: 🟢 Radar v2.5.2 operacional (60/60 testes passando), com resolução canônica de links do Google Flights (zero redirecionamento para home vazia), captura do destino real em rotas regionais (ex: Europa ➔ LIS/MAD), eliminação de bug fares fantasmas e Two-Way Sync ativo.
+- **Diretriz Prioritária**: Monitoramento proativo 24/7 com links 100% navegáveis diretamente para as ofertas e identificação cirúrgica dos destinos reais encontrados.
+- **Última Tarefa Concluída**: Resolução de KGMIDs em `src/domain/rotas.js` (`gerarLinkGoogleFlights`), persistência de `destino_real` em `src/db.js` e exibição no Cockpit PWA `src/public/app.js`, geração de links diretos apontando para a cidade real de chegada em `src/services/providers/serpapi_provider.js` e higienização de bug fares espúrios.
 
 ---
 
