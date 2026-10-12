@@ -60,7 +60,11 @@ export const MAPA_AEROPORTOS_SERPAPI = {
   "TYO": "HND,NRT",
   "WAS": "IAD,DCA",
   "CHI": "ORD,MDW",
-  "BHZ": "CNF"
+  "BHZ": "CNF",
+  "NORDESTE": "REC,SSA",
+  "SUL": "CWB,POA,FLN",
+  "SUDESTE": "GRU,GIG,CNF",
+  "NORTE": "BEL,MAO"
 };
 
 // Regiões e Países (IDs KGMID/Freebase para busca abrangente no Google Flights)
@@ -78,7 +82,14 @@ export const DICIONARIO_REGIOES = {
   "uruguai": "MVD",
   "peru": "LIM",
   "colombia": "BOG",
-  "america do sul": "BUE"
+  "america do sul": "BUE",
+  "nordeste": "REC,SSA",
+  "sul": "CWB,POA,FLN",
+  "sudeste": "SAO,RIO,BHZ",
+  "norte": "BEL,MAO",
+  "centro oeste": "BSB,GYN,CGB",
+  "centro-oeste": "BSB,GYN,CGB",
+  "caribe": "CUN,PUJ"
 };
 
 // Custo Diário Médio no Destino (em R$, considerando hospedagem econômica + refeições + transporte local)

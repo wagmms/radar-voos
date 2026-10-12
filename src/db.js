@@ -115,10 +115,18 @@ export const rotasRepo = {
 
   criar: (dados) => {
     const db = getDb();
-    const codigoOrigem = resolverDestino(dados.origem);
-    const codigoDestino = resolverDestino(dados.destino);
+    const codigoOrigem = dados.codigo_origem || resolverDestino(dados.origem);
+    const codigoDestino = dados.codigo_destino || resolverDestino(dados.destino);
+
+    if (!codigoOrigem) {
+      throw new Error(`Origem não reconhecida: '${dados.origem}'. Informe uma cidade válida ou código IATA.`);
+    }
+    if (!codigoDestino) {
+      throw new Error(`Destino não reconhecido: '${dados.destino}'. Informe a cidade, região ou código IATA.`);
+    }
+
     const dataVolta = calcularDataVolta(dados.data_ida, dados.data_volta);
-    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dados.data_ida, dataVolta);
+    const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dados.data_ida, dataVolta);
 
     const stmt = db.prepare(`
       INSERT INTO rotas (
@@ -399,7 +407,7 @@ export const chavesRepo = {
 export function popularDadosIniciaisSeVazio() {
   const db = getDb();
   const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
-  if (contagem > 0) return;
+  if (contagem >= 7) return;
 
   const rotasIniciais = [
     { origem: 'São Paulo', destino: 'Europa', data_ida: '2026-11-10', data_volta: '14', duracao_max_horas: 16, preco_alvo: 4200 },
@@ -413,6 +421,9 @@ export function popularDadosIniciaisSeVazio() {
   ];
 
   for (const r of rotasIniciais) {
-    rotasRepo.criar(r);
+    const jaExiste = db.prepare('SELECT id FROM rotas WHERE origem = ? AND destino = ? AND data_ida = ?').get(r.origem, r.destino, r.data_ida);
+    if (!jaExiste) {
+      rotasRepo.criar(r);
+    }
   }
 }

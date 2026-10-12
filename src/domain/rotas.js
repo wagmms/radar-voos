@@ -31,6 +31,9 @@ export function resolverDestino(texto) {
   if (trimOriginal.length === 3 && /^[A-Za-z]{3}$/.test(trimOriginal)) {
     return trimOriginal.toUpperCase();
   }
+  if (/^[A-Za-z]{3}(,[A-Za-z]{3})+$/.test(trimOriginal)) {
+    return trimOriginal.toUpperCase();
+  }
   if (trimOriginal.startsWith('/m/') || trimOriginal.startsWith('/g/')) {
     return trimOriginal;
   }
