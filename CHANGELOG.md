@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.5.1] - 2026-10-12
+
+### 🥷 Evasão Stealth e Parser Multicamada do Google Flights (Custo Zero Real)
+- **Descoberta e Engenharia Reversa do Google Flights DOM (`src/services/providers/google_flights_direct_provider.js`)**:
+  - Identificada a estrutura de dados de acessibilidade nos atributos `aria-label` do Google Flights, onde as tarifas completas, durações, companhias aéreas e paradas são expostas em texto estruturado em português (`aria-label="Preço total a partir de X Reais brasileiros..."`).
+- **Parser Multicamada de Alta Precisão**:
+  - **Camada A**: Extrai cartões de voos ricos com preço em reais, companhia aérea (ex: Tap Air Portugal, LATAM, Azul, Air Canada), tipo de voo (direto vs com escalas) e duração em horas.
+  - **Camada B**: Fallback para marcações pontuais de tarifas em `aria-label`.
+  - **Camada C**: Fallback para padrões textuais monetários em `BRL`/`R$`.
+- **Evasão Anti-Bot com Headers e Cookies Autênticos**:
+  - Injeção forçada de parâmetros de localização canônicos (`hl=pt-BR&curr=BRL`), garantindo consistência monetária.
+  - Rotação de User-Agents Chromium 130 nos três principais SOs (Windows, macOS, Linux).
+  - Injeção de cookies de sessão e consentimento pré-aceito (`SOCS`, `1P_JAR`, `NID`) para neutralizar redirecionamentos do GDPR/consent.
+- **Failover Instantâneo para o Pool SerpAPI**:
+  - Se uma rota for redirecionada para exploração ou vier sem blocos imediatos no HTML cru, o `FlightProviderManager` aciona transparentemente o pool SerpAPI sem perda de continuidade.
+
 ## [2.5.0] - 2026-10-12
 
 ### 🔄 Sincronização Bidirecional Real (Two-Way Sync: Web/Produção ↔ Ambiente Local)

@@ -25,6 +25,16 @@ const USER_AGENTS_STEALTH = [
   }
 ];
 
+function converterDuracaoParaHoras(str) {
+  if (!str) return 12.0;
+  const matchH = str.match(/(\d+)\s*h/i);
+  const matchM = str.match(/(\d+)\s*min/i);
+  const h = matchH ? parseInt(matchH[1], 10) : 0;
+  const m = matchM ? parseInt(matchM[1], 10) : 0;
+  const total = h + (m / 60);
+  return total > 0 ? parseFloat(total.toFixed(1)) : 12.0;
+}
+
 export class GoogleFlightsDirectProvider extends FlightProviderInterface {
   constructor() {
     super('Google Flights Direct (0 Custo)');
@@ -37,7 +47,8 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
   }
 
   async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
-    const linkWebEstruturado = gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+    const linkBase = gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+    const linkConsulta = `${linkBase}&hl=pt-BR&curr=BRL`;
 
     try {
       // 1. Rotação dinâmica de fingerprint para evitar perfil estático de bot
@@ -63,7 +74,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         'Cookie': 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn'
       };
 
-      const resp = await fetch(linkWebEstruturado, {
+      const resp = await fetch(linkConsulta, {
         headers,
         signal: controller.signal,
         redirect: 'follow'
@@ -71,7 +82,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
 
       clearTimeout(timeoutId);
 
-      // 3. Detecção de bloqueio de bot (sorry/index ou 429) -> aciona failover instantâneo
+      // 3. Detecção de bloqueio de bot (sorry/index, 429 ou consent) -> aciona failover instantâneo
       if (resp.status === 429 || resp.url.includes('sorry/index') || resp.url.includes('consent.google.com')) {
         return {
           ok: false,
@@ -90,20 +101,63 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
 
       const html = await resp.text();
 
-      // 4. Parser regex / heurístico de preços em BRL no HTML renderizado do Google Flights
-      const precosEncontrados = [];
-      const regexBRL = /(?:R\$|BRL)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
-      let match;
-      while ((match = regexBRL.exec(html)) !== null) {
-        const valLimpo = match[1].replace(/\./g, '');
-        const num = parseFloat(valLimpo);
-        if (num >= 150 && num <= 45000) { // Filtra ruídos
-          precosEncontrados.push(num);
+      // 4. Parser multicamada de voos
+      const voosDetalhados = [];
+
+      // Camada A: Detalhes ricos estruturados nos atributos aria-label
+      const regexAriaCard = /aria-label=[\"']Preço total a partir de\s*(\d+)\s*(?:Reais brasileiros|BRL|reais)[\s\S]*?Voo\s*([^.]*?)\s*da\s*([^.]+)\.[\s\S]*?Duração total:\s*([^.]+)\.[\s\S]*?[\"']/gi;
+      let matchCard;
+      while ((matchCard = regexAriaCard.exec(html)) !== null) {
+        const preco = parseInt(matchCard[1], 10);
+        if (preco >= 120 && preco <= 45000) {
+          voosDetalhados.push({
+            preco,
+            tipo: matchCard[2].trim(),
+            cia: matchCard[3].trim(),
+            duracaoTexto: matchCard[4].trim(),
+            duracaoHoras: converterDuracaoParaHoras(matchCard[4].trim())
+          });
         }
       }
 
-      if (precosEncontrados.length === 0) {
-        // Se a página retornou um desafio/captcha ou JS denso que escondeu o texto cru:
+      // Camada B: Fallback de preços gerais em aria-label (quando texto não tiver formato completo de cartão)
+      if (voosDetalhados.length === 0) {
+        const regexAriaPreco = /aria-label=[\"'](?:Preço total a partir de\s*)?(\d+)\s*Reais brasileiros[\"']/gi;
+        let matchPreco;
+        while ((matchPreco = regexAriaPreco.exec(html)) !== null) {
+          const preco = parseInt(matchPreco[1], 10);
+          if (preco >= 120 && preco <= 45000) {
+            voosDetalhados.push({
+              preco,
+              tipo: 'Voo Regular',
+              cia: 'Companhia Aérea',
+              duracaoTexto: '12 h',
+              duracaoHoras: 12.0
+            });
+          }
+        }
+      }
+
+      // Camada C: Fallback para padrões textuais de BRL/R$
+      if (voosDetalhados.length === 0) {
+        const regexBRL = /(?:R\$|BRL)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
+        let matchBRL;
+        while ((matchBRL = regexBRL.exec(html)) !== null) {
+          const valLimpo = matchBRL[1].replace(/\./g, '');
+          const num = parseFloat(valLimpo);
+          if (num >= 120 && num <= 45000) {
+            voosDetalhados.push({
+              preco: num,
+              tipo: 'Voo Regular',
+              cia: 'Companhia Aérea',
+              duracaoTexto: '12 h',
+              duracaoHoras: 12.0
+            });
+          }
+        }
+      }
+
+      if (voosDetalhados.length === 0) {
         return {
           ok: false,
           erro: true,
@@ -111,22 +165,31 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         };
       }
 
-      // Menor preço verificado no resultado
-      precosEncontrados.sort((a, b) => a - b);
-      const menorPreco = precosEncontrados[0];
+      // Filtrar por duração máxima estipulada pelo usuário (se aplicável)
+      const filtrados = duracaoMaxHoras && duracaoMaxHoras < 900
+        ? voosDetalhados.filter(v => v.duracaoHoras <= duracaoMaxHoras)
+        : voosDetalhados;
+
+      const listaFinal = filtrados.length > 0 ? filtrados : voosDetalhados;
+      listaFinal.sort((a, b) => a.preco - b.preco);
+      const melhorOferta = listaFinal[0];
+
+      const detalhesVoo = melhorOferta.cia !== 'Companhia Aérea'
+        ? `${melhorOferta.cia} | ${melhorOferta.tipo} | Duração: ${melhorOferta.duracaoTexto} | Tarifa Direta Stealth`
+        : `Tarifa Direta Google Flights (${melhorOferta.duracaoTexto})`;
 
       return {
         ok: true,
         encontrouVoos: true,
         oferta: {
-          preco: menorPreco,
-          duracaoHoras: 12.0,
+          preco: melhorOferta.preco,
+          duracaoHoras: melhorOferta.duracaoHoras,
           destinoReal: destinoCod,
           termometro: '🟢 Preço Competitivo (Google Flights Direct)',
           nivelPreco: 'low',
-          detalhes: 'Voo direto/1 escala | Tarifa extraída diretamente sem API',
+          detalhes: detalhesVoo,
           dicaStopover: '-',
-          link: linkWebEstruturado,
+          link: linkBase,
           provedor: this.nome
         }
       };

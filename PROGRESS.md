@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.5.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.5.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.5.0 operacional e 100% autônomo (60/60 testes passando), com Sincronização Bidirecional Real (Two-Way Sync: Web/Produção ↔ Local): qualquer modificação feita no Cockpit Web do Render é automaticamente refletida no ambiente local e no banco SQLite, e os deploys nunca mais sobrescrevem as rotas do usuário.
-- **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas e oportunidades aéreas no GDS com custo zero, paridade total entre ambientes e zero spam de notificações.
-- **Última Tarefa Concluída**: Implementação do Two-Way Sync Bidirecional em `src/services/rotas_sync.js` (`puxarDoGitHub`, `sincronizarRotasComBanco`, `sincronizarNoStartup`), integração no startup de `src/index.js`, rota `POST /api/rotas/sync-pull` em `src/server/routes/rotas_routes.js`, sincronização em tempo real no Cockpit PWA `src/public/app.js`, blindagem contra sobrescrita de `data/rotas.json` em testes e criação da suíte `tests/rotas_sync.test.js`.
+- **Estado Geral**: 🟢 Radar v2.5.1 operacional (60/60 testes passando), com motor stealth multicamada de extração direta do Google Flights em custo zero, failover instantâneo para o pool SerpAPI e Two-Way Sync bidirecional com GitHub ativo.
+- **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas aéreas com custo zero de API, evasão stealth e paridade total de dados.
+- **Última Tarefa Concluída**: Implementação do parser multicamada stealth em `src/services/providers/google_flights_direct_provider.js` extraindo voos completos, companhias aéreas, durações e preços em Reais diretamente dos atributos `aria-label` do Google Flights sem gastar cotas da SerpAPI.
 
 ---
 
