@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.6.3)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.6.4)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.6.3 operacional (68/68 testes passando). Implementada estratégia híbrida em `FlightProviderManager`: quando o provedor direto no ambiente de nuvem (Render) recebe apenas a tarifa oficial da cia aérea (R$ 741), a SerpAPI com proxy residencial é acionada complementarmente para desvendar as tarifas de parceiros e OTAs (R$ 587 a R$ 593).
-- **Diretriz Prioritária**: Garantir que o menor preço absoluto da rota seja eleito e refletido no Cockpit PWA e alertas.
-- **Última Tarefa Concluída**: Integração de eleição de menor tarifa entre provedores no `FlightProviderManager`, garantindo captura de OTAs em nuvem e link direto para a aba Cheapest.
+- **Estado Geral**: 🟢 Radar v2.6.4 operacional (70/70 testes passando). Implementado seletor de tipo de viagem explícito (Ida e Volta vs Apenas Ida), indicador dinâmico de escopo de teto (`#badge-teto-escopo`) e caixa explicativa contextual (`#hint-teto-explicacao`) para voos de datas flexíveis e fixas no Cockpit PWA, cards de rotas e Telegram.
+- **Diretriz Prioritária**: Fornecer máxima clareza ao usuário sobre para qual modalidade (Só Ida vs Ida e Volta) o teto de preço está sendo configurado e monitorado pelo radar.
+- **Última Tarefa Concluída**: Implementação do seletor de tipo de viagem, indicador dinâmico contextual do teto no modal, exibição de teto nos cards e cobertura automatizada de testes para flexibilidade Só Ida vs Ida e Volta.
 
 ---
 

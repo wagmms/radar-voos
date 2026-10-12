@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { rotasRepo, bugFaresRepo } from '../db.js';
 import { serpApiPool } from './serpapi_pool.js';
 import { weatherService } from './weather_service.js';
+import { ehSoIda } from '../domain/rotas.js';
 
 export function escapeHtml(texto) {
   return String(texto || '')
@@ -111,7 +112,9 @@ class NotifierTelegram {
     semData = false,
     labelJanela = null
   }) {
-    const voltaTexto = dataVolta ? ` até ${dataVolta}` : ' (Só Ida)';
+    const ehSoIdaAlerta = ehSoIda(dataVolta);
+    const escopoModalidade = ehSoIdaAlerta ? 'Apenas Ida' : 'Ida e Volta';
+    const voltaTexto = dataVolta && !ehSoIdaAlerta ? ` até ${dataVolta}` : '';
     let prefixoAssunto = '✈️ OPORTUNIDADE DE VOO';
     let emoji = '✈️';
 
@@ -130,13 +133,13 @@ class NotifierTelegram {
     msg += `✈️ <b>${escapeHtml(origem)} ➔ ${escapeHtml(destinoReal)}</b>\n`;
 
     if (semData) {
-      msg += `📅 <b>Melhor Período:</b> ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)}${labelJanela ? ` • <i>${escapeHtml(labelJanela)}</i>` : ''}\n`;
-      msg += `✨ <i>Modo Flexível Ativo: rastreando a menor tarifa nos próximos meses.</i>\n`;
+      msg += `📅 <b>Melhor Período:</b> ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)} (<i>${escopoModalidade}</i>)${labelJanela ? ` • <i>${escapeHtml(labelJanela)}</i>` : ''}\n`;
+      msg += `✨ <i>Modo Flexível Ativo: rastreando a menor tarifa (${escopoModalidade}) nos próximos meses.</i>\n`;
     } else {
-      msg += `📅 ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)}\n`;
+      msg += `📅 ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)} (<i>${escopoModalidade}</i>)\n`;
     }
 
-    msg += `💰 <b>Voo: R$ ${preco.toFixed(2).replace('.', ',')}</b>\n`;
+    msg += `💰 <b>Voo (${escopoModalidade}): R$ ${preco.toFixed(2).replace('.', ',')}</b>\n`;
 
     if (variacaoTexto && variacaoTexto !== 'Estável' && variacaoTexto !== 'Primeira Checagem') {
       msg += `📊 ${escapeHtml(variacaoTexto)}\n`;
@@ -328,13 +331,15 @@ class NotifierTelegram {
         const precoStr = r.preco_atual ? `R$ ${r.preco_atual.toFixed(2)}` : 'Aguardando checagem';
         const silenciada = rotasRepo.estaSilenciada(r) ? ' 🔕 [Silenciada]' : '';
         const climaStr = r.clima_destino_resumo ? ` | 🌤️ ${r.clima_destino_resumo}` : '';
-        const tagFlex = r.sem_data ? ' 🗓️ [Flexível / Menor Preço]' : '';
+        const ehSoIdaRota = ehSoIda(r.data_volta);
+        const escopoTeto = ehSoIdaRota ? 'Apenas Ida' : 'Ida e Volta';
+        const tagFlex = r.sem_data ? ` 🗓️ [Flexível • ${escopoTeto}]` : (r.flexibilidade_dias > 0 ? ` [±${r.flexibilidade_dias}d FLEX]` : '');
 
         resposta += `• <b>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</b>${tagFlex}${silenciada}\n`;
         resposta += r.sem_data
-          ? `  📅 Melhor período: ${r.data_ida}${r.data_volta ? ' até ' + r.data_volta : ' (Só Ida)'}\n`
-          : `  📅 ${r.data_ida}${r.data_volta ? ' até ' + r.data_volta : ' (Só Ida)'}\n`;
-        resposta += `  💰 Preço Atual: <b>${precoStr}</b> | Meta: R$ ${r.preco_alvo || '-'}\n`;
+          ? `  📅 Melhor período: ${r.data_ida}${r.data_volta && !ehSoIdaRota ? ' até ' + r.data_volta : ''} (${escopoTeto})\n`
+          : `  📅 ${r.data_ida}${r.data_volta && !ehSoIdaRota ? ' até ' + r.data_volta : ''} (${escopoTeto})\n`;
+        resposta += `  💰 Preço Atual: <b>${precoStr}</b> | Meta/Teto: ${r.preco_alvo ? `R$ ${r.preco_alvo.toFixed(2)} (${escopoTeto})` : '-'}\n`;
         resposta += `  🌡️ ${escapeHtml(r.termometro || 'Sem dados')}${climaStr}\n\n`;
       }
 

@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.6.4] - 2026-10-12
+
+### 🎯 Escopo Cristalino do Teto de Preço para Voos Flexíveis (Só Ida vs Ida e Volta)
+- **Seletor de Tipo de Viagem Explícito e Contexto do Teto (`src/public/index.html` e `src/public/app.js`)**:
+  - Adicionado seletor visual com chips dedicados para **🔄 Ida e Volta** e **➡️ Apenas Ida** no formulário de inclusão e edição de rotas.
+  - Criado indicador dinâmico de escopo (`#badge-teto-escopo`) e caixa explicativa em tempo real (`#hint-teto-explicacao`) junto ao campo de **Preço Alvo / Teto (R$)**.
+  - O usuário visualiza com 100% de clareza se o teto que está estipulando é para o **valor total de ida + volta** (com estadia configurada) ou para a **tarifa de apenas ida**, contextualizando automaticamente o comportamento do algoritmo nos modos de data flexível (sem data fixa ou janela de ±X dias).
+- **Exibição do Teto e Modalidade nos Cards do Cockpit Web (`src/public/app.js` e `src/public/styles.css`)**:
+  - Cards de voos no Cockpit PWA agora exibem tags específicas (`🗓️ FLEXÍVEL • SÓ IDA` vs `🗓️ FLEXÍVEL • IDA E VOLTA (Xd)`).
+  - Adicionada linha dedicada `.card-teto-row` exibindo o teto cadastrado acompanhado de pílula visual indicativa (`Apenas Ida` ou `Ida e Volta`).
+- **Comunicação Enriquecida no Telegram Bot (`src/services/notifier_telegram.js`)**:
+  - Comando `/rotas` e alertas de oportunidade passam a declarar explicitamente se a tarifa encontrada e a meta pertencem a `Ida e Volta` ou `Apenas Ida`.
+- **Validação e Scanner Defensivo (`src/services/flight_scanner.js` e `tests/rotas_flexibilidade.test.js`)**:
+  - Incorporada verificação canônica com `ehSoIda` na geração de janelas flexíveis e matriz adjacente, eliminando divergências de tipos.
+  - Adicionados testes automatizados validando o escopo do teto para Só Ida e Ida e Volta (70/70 testes aprovados).
+
 ## [2.6.3] - 2026-10-12
 
 ### ⚡ Estratégia Híbrida de Provedores com Descoberta de Tarifas de OTAs em Nuvem

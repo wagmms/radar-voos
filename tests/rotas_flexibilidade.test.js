@@ -3,7 +3,8 @@ import assert from 'node:assert';
 import {
   somarDiasData,
   gerarCombinacoesFlexibilidade,
-  gerarJanelasExploracaoSemData
+  gerarJanelasExploracaoSemData,
+  ehSoIda
 } from '../src/domain/rotas.js';
 import { rotasRepo } from '../src/db.js';
 
@@ -149,5 +150,65 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
 
     // Limpar rota
     rotasRepo.excluir(rotaFlex.id);
+  });
+
+  it('deve criar rota flexível sem data no modo Só Ida e manter data_volta como null', () => {
+    const rotaSoIda = rotasRepo.criar({
+      origem: 'São Paulo',
+      destino: 'Lisboa',
+      sem_data: 1,
+      data_volta: 'Só Ida',
+      preco_alvo: 1900
+    });
+
+    assert.ok(rotaSoIda);
+    assert.strictEqual(rotaSoIda.sem_data, 1);
+    assert.strictEqual(rotaSoIda.data_volta, null);
+    assert.strictEqual(ehSoIda(rotaSoIda.data_volta), true);
+    assert.strictEqual(rotaSoIda.preco_alvo, 1900);
+
+    // Janelas geradas para essa rota devem ser estritamente só ida
+    const janelas = gerarJanelasExploracaoSemData({
+      dataBase: rotaSoIda.data_ida,
+      qtdAmostras: 3,
+      soIda: ehSoIda(rotaSoIda.data_volta)
+    });
+
+    assert.strictEqual(janelas.length, 3);
+    janelas.forEach(j => {
+      assert.ok(j.dataIda);
+      assert.strictEqual(j.dataVolta, null, 'No modo Só Ida a dataVolta das amostras deve ser estritamente null');
+    });
+
+    rotasRepo.excluir(rotaSoIda.id);
+  });
+
+  it('deve identificar corretamente se o teto configurado se aplica a Apenas Ida ou Ida e Volta', () => {
+    // Caso 1: Rota sem data com estadia
+    const rotaRound = rotasRepo.criar({
+      origem: 'Rio de Janeiro',
+      destino: 'Paris',
+      sem_data: 1,
+      data_volta: '14 dias',
+      preco_alvo: 4200
+    });
+    assert.strictEqual(ehSoIda(rotaRound.data_volta), false);
+    const escopoRound = ehSoIda(rotaRound.data_volta) ? 'Apenas Ida' : 'Ida e Volta';
+    assert.strictEqual(escopoRound, 'Ida e Volta');
+
+    // Caso 2: Rota sem data só ida
+    const rotaOneWay = rotasRepo.criar({
+      origem: 'Rio de Janeiro',
+      destino: 'Paris',
+      sem_data: 1,
+      data_volta: 'Só Ida',
+      preco_alvo: 2100
+    });
+    assert.strictEqual(ehSoIda(rotaOneWay.data_volta), true);
+    const escopoOneWay = ehSoIda(rotaOneWay.data_volta) ? 'Apenas Ida' : 'Ida e Volta';
+    assert.strictEqual(escopoOneWay, 'Apenas Ida');
+
+    rotasRepo.excluir(rotaRound.id);
+    rotasRepo.excluir(rotaOneWay.id);
   });
 });

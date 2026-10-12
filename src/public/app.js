@@ -215,8 +215,26 @@ function setupEventListeners() {
     sincronizarComGitHubRemoto();
   });
 
-  // Form Nova Rota e Toggle de Voo Flexível
+  // Form Nova Rota, Tipo de Viagem e Toggle de Voo Flexível
   document.getElementById('input-sem-data')?.addEventListener('change', atualizarVisualModoFlexivel);
+  document.getElementById('btn-tipo-roundtrip')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    definirTipoViagemFormulario('round_trip');
+  });
+  document.getElementById('btn-tipo-oneway')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    definirTipoViagemFormulario('one_way');
+  });
+  document.getElementById('input-data-volta')?.addEventListener('input', (e) => {
+    const val = (e.target.value || '').toLowerCase();
+    if (val.includes('só ida') || val.includes('so ida')) {
+      sincronizarTipoViagemBotao('one_way');
+    } else if (val.length > 0) {
+      sincronizarTipoViagemBotao('round_trip');
+    }
+    atualizarContextoTeto();
+  });
+  document.getElementById('input-flexibilidade')?.addEventListener('change', atualizarContextoTeto);
   document.getElementById('form-nova-rota')?.addEventListener('submit', criarNovaRota);
 }
 
@@ -323,9 +341,12 @@ function renderizarRotas() {
       termoClass = 'low';
     }
 
+    const ehSoIda = !rota.data_volta ||
+      (typeof rota.data_volta === 'string' && (rota.data_volta.toLowerCase().includes('só ida') || rota.data_volta.toLowerCase().includes('so ida')));
+
     const tipoViagem = rota.sem_data === 1
-      ? '🗓️ VOO FLEXÍVEL (MENOR PREÇO)'
-      : (rota.data_volta ? 'IDA E VOLTA' : 'SÓ IDA');
+      ? (ehSoIda ? '🗓️ FLEXÍVEL • SÓ IDA' : `🗓️ FLEXÍVEL • IDA E VOLTA (${rota.dias_estadia || 10}d)`)
+      : (ehSoIda ? 'SÓ IDA' : 'IDA E VOLTA');
     const flexTag = rota.flexibilidade_dias && rota.flexibilidade_dias > 0 && rota.sem_data !== 1 ? ` • ±${rota.flexibilidade_dias}d FLEX` : '';
     const cabineTag = rota.cabine && rota.cabine !== 'economy' ? ` • ${rota.cabine.toUpperCase()}` : '';
     const arcoSvg = renderizarArcoVooSvg(rota.codigo_origem, rota.codigo_destino, 150, 36);
@@ -360,18 +381,18 @@ function renderizarRotas() {
 
         <div class="card-dates-box">
           ${rota.sem_data === 1 ? `
-            <div>🗓️ Período: <strong>${rota.preco_atual ? 'Melhor: ' + formatarDataBr(rota.data_ida) + (rota.data_volta ? ' a ' + formatarDataBr(rota.data_volta) : '') : 'Qualquer data (Flexível)'}</strong></div>
-            <div>⏱️ Duração: <strong>${rota.data_volta ? (rota.dias_estadia || 10) + ' dias de estadia' : 'Só Ida'}</strong></div>
+            <div>🗓️ Período: <strong>${rota.preco_atual ? 'Melhor: ' + formatarDataBr(rota.data_ida) + (rota.data_volta && !ehSoIda ? ' a ' + formatarDataBr(rota.data_volta) : '') : 'Qualquer data (Flexível)'}</strong></div>
+            <div>⏱️ Modalidade: <strong>${ehSoIda ? '➡️ Apenas Ida' : '🔄 Ida e Volta (' + (rota.dias_estadia || 10) + 'd estadia)'}</strong></div>
           ` : `
             <div>📅 Ida: <strong>${formatarDataBr(rota.data_ida)}</strong></div>
-            <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
+            <div>${!ehSoIda && rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : '➡️ Apenas Ida'}</div>
           `}
         </div>
 
         ${melhorOpcaoFlexivel && melhorOpcaoFlexivel.preco ? `
           <div class="flex-saving-badge">
             <div>
-              ✨ <strong>${melhorOpcaoFlexivel.modo === 'sem_data' ? 'Menor Tarifa do Período:' : 'Janela Flexível:'}</strong> ${formatarDataBr(melhorOpcaoFlexivel.data_ida)}${melhorOpcaoFlexivel.data_volta ? ' a ' + formatarDataBr(melhorOpcaoFlexivel.data_volta) : ''}
+              ✨ <strong>${melhorOpcaoFlexivel.modo === 'sem_data' ? 'Menor Tarifa do Período' : 'Janela Flexível'} (${ehSoIda ? 'Apenas Ida' : 'Ida e Volta'}):</strong> ${formatarDataBr(melhorOpcaoFlexivel.data_ida)}${melhorOpcaoFlexivel.data_volta && !ehSoIda ? ' a ' + formatarDataBr(melhorOpcaoFlexivel.data_volta) : ''}
               (R$ ${melhorOpcaoFlexivel.preco.toFixed(2).replace('.', ',')})
             </div>
             ${melhorOpcaoFlexivel.economia && melhorOpcaoFlexivel.economia > 0 ? `
@@ -400,6 +421,14 @@ function renderizarRotas() {
             ${sparklineSvg}
             <span style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">Recorde: ${menorHistorico}</span>
           </div>
+        </div>
+
+        <!-- Teto / Preço Alvo Monitorado com Escopo Claro -->
+        <div class="card-teto-row">
+          <span class="card-teto-label">🎯 Teto Monitorado:</span>
+          <span class="card-teto-val">
+            ${rota.preco_alvo ? `<strong>R$ ${Number(rota.preco_alvo).toFixed(2).replace('.', ',')}</strong> <span class="teto-scope-pill ${ehSoIda ? 'pill-oneway' : 'pill-roundtrip'}">${ehSoIda ? 'Apenas Ida' : 'Ida e Volta'}</span>` : '<span class="teto-sem-meta">Sem teto definido</span>'}
+          </span>
         </div>
 
         ${rota.termometro ? `
@@ -580,26 +609,140 @@ function atualizarMetricasBugs() {
   if (badgeBugFares) badgeBugFares.textContent = state.bugFares.length;
 }
 
+function obterTipoViagemFormulario() {
+  const btnOne = document.getElementById('btn-tipo-oneway');
+  return btnOne && btnOne.classList.contains('active') ? 'one_way' : 'round_trip';
+}
+
+function sincronizarTipoViagemBotao(tipo) {
+  const btnRound = document.getElementById('btn-tipo-roundtrip');
+  const btnOne = document.getElementById('btn-tipo-oneway');
+  if (tipo === 'one_way') {
+    btnRound?.classList.remove('active');
+    btnOne?.classList.add('active');
+  } else {
+    btnOne?.classList.remove('active');
+    btnRound?.classList.add('active');
+  }
+}
+
+function definirTipoViagemFormulario(tipo) {
+  sincronizarTipoViagemBotao(tipo);
+  const inputVolta = document.getElementById('input-data-volta');
+  const checkSemData = document.getElementById('input-sem-data');
+  const ehSemData = Boolean(checkSemData?.checked);
+
+  if (tipo === 'one_way') {
+    if (inputVolta) {
+      inputVolta.value = 'Só Ida';
+      inputVolta.readOnly = true;
+    }
+  } else {
+    if (inputVolta) {
+      inputVolta.readOnly = false;
+      const val = (inputVolta.value || '').toLowerCase();
+      if (!val || val.includes('só ida') || val.includes('so ida')) {
+        inputVolta.value = ehSemData ? '10 dias' : '';
+      }
+    }
+  }
+
+  atualizarVisualModoFlexivel();
+  atualizarContextoTeto();
+}
+
+function atualizarContextoTeto() {
+  const tipo = obterTipoViagemFormulario();
+  const badgeTeto = document.getElementById('badge-teto-escopo');
+  const hintTeto = document.getElementById('hint-teto-explicacao');
+  const checkSemData = document.getElementById('input-sem-data');
+  const selectFlex = document.getElementById('input-flexibilidade');
+  const inputVolta = document.getElementById('input-data-volta');
+
+  const ehSemData = Boolean(checkSemData?.checked);
+  const flexDias = parseInt(selectFlex?.value || '0', 10);
+  const voltaTexto = inputVolta?.value || '';
+  const matchDias = voltaTexto.match(/^(\d+)/);
+  const diasEstadia = matchDias ? matchDias[1] : '10';
+
+  if (!badgeTeto || !hintTeto) return;
+
+  if (tipo === 'one_way') {
+    badgeTeto.textContent = '➡️ Apenas Ida';
+    badgeTeto.className = 'teto-scope-badge badge-oneway';
+
+    if (ehSemData) {
+      hintTeto.innerHTML = `💡 <strong>Modo Flexível (Sem Data Fixa)</strong>: o radar varre continuamente os próximos meses buscando a menor tarifa de <strong>Apenas Ida</strong> abaixo deste teto.`;
+    } else if (flexDias > 0) {
+      hintTeto.innerHTML = `💡 <strong>Janela Flexível (±${flexDias}d)</strong>: o radar avaliará datas de <strong>Apenas Ida</strong> buscando tarifas abaixo deste teto.`;
+    } else {
+      hintTeto.innerHTML = `💡 O radar alertará quando o bilhete de <strong>Apenas Ida</strong> estiver abaixo deste teto.`;
+    }
+  } else {
+    badgeTeto.textContent = '🔄 Ida e Volta';
+    badgeTeto.className = 'teto-scope-badge badge-roundtrip';
+
+    if (ehSemData) {
+      hintTeto.innerHTML = `💡 <strong>Modo Flexível (Sem Data Fixa)</strong>: o radar varre continuamente os próximos meses buscando a menor tarifa total de <strong>Ida e Volta (${diasEstadia} dias de estadia)</strong> abaixo deste teto.`;
+    } else if (flexDias > 0) {
+      hintTeto.innerHTML = `💡 <strong>Janela Flexível (±${flexDias}d)</strong>: o radar testará combinações de <strong>Ida e Volta</strong> buscando valor total abaixo deste teto.`;
+    } else {
+      hintTeto.innerHTML = `💡 O radar alertará quando o valor <strong>total de Ida e Volta</strong> estiver abaixo deste teto.`;
+    }
+  }
+}
+
 function atualizarVisualModoFlexivel() {
   const checkSemData = document.getElementById('input-sem-data');
   const inputDataIda = document.getElementById('input-data-ida');
   const labelDataIda = document.getElementById('label-data-ida');
   const inputDataVolta = document.getElementById('input-data-volta');
   const labelDataVolta = document.getElementById('label-data-volta');
+  const tipo = obterTipoViagemFormulario();
 
   if (!checkSemData || !inputDataIda || !labelDataIda) return;
 
   if (checkSemData.checked) {
     inputDataIda.removeAttribute('required');
     labelDataIda.textContent = 'Data de Ida Estimada (Opcional)';
-    if (labelDataVolta) labelDataVolta.textContent = 'Duração da Viagem (Dias, ex: 10) ou Só Ida';
-    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 10 dias ou Só Ida';
+    if (tipo === 'one_way') {
+      if (labelDataVolta) labelDataVolta.textContent = 'Modalidade';
+      if (inputDataVolta) {
+        inputDataVolta.value = 'Só Ida';
+        inputDataVolta.readOnly = true;
+      }
+    } else {
+      if (labelDataVolta) labelDataVolta.textContent = 'Duração da Viagem (Dias de estadia)';
+      if (inputDataVolta) {
+        inputDataVolta.readOnly = false;
+        if (!inputDataVolta.value || inputDataVolta.value.toLowerCase().includes('só ida') || inputDataVolta.value.toLowerCase().includes('so ida')) {
+          inputDataVolta.value = '10 dias';
+        }
+        inputDataVolta.placeholder = 'Ex: 10 dias';
+      }
+    }
   } else {
     inputDataIda.setAttribute('required', 'required');
     labelDataIda.textContent = 'Data de Ida';
-    if (labelDataVolta) labelDataVolta.textContent = 'Volta (Data, Dias de viagem ou Só Ida)';
-    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 14 dias, 2026-11-24 ou Só Ida';
+    if (tipo === 'one_way') {
+      if (labelDataVolta) labelDataVolta.textContent = 'Modalidade';
+      if (inputDataVolta) {
+        inputDataVolta.value = 'Só Ida';
+        inputDataVolta.readOnly = true;
+      }
+    } else {
+      if (labelDataVolta) labelDataVolta.textContent = 'Volta (Data ou Dias de viagem)';
+      if (inputDataVolta) {
+        inputDataVolta.readOnly = false;
+        if (inputDataVolta.value.toLowerCase().includes('só ida') || inputDataVolta.value.toLowerCase().includes('so ida')) {
+          inputDataVolta.value = '';
+        }
+        inputDataVolta.placeholder = 'Ex: 14 dias ou 2026-11-24';
+      }
+    }
   }
+
+  atualizarContextoTeto();
 }
 
 // Ações do Usuário
@@ -612,7 +755,7 @@ function abrirModalNovaRota() {
   if (selectFlex) selectFlex.value = '3';
   const checkSemData = document.getElementById('input-sem-data');
   if (checkSemData) checkSemData.checked = false;
-  atualizarVisualModoFlexivel();
+  definirTipoViagemFormulario('round_trip');
   abrirModal(modalRota);
 }
 
@@ -633,14 +776,21 @@ window.abrirEdicaoRota = function(id) {
   if (checkSemData) {
     checkSemData.checked = Boolean(rota.sem_data === 1);
   }
-  atualizarVisualModoFlexivel();
+
+  const ehSoIda = Boolean(
+    !rota.data_volta ||
+    (typeof rota.data_volta === 'string' && (rota.data_volta.toLowerCase().includes('só ida') || rota.data_volta.toLowerCase().includes('so ida'))) ||
+    (rota.sem_data === 1 && !rota.dias_estadia && !rota.data_volta)
+  );
+
+  definirTipoViagemFormulario(ehSoIda ? 'one_way' : 'round_trip');
 
   if (rota.sem_data === 1) {
-    document.getElementById('input-data-volta').value = !rota.data_volta && !rota.dias_estadia
+    document.getElementById('input-data-volta').value = ehSoIda
       ? 'Só Ida'
       : `${rota.dias_estadia || 10} dias`;
   } else {
-    document.getElementById('input-data-volta').value = rota.data_volta || 'Só Ida';
+    document.getElementById('input-data-volta').value = ehSoIda ? 'Só Ida' : (rota.data_volta || '');
   }
 
   document.getElementById('input-preco-alvo').value = rota.preco_alvo || '';
@@ -650,6 +800,7 @@ window.abrirEdicaoRota = function(id) {
   const selectFlex = document.getElementById('input-flexibilidade');
   if (selectFlex) selectFlex.value = String(rota.flexibilidade_dias ?? 0);
 
+  atualizarContextoTeto();
   abrirModal(modalRota);
 };
 
@@ -689,10 +840,11 @@ async function criarNovaRota(e) {
   const cabine = document.getElementById('input-cabine')?.value || 'economy';
   const flexibilidade_dias = parseInt(document.getElementById('input-flexibilidade')?.value || '0', 10);
   const sem_data = document.getElementById('input-sem-data')?.checked ? 1 : 0;
+  const tipo = obterTipoViagemFormulario();
 
   const matchDias = data_volta.match(/^(\d+)/);
   const dias_estadia = matchDias ? parseInt(matchDias[1], 10) : 10;
-  const ehSoIdaTexto = data_volta.toLowerCase().includes('só ida') || data_volta.toLowerCase().includes('so ida');
+  const ehSoIdaTexto = tipo === 'one_way' || data_volta.toLowerCase().includes('só ida') || data_volta.toLowerCase().includes('so ida');
 
   const url = rotaId ? `/api/rotas/${rotaId}` : '/api/rotas';
   const method = rotaId ? 'PUT' : 'POST';
@@ -705,7 +857,7 @@ async function criarNovaRota(e) {
         origem,
         destino,
         data_ida: data_ida || undefined,
-        data_volta: sem_data ? (ehSoIdaTexto ? 'Só Ida' : `${dias_estadia} dias`) : (data_volta || undefined),
+        data_volta: ehSoIdaTexto ? 'Só Ida' : (sem_data ? `${dias_estadia} dias` : (data_volta || undefined)),
         preco_alvo,
         duracao_max_horas,
         cabine,

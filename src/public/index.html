@@ -203,6 +203,19 @@
             </div>
           </div>
 
+          <!-- Tipo de Viagem Explícito -->
+          <div class="trip-type-selector-card">
+            <span class="trip-type-selector-label">Tipo de Viagem:</span>
+            <div class="trip-type-buttons" id="group-trip-type-buttons">
+              <button type="button" class="btn-trip-select active" id="btn-tipo-roundtrip" data-tipo="round_trip">
+                🔄 Ida e Volta
+              </button>
+              <button type="button" class="btn-trip-select" id="btn-tipo-oneway" data-tipo="one_way">
+                ➡️ Apenas Ida
+              </button>
+            </div>
+          </div>
+
           <!-- Opção Voo Flexível Sem Data Fixa -->
           <div class="flex-mode-toggle-card">
             <label class="checkbox-container" for="input-sem-data">
@@ -227,9 +240,15 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group">
-              <label for="input-preco-alvo">Preço Alvo (R$)</label>
+            <div class="form-group form-group-teto">
+              <div class="label-with-teto-badge">
+                <label for="input-preco-alvo" id="label-preco-alvo">Preço Alvo / Teto (R$)</label>
+                <span class="teto-scope-badge badge-roundtrip" id="badge-teto-escopo">🔄 Ida e Volta</span>
+              </div>
               <input type="number" id="input-preco-alvo" step="50" placeholder="Ex: 3800">
+              <div class="teto-hint-box" id="hint-teto-explicacao">
+                💡 Teto pesquisado para o <strong>valor total de Ida e Volta</strong>.
+              </div>
             </div>
             <div class="form-group">
               <label for="input-flexibilidade">Flexibilidade de Datas</label>

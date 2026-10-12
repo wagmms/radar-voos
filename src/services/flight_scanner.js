@@ -8,7 +8,7 @@ import {
 import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
-import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData } from '../domain/rotas.js';
+import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData, ehSoIda } from '../domain/rotas.js';
 import { telemetryEvents } from './telemetry_events.js';
 
 export class FlightScanner {
@@ -43,11 +43,12 @@ export class FlightScanner {
 
       // 2. Modo Voo Flexível Sem Data (movido pelo menor preço nos próximos meses)
       if (rota.sem_data === 1) {
+        const soIda = ehSoIda(rota.data_volta);
         const janelas = gerarJanelasExploracaoSemData({
           dataBase: rota.data_ida,
           diasEstadia: rota.dias_estadia || 10,
           qtdAmostras: 4,
-          soIda: !rota.data_volta
+          soIda
         });
 
         const resultadosAmostras = [];
@@ -145,7 +146,8 @@ export class FlightScanner {
         // 3. Matriz de Flexibilidade Adjacente (±0 a ±7 dias)
         const flexDias = rota.flexibilidade_dias || 0;
         if (flexDias > 0) {
-          const combinacoes = gerarCombinacoesFlexibilidade(rota.data_ida, rota.data_volta, flexDias);
+          const voltaEfetiva = ehSoIda(rota.data_volta) ? null : rota.data_volta;
+          const combinacoes = gerarCombinacoesFlexibilidade(rota.data_ida, voltaEfetiva, flexDias);
           for (const comb of combinacoes.slice(1, 3)) {
             try {
               const resAdj = await FlightScanner.buscarOfertas(

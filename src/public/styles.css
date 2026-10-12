@@ -1096,5 +1096,160 @@ body {
   line-height: 1.3;
 }
 
+/* SELETOR DE TIPO DE VIAGEM (IDA E VOLTA / APENAS IDA) */
+.trip-type-selector-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+
+.trip-type-selector-label {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.trip-type-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-trip-select {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-trip-select:hover {
+  border-color: rgba(6, 182, 212, 0.4);
+  color: #ffffff;
+}
+
+.btn-trip-select.active {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: var(--cyan-primary);
+  color: var(--cyan-primary);
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+}
+
+/* BADGES DE ESCOPO DO TETO */
+.label-with-teto-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.label-with-teto-badge label {
+  margin-bottom: 0;
+}
+
+.teto-scope-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  transition: all 0.2s ease;
+}
+
+.teto-scope-badge.badge-roundtrip {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+}
+
+.teto-scope-badge.badge-oneway {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+}
+
+.teto-hint-box {
+  margin-top: 6px;
+  font-size: 0.76rem;
+  color: var(--text-dim);
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid var(--cyan-primary);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 6px 10px;
+  line-height: 1.4;
+  transition: all 0.2s ease;
+}
+
+.teto-hint-box strong {
+  color: #ffffff;
+}
+
+/* TETO NOS CARDS DE VOO */
+.card-teto-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  margin-top: 4px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.07);
+  font-size: 0.78rem;
+}
+
+.card-teto-label {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-teto-val {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  font-family: var(--font-mono);
+}
+
+.teto-scope-pill {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.teto-scope-pill.pill-roundtrip {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.teto-scope-pill.pill-oneway {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.teto-sem-meta {
+  color: var(--text-dim);
+  font-style: italic;
+  font-size: 0.75rem;
+}
+
 
 
