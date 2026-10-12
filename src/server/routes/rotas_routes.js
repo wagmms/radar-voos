@@ -68,6 +68,27 @@ export async function rotasRoutes(fastify) {
     return reply.code(201).send({ ok: true, rota: novaRota });
   });
 
+  // Atualizar/Alterar opções de uma rota existente
+  fastify.put('/api/rotas/:id', async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body || {};
+    const rota = rotasRepo.buscarPorId(id);
+    if (!rota) {
+      return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
+    }
+
+    if (body.data_ida && body.data_volta) {
+      const voltaCalculada = calcularDataVolta(body.data_ida, body.data_volta);
+      const validacao = validarPeriodo(body.data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way');
+      if (!validacao.ok) {
+        return reply.code(400).send({ ok: false, erro: validacao.erro });
+      }
+    }
+
+    const rotaAtualizada = rotasRepo.atualizar(id, body);
+    return { ok: true, rota: rotaAtualizada };
+  });
+
   // Excluir rota
   fastify.delete('/api/rotas/:id', async (request, reply) => {
     const { id } = request.params;

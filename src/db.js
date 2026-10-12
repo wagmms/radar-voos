@@ -151,6 +151,41 @@ export const rotasRepo = {
     return rotasRepo.buscarPorId(res.lastInsertRowid);
   },
 
+  atualizar: (id, dados) => {
+    const db = getDb();
+    const rota = rotasRepo.buscarPorId(id);
+    if (!rota) return null;
+
+    const origem = dados.origem || rota.origem;
+    const destino = dados.destino || rota.destino;
+    const codigoOrigem = resolverDestino(origem) || rota.codigo_origem;
+    const codigoDestino = resolverDestino(destino) || rota.codigo_destino;
+    const dataIda = dados.data_ida || rota.data_ida;
+    const dataVolta = dados.data_volta !== undefined ? calcularDataVolta(dataIda, dados.data_volta) : rota.data_volta;
+    const precoAlvo = dados.preco_alvo !== undefined ? (parseFloat(dados.preco_alvo) || null) : rota.preco_alvo;
+    const duracaoMaxHoras = dados.duracao_max_horas !== undefined ? (parseFloat(dados.duracao_max_horas) || 999) : rota.duracao_max_horas;
+    const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
+    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
+
+    const stmt = db.prepare(`
+      UPDATE rotas SET
+        origem = ?,
+        destino = ?,
+        codigo_origem = ?,
+        codigo_destino = ?,
+        data_ida = ?,
+        data_volta = ?,
+        preco_alvo = ?,
+        duracao_max_horas = ?,
+        link_google_flights = ?,
+        ativa = ?
+      WHERE id = ?
+    `);
+
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, link, ativa, id);
+    return rotasRepo.buscarPorId(id);
+  },
+
   atualizarResultadoChecagem: (id, resultado) => {
     const db = getDb();
     const rota = rotasRepo.buscarPorId(id);

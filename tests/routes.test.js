@@ -80,4 +80,24 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.strictEqual(json.ok, true);
     assert.ok(json.rotas.length >= 1);
   });
+
+  it('PUT /api/rotas/:id deve alterar parâmetros de uma rota existente', async () => {
+    const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const rotaId = resList.json().rotas[0].id;
+
+    const resPut = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${rotaId}`,
+      payload: {
+        preco_alvo: 3500,
+        duracao_max_horas: 12
+      }
+    });
+
+    assert.strictEqual(resPut.statusCode, 200);
+    const json = resPut.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.rota.preco_alvo, 3500);
+    assert.strictEqual(json.rota.duracao_max_horas, 12);
+  });
 });

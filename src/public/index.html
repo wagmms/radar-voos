@@ -160,14 +160,15 @@
       </div>
     </main>
 
-    <!-- Modal Nova Rota -->
+    <!-- Modal Nova Rota / Editar Rota -->
     <div class="modal-overlay" id="modal-rota">
       <div class="modal-card">
         <div class="modal-header">
-          <h3>✈️ Monitorar Nova Rota</h3>
+          <h3 id="modal-rota-titulo">✈️ Monitorar Nova Rota</h3>
           <button class="btn-close" id="btn-fechar-modal-rota">&times;</button>
         </div>
         <form id="form-nova-rota">
+          <input type="hidden" id="input-rota-id" value="">
           <div class="form-row">
             <div class="form-group">
               <label for="input-origem">Origem (Cidade ou Aeroporto)</label>
@@ -203,7 +204,7 @@
 
           <div class="modal-actions">
             <button type="button" class="btn btn-secondary" id="btn-cancelar-modal-rota">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Ativar Monitoramento</button>
+            <button type="submit" class="btn btn-primary" id="btn-salvar-rota-submit">Salvar Rastreamento</button>
           </div>
         </form>
       </div>

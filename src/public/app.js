@@ -77,7 +77,7 @@ function setupEventListeners() {
   // Botões de Ação Topo
   document.getElementById('btn-forcar-varredura')?.addEventListener('click', executarVarreduraManual);
   document.getElementById('btn-testar-telegram')?.addEventListener('click', testarTelegram);
-  document.getElementById('btn-abrir-modal-rota')?.addEventListener('click', () => abrirModal(modalRota));
+  document.getElementById('btn-abrir-modal-rota')?.addEventListener('click', abrirModalNovaRota);
   document.getElementById('btn-fechar-modal-rota')?.addEventListener('click', () => fecharModal(modalRota));
   document.getElementById('btn-cancelar-modal-rota')?.addEventListener('click', () => fecharModal(modalRota));
 
@@ -229,6 +229,9 @@ function renderizarRotas() {
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z"/></svg>
             Google Flights
           </a>
+          <button class="btn-icon-action" onclick="abrirEdicaoRota(${rota.id})" title="Alterar opções desta rota">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          </button>
           <button class="btn-icon-action" onclick="verificarRotaIndividual(${rota.id})" title="Verificar preço agora">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
           </button>
@@ -329,8 +332,35 @@ function atualizarMetricasBugs() {
 }
 
 // Ações do Usuário
+function abrirModalNovaRota() {
+  document.getElementById('input-rota-id').value = '';
+  document.getElementById('modal-rota-titulo').textContent = '✈️ Monitorar Nova Rota';
+  document.getElementById('btn-salvar-rota-submit').textContent = 'Ativar Monitoramento';
+  document.getElementById('form-nova-rota').reset();
+  abrirModal(modalRota);
+}
+
+window.abrirEdicaoRota = function(id) {
+  const rota = state.rotas.find((r) => r.id === id);
+  if (!rota) return;
+
+  document.getElementById('input-rota-id').value = rota.id;
+  document.getElementById('modal-rota-titulo').textContent = `✏️ Alterar Opções: ${rota.origem} ➔ ${rota.destino}`;
+  document.getElementById('btn-salvar-rota-submit').textContent = 'Salvar Alterações';
+
+  document.getElementById('input-origem').value = rota.origem;
+  document.getElementById('input-destino').value = rota.destino;
+  document.getElementById('input-data-ida').value = rota.data_ida;
+  document.getElementById('input-data-volta').value = rota.data_volta || 'Só Ida';
+  document.getElementById('input-preco-alvo').value = rota.preco_alvo || '';
+  document.getElementById('input-duracao-max').value = rota.duracao_max_horas || 16;
+
+  abrirModal(modalRota);
+};
+
 async function criarNovaRota(e) {
   e.preventDefault();
+  const rotaId = document.getElementById('input-rota-id').value;
   const origem = document.getElementById('input-origem').value.trim();
   const destino = document.getElementById('input-destino').value.trim();
   const data_ida = document.getElementById('input-data-ida').value;
@@ -338,9 +368,12 @@ async function criarNovaRota(e) {
   const preco_alvo = document.getElementById('input-preco-alvo').value;
   const duracao_max_horas = document.getElementById('input-duracao-max').value;
 
+  const url = rotaId ? `/api/rotas/${rotaId}` : '/api/rotas';
+  const method = rotaId ? 'PUT' : 'POST';
+
   try {
-    const res = await fetch('/api/rotas', {
-      method: 'POST',
+    const res = await fetch(url, {
+      method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         origem,
@@ -358,7 +391,8 @@ async function criarNovaRota(e) {
       return;
     }
 
-    mostrarToast(`Rota ${origem} ➔ ${destino} adicionada ao radar!`);
+    const acaoTexto = rotaId ? 'atualizada' : 'adicionada ao radar';
+    mostrarToast(`Rota ${origem} ➔ ${destino} ${acaoTexto}!`);
     fecharModal(modalRota);
     document.getElementById('form-nova-rota').reset();
     carregarDadosCompletos();
