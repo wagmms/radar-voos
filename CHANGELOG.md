@@ -7,6 +7,18 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.2] - 2026-10-12
+
+### 🔍 Parser Enriquecido do Google Flights: Conexões Detalhadas (Escalas) e Bagagens
+- **Módulo de Extração Direta (`src/services/providers/google_flights_direct_provider.js`)**:
+  - Implementada função `extrairInfoConexoes` com suporte a voos diretos (`Direto`), escalas simples e conexões detalhadas com extração de aeroporto IATA e tempos de layover (ex: `1 parada em Campinas (VCP)`, `1 parada em Aeroporto de Brasília (BSB)` com tempo de conexão).
+  - Implementada função `extrairInfoBagagem` identificando modalidades de mala de mão (`incluida`, `nao_incluida`), bagagens despachadas (`incluida`, `paga`) e itens pessoais.
+  - Implementada função `limparNomeCompanhia` para sanitização de resíduos de paradas e voos operados (eliminando sufixos como `Azul com 1 parada`).
+  - Implementada função `extrairPrecoNumerico` com suporte a separadores de milhares (`1.250`, `2,450`, etc.).
+  - Parser multicamada no `buscarOfertas` com varredura em nós `aria-label` e elementos adjacentes do HTML direto, estruturando `escalas`, `detalhesEscalas`, `tempoConexao`, `aeroportoConexao` e `bagagem` nas ofertas e amostras de voo.
+- **Cobertura de Testes Automatizados (`tests/flight_providers.test.js`)**:
+  - Adicionados 5 novos testes unitários e de integração cobrindo parsing de conexões, identificação de bagagens, sanitização de companhias e extração enriquecida em HTML com nós filhos, elevando a suíte para 81/81 testes aprovados.
+
 ## [2.7.1] - 2026-10-12
 
 ### 🏷️ Identificação e Destaque Visual de Tarifas Especiais (Aba Cheapest & Parceiros/OTAs)
