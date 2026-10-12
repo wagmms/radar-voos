@@ -84,16 +84,49 @@ export async function monitorRoutes(fastify) {
     return { ok: enviado, mensagem: enviado ? 'Alerta de teste enviado com sucesso!' : 'Falha ao enviar mensagem.' };
   });
 
-  // Diagnóstico Google Flights Direct
+  // Diagnóstico Google Flights Direct & SerpAPI
   fastify.get('/api/debug/google-flights', async (request, reply) => {
-    const { GoogleFlightsDirectProvider } = await import('../../services/providers/google_flights_direct_provider.js');
-    const p = new GoogleFlightsDirectProvider();
-    const res = await p.buscarOfertas({
+    const { gerarLinkGoogleFlightsCheapest } = await import('../../domain/rotas.js');
+    const { SerpApiProvider } = await import('../../services/providers/serpapi_provider.js');
+    const url = gerarLinkGoogleFlightsCheapest('RIO', 'RAO', '2027-01-17', null, 6);
+
+    const resp = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+        'Cookie': 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn'
+      }
+    });
+
+    const html = await resp.text();
+    const tem587 = html.includes('587');
+    const matches587 = [];
+    if (tem587) {
+      let pos = 0;
+      while ((pos = html.indexOf('587', pos)) !== -1) {
+        matches587.push(html.slice(Math.max(0, pos - 80), Math.min(html.length, pos + 80)));
+        pos += 3;
+        if (matches587.length >= 5) break;
+      }
+    }
+
+    // Testa SerpAPI com booking_token
+    const serpProvider = new SerpApiProvider();
+    const serpRes = await serpProvider.buscarOfertas({
       origemCod: 'RIO',
       destinoCod: 'RAO',
       dataIda: '2027-01-17',
       duracaoMaxHoras: 6
     });
-    return { ok: true, debug: res };
+
+    return {
+      ok: true,
+      url,
+      htmlLength: html.length,
+      tem587,
+      matches587,
+      serpApi: serpRes
+    };
   });
 }
