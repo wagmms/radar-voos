@@ -8,7 +8,7 @@ import {
 import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
-import { gerarCombinacoesFlexibilidade } from '../domain/rotas.js';
+import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData } from '../domain/rotas.js';
 import { telemetryEvents } from './telemetry_events.js';
 
 export class FlightScanner {
@@ -35,77 +35,149 @@ export class FlightScanner {
       // 1. Consulta meteorológica do destino em paralelo
       const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
 
-      // 2. Busca de ofertas da data base
-      const resultadoBase = await FlightScanner.buscarOfertas(
-        rota.codigo_origem,
-        rota.codigo_destino,
-        rota.data_ida,
-        rota.data_volta,
-        rota.duracao_max_horas,
-        rota.cabine || 'economy',
-        1
-      );
+      let resultadoFinal = null;
+      let oferta = null;
+      let melhorOpcaoFlexivel = null;
+      let dataIdaEfetiva = rota.data_ida;
+      let dataVoltaEfetiva = rota.data_volta;
+
+      // 2. Modo Voo Flexível Sem Data (movido pelo menor preço nos próximos meses)
+      if (rota.sem_data === 1) {
+        const janelas = gerarJanelasExploracaoSemData({
+          dataBase: rota.data_ida,
+          diasEstadia: rota.dias_estadia || 10,
+          qtdAmostras: 4,
+          soIda: !rota.data_volta
+        });
+
+        const resultadosAmostras = [];
+        for (const j of janelas) {
+          try {
+            const res = await FlightScanner.buscarOfertas(
+              rota.codigo_origem,
+              rota.codigo_destino,
+              j.dataIda,
+              j.dataVolta,
+              rota.duracao_max_horas,
+              rota.cabine || 'economy',
+              1
+            );
+            if (res.ok && res.encontrouVoos && res.oferta && res.oferta.preco > 0) {
+              resultadosAmostras.push({
+                ...j,
+                oferta: res.oferta
+              });
+            }
+          } catch (_) {}
+        }
+
+        if (resultadosAmostras.length === 0) {
+          const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
+          rotasRepo.atualizarResultadoChecagem(rota.id, {
+            preco: 0,
+            variacao_texto: '-',
+            termometro: '⚪ Sem voos no período flexível',
+            custo_destino_texto: '-',
+            detalhes_voo: '-',
+            dica_stopover: '-',
+            link_google_flights: rota.link_google_flights,
+            clima_destino_resumo: clima.ok ? clima.resumo : null,
+            clima_temp_media: clima.ok ? clima.tempMedia : null,
+            melhor_opcao_flexivel: null
+          });
+          return { sucesso: true, encontrou: false, mensagem: 'Sem voos no período flexível' };
+        }
+
+        // Ordena estritamente pelo MENOR PREÇO (Best Price)
+        resultadosAmostras.sort((a, b) => a.oferta.preco - b.oferta.preco);
+        const campeao = resultadosAmostras[0];
+
+        oferta = campeao.oferta;
+        dataIdaEfetiva = campeao.dataIda;
+        dataVoltaEfetiva = campeao.dataVolta;
+        resultadoFinal = { ok: true, encontrouVoos: true, oferta };
+
+        melhorOpcaoFlexivel = {
+          data_ida: campeao.dataIda,
+          data_volta: campeao.dataVolta,
+          preco: campeao.oferta.preco,
+          label: campeao.label,
+          modo: 'sem_data',
+          totalAmostras: resultadosAmostras.length,
+          link: campeao.oferta.link
+        };
+      } else {
+        // 2b. Modo Data Fixa / Base
+        const resultadoBase = await FlightScanner.buscarOfertas(
+          rota.codigo_origem,
+          rota.codigo_destino,
+          rota.data_ida,
+          rota.data_volta,
+          rota.duracao_max_horas,
+          rota.cabine || 'economy',
+          1
+        );
+
+        if (!resultadoBase.ok) {
+          rotasRepo.marcarFalhaChecagem(rota.id, resultadoBase.mensagemErro || 'Falha na checagem');
+          return { sucesso: false, erro: resultadoBase.mensagemErro };
+        }
+
+        if (!resultadoBase.encontrouVoos) {
+          const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
+          rotasRepo.atualizarResultadoChecagem(rota.id, {
+            preco: 0,
+            variacao_texto: '-',
+            termometro: resultadoBase.mensagem || '⚪ Sem voos no filtro',
+            custo_destino_texto: '-',
+            detalhes_voo: '-',
+            dica_stopover: '-',
+            link_google_flights: rota.link_google_flights,
+            clima_destino_resumo: clima.ok ? clima.resumo : null,
+            clima_temp_media: clima.ok ? clima.tempMedia : null,
+            melhor_opcao_flexivel: null
+          });
+          return { sucesso: true, encontrou: false, mensagem: resultadoBase.mensagem };
+        }
+
+        oferta = resultadoBase.oferta;
+
+        // 3. Matriz de Flexibilidade Adjacente (±0 a ±7 dias)
+        const flexDias = rota.flexibilidade_dias || 0;
+        if (flexDias > 0) {
+          const combinacoes = gerarCombinacoesFlexibilidade(rota.data_ida, rota.data_volta, flexDias);
+          for (const comb of combinacoes.slice(1, 3)) {
+            try {
+              const resAdj = await FlightScanner.buscarOfertas(
+                rota.codigo_origem,
+                rota.codigo_destino,
+                comb.dataIda,
+                comb.dataVolta,
+                rota.duracao_max_horas,
+                rota.cabine || 'economy',
+                1
+              );
+
+              if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta.preco < oferta.preco) {
+                const economia = oferta.preco - resAdj.oferta.preco;
+                const economiaPct = Math.round((economia / oferta.preco) * 100);
+                melhorOpcaoFlexivel = {
+                  data_ida: comb.dataIda,
+                  data_volta: comb.dataVolta,
+                  preco: resAdj.oferta.preco,
+                  economia,
+                  economiaPct,
+                  deltaDias: comb.deltaDias,
+                  link: resAdj.oferta.link
+                };
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      }
 
       const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
-
-      if (!resultadoBase.ok) {
-        rotasRepo.marcarFalhaChecagem(rota.id, resultadoBase.mensagemErro || 'Falha na checagem');
-        return { sucesso: false, erro: resultadoBase.mensagemErro };
-      }
-
-    if (!resultadoBase.encontrouVoos) {
-      rotasRepo.atualizarResultadoChecagem(rota.id, {
-        preco: 0,
-        variacao_texto: '-',
-        termometro: resultadoBase.mensagem || '⚪ Sem voos no filtro',
-        custo_destino_texto: '-',
-        detalhes_voo: '-',
-        dica_stopover: '-',
-        link_google_flights: rota.link_google_flights,
-        clima_destino_resumo: clima.ok ? clima.resumo : null,
-        clima_temp_media: clima.ok ? clima.tempMedia : null,
-        melhor_opcao_flexivel: null
-      });
-      return { sucesso: true, encontrou: false, mensagem: resultadoBase.mensagem };
-    }
-
-    let { oferta } = resultadoBase;
-    let melhorOpcaoFlexivel = null;
-
-    // 3. Matriz de Flexibilidade de Datas (se flexibilidade_dias > 0)
-    const flexDias = rota.flexibilidade_dias || 0;
-    if (flexDias > 0) {
-      const combinacoes = gerarCombinacoesFlexibilidade(rota.data_ida, rota.data_volta, flexDias);
-      // Analisa até 2 combinações adjacentes na janela para encontrar tarifas ainda menores
-      for (const comb of combinacoes.slice(1, 3)) {
-        try {
-          const resAdj = await FlightScanner.buscarOfertas(
-            rota.codigo_origem,
-            rota.codigo_destino,
-            comb.dataIda,
-            comb.dataVolta,
-            rota.duracao_max_horas,
-            rota.cabine || 'economy',
-            1
-          );
-
-          if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta.preco < oferta.preco) {
-            const economia = oferta.preco - resAdj.oferta.preco;
-            const economiaPct = Math.round((economia / oferta.preco) * 100);
-            melhorOpcaoFlexivel = {
-              dataIda: comb.dataIda,
-              dataVolta: comb.dataVolta,
-              preco: resAdj.oferta.preco,
-              economia,
-              economiaPct,
-              deltaDias: comb.deltaDias,
-              link: resAdj.oferta.link
-            };
-            break; // Encontrou economia na janela
-          }
-        } catch (_) {}
-      }
-    }
 
     const precoAnterior = parsePreco(rota.preco_atual);
     const variacao = calcularVariacao(oferta.preco, precoAnterior);
@@ -114,8 +186,8 @@ export class FlightScanner {
       oferta.destinoReal,
       rota.destino,
       oferta.preco,
-      rota.data_ida,
-      rota.data_volta
+      dataIdaEfetiva,
+      dataVoltaEfetiva
     );
 
     // 4. Detecção Estatística de Bug Fares em Tempo Real (Zero Delay)
@@ -124,7 +196,7 @@ export class FlightScanner {
       destinoCod: rota.codigo_destino,
       preco: oferta.preco,
       precoMedioHistorico: rota.menor_preco_historico || precoAnterior,
-      dataVolta: rota.data_volta
+      dataVolta: dataVoltaEfetiva
     });
 
     if (analiseBug.ehBugFare) {
@@ -149,9 +221,11 @@ export class FlightScanner {
     }
 
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
+      data_ida: rota.sem_data === 1 ? dataIdaEfetiva : undefined,
+      data_volta: rota.sem_data === 1 ? dataVoltaEfetiva : undefined,
       preco: oferta.preco,
       variacao_texto: variacao.texto,
-      termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : oferta.termometro,
+      termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : (rota.sem_data === 1 ? `🔥 Menor Preço Flexível (${melhorOpcaoFlexivel?.label || ''})` : oferta.termometro),
       custo_destino_texto: custoInfo.textoResumo,
       detalhes_voo: `${oferta.duracaoHoras.toFixed(1)}h | ${oferta.detalhes}`,
       dica_stopover: oferta.dicaStopover,
@@ -162,7 +236,9 @@ export class FlightScanner {
     });
 
     // 5. Inteligência de Alertas Regulares
-    const chaveAlerta = `${rota.codigo_origem}_${rota.codigo_destino}_${rota.data_ida}_${rota.data_volta || 'SO_IDA'}`;
+    const chaveAlerta = rota.sem_data === 1
+      ? `${rota.codigo_origem}_${rota.codigo_destino}_FLEXIVEL`
+      : `${rota.codigo_origem}_${rota.codigo_destino}_${rota.data_ida}_${rota.data_volta || 'SO_IDA'}`;
     const ehRecorde = !rota.menor_preco_historico || oferta.preco < rota.menor_preco_historico;
 
     const decisaoAlerta = alertasRepo.deveDisparar(
@@ -182,8 +258,8 @@ export class FlightScanner {
         rotaId: rota.id,
         origem: rota.origem,
         destinoReal: oferta.destinoReal,
-        dataIda: rota.data_ida,
-        dataVolta: rota.data_volta,
+        dataIda: dataIdaEfetiva,
+        dataVolta: dataVoltaEfetiva,
         preco: oferta.preco,
         variacaoTexto: variacao.texto,
         ehRecorde,
@@ -192,7 +268,9 @@ export class FlightScanner {
         detalhes: oferta.detalhes,
         dicaStopover: oferta.dicaStopover,
         link: oferta.link,
-        clima: clima.ok ? clima : null
+        clima: clima.ok ? clima : null,
+        semData: rota.sem_data === 1,
+        labelJanela: melhorOpcaoFlexivel?.label
       });
     }
 

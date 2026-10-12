@@ -1,20 +1,20 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.2.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.3.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.2.1 operacional, 100% autônomo (45/45 testes passando), com telemetria SSE, Cockpit PWA corrigido (renderização e métricas ativas), pool de chaves blindado e agendador 24/7 resiliente.
+- **Estado Geral**: 🟢 Radar v2.3.0 operacional, 100% autônomo (48/48 testes passando), com recurso de Voo Flexível Sem Data Fixa (Best Price Explorer / Anytime), telemetria SSE, Cockpit PWA com chip de filtro flexível e agendador 24/7 resiliente.
 - **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas e oportunidades aéreas no GDS com custo zero e zero atraso de blogs externos.
-- **Última Tarefa Concluída**: Resolução do bug de exibição de rotas no Cockpit PWA (`src/public/app.js` corrigindo `r.preco_alvo`), implementação de `temChaveDisponivel()` no pool SerpAPI (`src/services/serpapi_pool.js`) e blindagem de exceções no agendador (`src/services/scheduler.js`), garantindo que todas as 8 rotas salvas no SQLite sejam renderizadas com precisão.
+- **Última Tarefa Concluída**: Implementação completa da opção de voo flexível sem data fixa movida a menor preço (`sem_data: 1`), gerador de janelas estratégicas multi-mês (`src/domain/rotas.js`), eleição da menor tarifa (`src/services/flight_scanner.js`), endpoints REST (`src/server/routes/rotas_routes.js`), alertas do Telegram (`src/services/notifier_telegram.js`) e interface PWA (`src/public/index.html`, `src/public/app.js`, `src/public/styles.css`).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `Dockerfile` e `docker-compose.yml`
-- **Função/Componente/Seletor**: Configuração de deploy em produção e persistência de volume SQLite
-- **Comportamento Esperado / Critério de Aceite**: Garantir que o contêiner suba na porta 3333 com o volume `./data` persistente em modo WAL sem permissões travadas.
+- **Arquivo/Módulo Alvo**: `src/services/providers/google_flights_direct_provider.js`
+- **Função/Componente/Seletor**: `buscarOfertas`
+- **Comportamento Esperado / Critério de Aceite**: Expandir parser de tarifas para extrair conexões detalhadas e bagagens diretamente dos blocos de resultados do Google Flights com zero custo de API.
 
 ---
 

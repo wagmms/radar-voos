@@ -7,6 +7,23 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.3.0] - 2026-10-12
+
+### 🌐 Voo Flexível Sem Data Fixa (Best Price Explorer - Movido a Menor Preço)
+- **Modo Flexível sem Data Fixa (`sem_data: 1` e `dias_estadia`)**:
+  - Implementado suporte completo para monitorar rotas sem exigir uma data de partida rígida.
+  - O motor gera janelas de exploração distribuídas nos próximos meses (`gerarJanelasExploracaoSemData`), ajustando as terças/quartas-feiras com tarifas estatisticamente mais baixas.
+- **Motor de Eleição de Menor Preço (`src/services/flight_scanner.js`)**:
+  - No escaneamento de rotas flexíveis, o scanner varre as janelas candidatas e elege estritamente a opção com o **menor preço absoluto**.
+  - Atualização automática da data da rota e link direto do Google Flights para a data vencedora da menor tarifa.
+- **Interface Cockpit PWA e Telegram Alinhados**:
+  - Adicionado toggle `🗓️ Voo Flexível / Sem Data Fixa (Movido a Menor Preço)` no modal de criação e edição de rotas.
+  - Adicionado filtro de categoria `🗓️ Flexíveis` na barra de busca do Cockpit PWA.
+  - Cards de voos com tag visual destacada e indicação da melhor data identificada no período.
+  - Alerta do Telegram configurado com prefixo `🔥 MENOR PREÇO ENCONTRADO (DATAS FLEXÍVEIS)` e comando `/rotas` adaptado.
+- **Cobertura de Testes**:
+  - Suíte expandida para 48 testes automatizados cobrindo geração de janelas sem data, persistência SQLite e criação via API REST.
+
 ## [2.2.1] - 2026-10-12
 
 ### 🐛 Correções Críticas de Renderização e Resiliência 24/7

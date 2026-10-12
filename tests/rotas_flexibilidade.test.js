@@ -1,6 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { somarDiasData, gerarCombinacoesFlexibilidade } from '../src/domain/rotas.js';
+import {
+  somarDiasData,
+  gerarCombinacoesFlexibilidade,
+  gerarJanelasExploracaoSemData
+} from '../src/domain/rotas.js';
 import { rotasRepo } from '../src/db.js';
 
 describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
@@ -80,5 +84,70 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
 
     // Limpar rota de teste
     rotasRepo.excluir(rota.id);
+  });
+
+  it('deve gerar janelas estratégicas para voos flexíveis sem data fixa espaçadas em múltiplos meses', () => {
+    const janelas = gerarJanelasExploracaoSemData({
+      dataBase: '2026-11-01',
+      diasEstadia: 12,
+      qtdAmostras: 4,
+      soIda: false
+    });
+
+    assert.strictEqual(janelas.length, 4);
+    // Cada amostra deve ter dataIda e dataVolta espaçadas por 12 dias
+    janelas.forEach(j => {
+      assert.ok(j.dataIda);
+      assert.ok(j.dataVolta);
+      assert.strictEqual(somarDiasData(j.dataIda, 12), j.dataVolta);
+      assert.ok(j.label);
+      assert.ok(j.mes);
+    });
+
+    // As janelas devem estar em ordem cronológica ascendente
+    for (let i = 1; i < janelas.length; i++) {
+      assert.ok(janelas[i].dataIda > janelas[i - 1].dataIda);
+    }
+  });
+
+  it('deve criar e persistir rota flexível sem data fixa no SQLite com datas calculadas automaticamente', () => {
+    const rotaFlex = rotasRepo.criar({
+      origem: 'São Paulo',
+      destino: 'Buenos Aires',
+      sem_data: 1,
+      dias_estadia: 8,
+      preco_alvo: 1800
+    });
+
+    assert.ok(rotaFlex);
+    assert.strictEqual(rotaFlex.sem_data, 1);
+    assert.strictEqual(rotaFlex.dias_estadia, 8);
+    assert.ok(rotaFlex.data_ida);
+    assert.ok(rotaFlex.data_volta);
+    assert.strictEqual(somarDiasData(rotaFlex.data_ida, 8), rotaFlex.data_volta);
+
+    // Simular que o scanner encontrou uma data com o menor preço histórico
+    rotasRepo.atualizarResultadoChecagem(rotaFlex.id, {
+      data_ida: '2027-02-16',
+      data_volta: '2027-02-24',
+      preco_atual: 1450,
+      termometro: '🔥 Menor Preço Flexível (Fev/27)',
+      melhor_opcao_flexivel: {
+        data_ida: '2027-02-16',
+        data_volta: '2027-02-24',
+        preco: 1450,
+        modo: 'sem_data',
+        label: 'Janela 2 (Fev/27)'
+      }
+    });
+
+    const rotaAtualizada = rotasRepo.buscarPorId(rotaFlex.id);
+    assert.strictEqual(rotaAtualizada.preco_atual, 1450);
+    assert.strictEqual(rotaAtualizada.data_ida, '2027-02-16');
+    assert.strictEqual(rotaAtualizada.data_volta, '2027-02-24');
+    assert.strictEqual(rotaAtualizada.termometro, '🔥 Menor Preço Flexível (Fev/27)');
+
+    // Limpar rota
+    rotasRepo.excluir(rotaFlex.id);
   });
 });

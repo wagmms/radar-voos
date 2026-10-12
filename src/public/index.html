@@ -117,6 +117,7 @@
         </div>
         <div class="filter-toggles">
           <button class="filter-chip active" data-filter="todas">Todas</button>
+          <button class="filter-chip" data-filter="flexivel">🗓️ Flexíveis</button>
           <button class="filter-chip" data-filter="meta">Na Meta</button>
           <button class="filter-chip" data-filter="promo">Super Baratos</button>
         </div>
@@ -183,13 +184,25 @@
             </div>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
-              <label for="input-data-ida">Data de Ida</label>
+          <!-- Opção Voo Flexível Sem Data Fixa -->
+          <div class="flex-mode-toggle-card">
+            <label class="checkbox-container" for="input-sem-data">
+              <input type="checkbox" id="input-sem-data">
+              <span class="checkbox-checkmark"></span>
+              <div class="checkbox-text-group">
+                <strong class="checkbox-title">🗓️ Voo Flexível / Sem Data Fixa (Movido a Menor Preço)</strong>
+                <span class="checkbox-sub">Varre continuamente o ano em busca da tarifa mais barata sem data rígida.</span>
+              </div>
+            </label>
+          </div>
+
+          <div class="form-row" id="row-datas-viagem">
+            <div class="form-group" id="group-data-ida">
+              <label for="input-data-ida" id="label-data-ida">Data de Ida</label>
               <input type="date" id="input-data-ida" required>
             </div>
-            <div class="form-group">
-              <label for="input-data-volta">Volta (Data, Dias de viagem ou 'Só Ida')</label>
+            <div class="form-group" id="group-data-volta">
+              <label for="input-data-volta" id="label-data-volta">Volta (Data, Dias de viagem ou 'Só Ida')</label>
               <input type="text" id="input-data-volta" placeholder="Ex: 14 (dias), 2026-11-24 ou Só Ida">
             </div>
           </div>

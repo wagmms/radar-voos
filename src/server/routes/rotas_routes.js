@@ -66,12 +66,32 @@ export async function rotasRoutes(fastify) {
   // Criar nova rota monitorada
   fastify.post('/api/rotas', async (request, reply) => {
     const body = request.body || {};
-    const { origem, destino, data_ida, data_volta, duracao_max_horas, preco_alvo, cabine } = body;
+    const {
+      origem,
+      destino,
+      data_ida,
+      data_volta,
+      duracao_max_horas,
+      preco_alvo,
+      cabine,
+      flexibilidade_dias,
+      sem_data,
+      dias_estadia
+    } = body;
 
-    if (!origem || !destino || !data_ida) {
+    const ehSemData = Boolean(sem_data === true || sem_data === 1 || sem_data === 'true' || sem_data === '1');
+
+    if (!origem || !destino) {
       return reply.code(400).send({
         ok: false,
-        erro: 'Campos obrigatórios ausentes: origem, destino e data_ida são necessários.'
+        erro: 'Campos obrigatórios ausentes: origem e destino são necessários.'
+      });
+    }
+
+    if (!ehSemData && !data_ida) {
+      return reply.code(400).send({
+        ok: false,
+        erro: 'Campos obrigatórios ausentes: data_ida é necessária (ou ative a opção de voo flexível sem data).'
       });
     }
 
@@ -92,24 +112,30 @@ export async function rotasRoutes(fastify) {
       });
     }
 
-    const voltaCalculada = calcularDataVolta(data_ida, data_volta);
-    const validacao = validarPeriodo(data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way');
-
-    if (!validacao.ok) {
-      return reply.code(400).send({ ok: false, erro: validacao.erro });
+    let voltaCalculada = null;
+    if (data_ida) {
+      voltaCalculada = calcularDataVolta(data_ida, data_volta);
+      const validacao = validarPeriodo(data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way', ehSemData);
+      if (!validacao.ok) {
+        return reply.code(400).send({ ok: false, erro: validacao.erro });
+      }
     }
 
     // Consulta de clima preliminar
-    const climaPreliminar = await weatherService.obterClimaDestino(codDestino, data_ida).catch(() => null);
+    const dataClima = data_ida || new Date().toISOString().split('T')[0];
+    const climaPreliminar = await weatherService.obterClimaDestino(codDestino, dataClima).catch(() => null);
 
     const novaRota = rotasRepo.criar({
       origem,
       destino,
-      data_ida,
-      data_volta: voltaCalculada,
+      data_ida: data_ida || null,
+      data_volta: voltaCalculada || data_volta,
       duracao_max_horas: parseFloat(duracao_max_horas) || 999,
       preco_alvo: parseFloat(preco_alvo) || null,
       cabine: cabine || 'economy',
+      flexibilidade_dias: parseInt(flexibilidade_dias, 10) || 0,
+      sem_data: ehSemData ? 1 : 0,
+      dias_estadia: parseInt(dias_estadia, 10) || (data_volta && !isNaN(data_volta) ? parseInt(data_volta, 10) : 10),
       clima_destino_resumo: climaPreliminar?.ok ? climaPreliminar.resumo : null,
       clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
     });
@@ -127,15 +153,22 @@ export async function rotasRoutes(fastify) {
       return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
     }
 
+    const ehSemData = body.sem_data !== undefined
+      ? Boolean(body.sem_data === true || body.sem_data === 1 || body.sem_data === 'true' || body.sem_data === '1')
+      : Boolean(rota.sem_data);
+
     if (body.data_ida && body.data_volta) {
       const voltaCalculada = calcularDataVolta(body.data_ida, body.data_volta);
-      const validacao = validarPeriodo(body.data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way');
+      const validacao = validarPeriodo(body.data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way', ehSemData);
       if (!validacao.ok) {
         return reply.code(400).send({ ok: false, erro: validacao.erro });
       }
     }
 
-    const rotaAtualizada = rotasRepo.atualizar(id, body);
+    const rotaAtualizada = rotasRepo.atualizar(id, {
+      ...body,
+      sem_data: body.sem_data !== undefined ? (ehSemData ? 1 : 0) : undefined
+    });
     telemetryEvents.emitirAtualizacao('rota_atualizada', { rota: rotaAtualizada });
     return { ok: true, rota: rotaAtualizada };
   });

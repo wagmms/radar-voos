@@ -2,7 +2,13 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from './config.js';
-import { resolverDestino, calcularDataVolta, gerarLinkGoogleFlights } from './domain/rotas.js';
+import {
+  resolverDestino,
+  calcularDataVolta,
+  gerarLinkGoogleFlights,
+  somarDiasData,
+  gerarDataPadraoInicial
+} from './domain/rotas.js';
 
 let dbInstance = null;
 
@@ -110,6 +116,8 @@ function initSchema(db) {
   try { db.exec("ALTER TABLE rotas ADD COLUMN cabine TEXT DEFAULT 'economy';"); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN flexibilidade_dias INTEGER DEFAULT 0;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN melhor_opcao_flexivel TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN sem_data INTEGER DEFAULT 0;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN dias_estadia INTEGER DEFAULT 10;'); } catch (_) {}
 }
 
 /**
@@ -141,8 +149,18 @@ export const rotasRepo = {
       throw new Error(`Destino não reconhecido: '${dados.destino}'. Informe a cidade, região ou código IATA.`);
     }
 
-    const dataVolta = calcularDataVolta(dados.data_ida, dados.data_volta);
-    const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dados.data_ida, dataVolta);
+    const semData = dados.sem_data ? 1 : 0;
+    const diasEstadia = parseInt(dados.dias_estadia, 10) || 10;
+    let dataIda = dados.data_ida;
+    if (semData && !dataIda) {
+      dataIda = gerarDataPadraoInicial(25);
+    }
+
+    const dataVolta = semData && (!dados.data_volta || dados.data_volta === 'flexivel')
+      ? somarDiasData(dataIda, diasEstadia)
+      : calcularDataVolta(dataIda, dados.data_volta);
+
+    const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
     const flexibilidadeDias = parseInt(dados.flexibilidade_dias, 10) || 0;
 
@@ -150,8 +168,9 @@ export const rotasRepo = {
       INSERT INTO rotas (
         origem, destino, codigo_origem, codigo_destino,
         data_ida, data_volta, duracao_max_horas, preco_alvo,
-        link_google_flights, cabine, flexibilidade_dias, ativa
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        link_google_flights, cabine, flexibilidade_dias,
+        sem_data, dias_estadia, ativa
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `);
 
     const res = stmt.run(
@@ -159,13 +178,15 @@ export const rotasRepo = {
       dados.destino,
       codigoOrigem,
       codigoDestino,
-      dados.data_ida,
+      dataIda,
       dataVolta,
       dados.duracao_max_horas || 999,
       dados.preco_alvo || null,
       link,
       dados.cabine || 'economy',
-      flexibilidadeDias
+      flexibilidadeDias,
+      semData,
+      diasEstadia
     );
 
     return rotasRepo.buscarPorId(res.lastInsertRowid);
@@ -180,6 +201,8 @@ export const rotasRepo = {
     const destino = dados.destino || rota.destino;
     const codigoOrigem = resolverDestino(origem) || rota.codigo_origem;
     const codigoDestino = resolverDestino(destino) || rota.codigo_destino;
+    const semData = dados.sem_data !== undefined ? (dados.sem_data ? 1 : 0) : (rota.sem_data || 0);
+    const diasEstadia = dados.dias_estadia !== undefined ? (parseInt(dados.dias_estadia, 10) || 10) : (rota.dias_estadia || 10);
     const dataIda = dados.data_ida || rota.data_ida;
     const dataVolta = dados.data_volta !== undefined ? calcularDataVolta(dataIda, dados.data_volta) : rota.data_volta;
     const precoAlvo = dados.preco_alvo !== undefined ? (parseFloat(dados.preco_alvo) || null) : rota.preco_alvo;
@@ -201,12 +224,14 @@ export const rotasRepo = {
         duracao_max_horas = ?,
         cabine = ?,
         flexibilidade_dias = ?,
+        sem_data = ?,
+        dias_estadia = ?,
         link_google_flights = ?,
         ativa = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, link, ativa, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadia, link, ativa, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -225,8 +250,14 @@ export const rotasRepo = {
       ? (typeof resultado.melhor_opcao_flexivel === 'object' ? JSON.stringify(resultado.melhor_opcao_flexivel) : String(resultado.melhor_opcao_flexivel))
       : null;
 
+    const dataIdaNova = resultado.data_ida || rota.data_ida;
+    const dataVoltaNova = resultado.data_volta !== undefined ? resultado.data_volta : rota.data_volta;
+    const linkNovo = resultado.link_google_flights || rota.link_google_flights;
+
     const stmt = db.prepare(`
       UPDATE rotas SET
+        data_ida = ?,
+        data_volta = ?,
         preco_atual = ?,
         menor_preco_historico = ?,
         variacao_texto = ?,
@@ -243,6 +274,8 @@ export const rotasRepo = {
     `);
 
     stmt.run(
+      dataIdaNova,
+      dataVoltaNova,
       preco ?? null,
       menorHistorico ?? null,
       resultado.variacao_texto ?? null,
@@ -250,7 +283,7 @@ export const rotasRepo = {
       resultado.custo_destino_texto ?? null,
       resultado.detalhes_voo ?? null,
       resultado.dica_stopover ?? null,
-      resultado.link_google_flights ?? null,
+      linkNovo,
       resultado.clima_destino_resumo ?? null,
       resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
       melhorFlexivelStr,

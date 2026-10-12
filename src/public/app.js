@@ -196,7 +196,8 @@ function setupEventListeners() {
     resetarCotasHoje();
   });
 
-  // Form Nova Rota
+  // Form Nova Rota e Toggle de Voo Flexível
+  document.getElementById('input-sem-data')?.addEventListener('change', atualizarVisualModoFlexivel);
   document.getElementById('form-nova-rota')?.addEventListener('submit', criarNovaRota);
 }
 
@@ -241,6 +242,8 @@ function renderizarRotas() {
       bateCat = rota.preco_atual && rota.preco_alvo && rota.preco_atual <= rota.preco_alvo;
     } else if (state.filtroCategoria === 'promo') {
       bateCat = rota.termometro && (rota.termometro.includes('Super Barato') || rota.termometro.includes('Excelente'));
+    } else if (state.filtroCategoria === 'flexivel') {
+      bateCat = Boolean(rota.sem_data === 1);
     }
 
     return bateTexto && bateCat;
@@ -266,6 +269,9 @@ function renderizarRotas() {
 
     let cardClass = '';
     let termoClass = '';
+    if (rota.sem_data === 1) {
+      cardClass = 'status-flexivel';
+    }
     if (rota.preco_atual && rota.preco_alvo && rota.preco_atual <= rota.preco_alvo) {
       cardClass = 'status-meta';
       termoClass = 'low';
@@ -277,8 +283,10 @@ function renderizarRotas() {
       termoClass = 'low';
     }
 
-    const tipoViagem = rota.data_volta ? 'IDA E VOLTA' : 'SÓ IDA';
-    const flexTag = rota.flexibilidade_dias && rota.flexibilidade_dias > 0 ? ` • ±${rota.flexibilidade_dias}d FLEX` : '';
+    const tipoViagem = rota.sem_data === 1
+      ? '🗓️ VOO FLEXÍVEL (MENOR PREÇO)'
+      : (rota.data_volta ? 'IDA E VOLTA' : 'SÓ IDA');
+    const flexTag = rota.flexibilidade_dias && rota.flexibilidade_dias > 0 && rota.sem_data !== 1 ? ` • ±${rota.flexibilidade_dias}d FLEX` : '';
     const cabineTag = rota.cabine && rota.cabine !== 'economy' ? ` • ${rota.cabine.toUpperCase()}` : '';
     const arcoSvg = renderizarArcoVooSvg(rota.codigo_origem, rota.codigo_destino, 150, 36);
     const sparklineSvg = renderizarSparkline(rota.historico_recente || [], { width: 110, height: 32 });
@@ -301,21 +309,26 @@ function renderizarRotas() {
             <span class="airport-badge">${escapeHtml(rota.codigo_destino || 'DEST')}</span>
             <div class="city-names">${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}</div>
           </div>
-          <span class="trip-type-tag">${tipoViagem}${flexTag}${cabineTag}</span>
+          <span class="trip-type-tag ${rota.sem_data === 1 ? 'tag-flexivel' : ''}">${tipoViagem}${flexTag}${cabineTag}</span>
         </div>
 
         <!-- Arco Geodésico Great Circle (remotion-maps) -->
         ${arcoSvg}
 
         <div class="card-dates-box">
-          <div>📅 Ida: <strong>${formatarDataBr(rota.data_ida)}</strong></div>
-          <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
+          ${rota.sem_data === 1 ? `
+            <div>🗓️ Período: <strong>${rota.preco_atual ? 'Melhor: ' + formatarDataBr(rota.data_ida) : 'Qualquer data (Flexível)'}</strong></div>
+            <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
+          ` : `
+            <div>📅 Ida: <strong>${formatarDataBr(rota.data_ida)}</strong></div>
+            <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
+          `}
         </div>
 
         ${melhorOpcaoFlexivel && melhorOpcaoFlexivel.preco ? `
           <div class="flex-saving-badge">
             <div>
-              ✨ <strong>Janela Flexível:</strong> ${formatarDataBr(melhorOpcaoFlexivel.data_ida)}${melhorOpcaoFlexivel.data_volta ? ' a ' + formatarDataBr(melhorOpcaoFlexivel.data_volta) : ''}
+              ✨ <strong>${melhorOpcaoFlexivel.modo === 'sem_data' ? 'Menor Tarifa do Período:' : 'Janela Flexível:'}</strong> ${formatarDataBr(melhorOpcaoFlexivel.data_ida)}${melhorOpcaoFlexivel.data_volta ? ' a ' + formatarDataBr(melhorOpcaoFlexivel.data_volta) : ''}
               (R$ ${melhorOpcaoFlexivel.preco.toFixed(2).replace('.', ',')})
             </div>
             ${melhorOpcaoFlexivel.economia && melhorOpcaoFlexivel.economia > 0 ? `
@@ -476,6 +489,28 @@ function atualizarMetricasBugs() {
   if (badgeBugFares) badgeBugFares.textContent = state.bugFares.length;
 }
 
+function atualizarVisualModoFlexivel() {
+  const checkSemData = document.getElementById('input-sem-data');
+  const inputDataIda = document.getElementById('input-data-ida');
+  const labelDataIda = document.getElementById('label-data-ida');
+  const inputDataVolta = document.getElementById('input-data-volta');
+  const labelDataVolta = document.getElementById('label-data-volta');
+
+  if (!checkSemData || !inputDataIda || !labelDataIda) return;
+
+  if (checkSemData.checked) {
+    inputDataIda.removeAttribute('required');
+    labelDataIda.textContent = 'Data de Ida Estimada (Opcional)';
+    if (labelDataVolta) labelDataVolta.textContent = 'Duração da Viagem (Dias, ex: 10) ou Só Ida';
+    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 10 (dias) ou Só Ida';
+  } else {
+    inputDataIda.setAttribute('required', 'required');
+    labelDataIda.textContent = 'Data de Ida';
+    if (labelDataVolta) labelDataVolta.textContent = 'Volta (Data, Dias de viagem ou Só Ida)';
+    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 14 (dias), 2026-11-24 ou Só Ida';
+  }
+}
+
 // Ações do Usuário
 function abrirModalNovaRota() {
   document.getElementById('input-rota-id').value = '';
@@ -484,6 +519,9 @@ function abrirModalNovaRota() {
   document.getElementById('form-nova-rota').reset();
   const selectFlex = document.getElementById('input-flexibilidade');
   if (selectFlex) selectFlex.value = '3';
+  const checkSemData = document.getElementById('input-sem-data');
+  if (checkSemData) checkSemData.checked = false;
+  atualizarVisualModoFlexivel();
   abrirModal(modalRota);
 }
 
@@ -506,6 +544,12 @@ window.abrirEdicaoRota = function(id) {
   if (selectCabine) selectCabine.value = rota.cabine || 'economy';
   const selectFlex = document.getElementById('input-flexibilidade');
   if (selectFlex) selectFlex.value = String(rota.flexibilidade_dias ?? 0);
+
+  const checkSemData = document.getElementById('input-sem-data');
+  if (checkSemData) {
+    checkSemData.checked = Boolean(rota.sem_data === 1);
+  }
+  atualizarVisualModoFlexivel();
 
   abrirModal(modalRota);
 };
@@ -545,6 +589,8 @@ async function criarNovaRota(e) {
   const duracao_max_horas = document.getElementById('input-duracao-max').value;
   const cabine = document.getElementById('input-cabine')?.value || 'economy';
   const flexibilidade_dias = parseInt(document.getElementById('input-flexibilidade')?.value || '0', 10);
+  const sem_data = document.getElementById('input-sem-data')?.checked ? 1 : 0;
+  const dias_estadia = sem_data && data_volta && !isNaN(data_volta) ? parseInt(data_volta, 10) : 10;
 
   const url = rotaId ? `/api/rotas/${rotaId}` : '/api/rotas';
   const method = rotaId ? 'PUT' : 'POST';
@@ -556,12 +602,14 @@ async function criarNovaRota(e) {
       body: JSON.stringify({
         origem,
         destino,
-        data_ida,
-        data_volta,
+        data_ida: data_ida || undefined,
+        data_volta: data_volta || undefined,
         preco_alvo,
         duracao_max_horas,
         cabine,
-        flexibilidade_dias
+        flexibilidade_dias,
+        sem_data,
+        dias_estadia
       })
     });
 

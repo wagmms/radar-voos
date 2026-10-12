@@ -1035,4 +1035,66 @@ body {
   font-size: 0.7rem;
 }
 
+/* VOO FLEXÍVEL SEM DATA (MENOR PREÇO) */
+.flight-card.status-flexivel {
+  border-color: rgba(6, 182, 212, 0.3);
+  background: linear-gradient(180deg, rgba(6, 182, 212, 0.04) 0%, var(--bg-surface) 100%);
+}
+
+.trip-type-tag.tag-flexivel {
+  background: rgba(6, 182, 212, 0.15);
+  color: var(--cyan-primary);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  font-weight: 700;
+}
+
+.flex-mode-toggle-card {
+  background: rgba(6, 182, 212, 0.06);
+  border: 1px solid rgba(6, 182, 212, 0.25);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  transition: all 0.2s ease;
+}
+
+.flex-mode-toggle-card:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.4);
+}
+
+.checkbox-container {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-container input {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  accent-color: var(--cyan-primary);
+  cursor: pointer;
+}
+
+.checkbox-text-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.checkbox-title {
+  color: var(--cyan-primary);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.checkbox-sub {
+  color: var(--text-dim);
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+
 

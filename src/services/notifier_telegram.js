@@ -107,13 +107,18 @@ class NotifierTelegram {
     detalhes,
     dicaStopover,
     link,
-    clima = null
+    clima = null,
+    semData = false,
+    labelJanela = null
   }) {
     const voltaTexto = dataVolta ? ` até ${dataVolta}` : ' (Só Ida)';
     let prefixoAssunto = '✈️ OPORTUNIDADE DE VOO';
     let emoji = '✈️';
 
-    if (variacaoTexto && variacaoTexto.includes('Caiu')) {
+    if (semData) {
+      prefixoAssunto = '🔥 MENOR PREÇO ENCONTRADO (DATAS FLEXÍVEIS)';
+      emoji = '🔥';
+    } else if (variacaoTexto && variacaoTexto.includes('Caiu')) {
       prefixoAssunto = '🚨 QUEDA RELÂMPAGO';
       emoji = '🚨';
     } else if (ehRecorde) {
@@ -123,7 +128,14 @@ class NotifierTelegram {
 
     let msg = `<b>${emoji} ${escapeHtml(prefixoAssunto)}</b>\n\n`;
     msg += `✈️ <b>${escapeHtml(origem)} ➔ ${escapeHtml(destinoReal)}</b>\n`;
-    msg += `📅 ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)}\n`;
+
+    if (semData) {
+      msg += `📅 <b>Melhor Período:</b> ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)}${labelJanela ? ` • <i>${escapeHtml(labelJanela)}</i>` : ''}\n`;
+      msg += `✨ <i>Modo Flexível Ativo: rastreando a menor tarifa nos próximos meses.</i>\n`;
+    } else {
+      msg += `📅 ${escapeHtml(dataIda)}${escapeHtml(voltaTexto)}\n`;
+    }
+
     msg += `💰 <b>Voo: R$ ${preco.toFixed(2).replace('.', ',')}</b>\n`;
 
     if (variacaoTexto && variacaoTexto !== 'Estável' && variacaoTexto !== 'Primeira Checagem') {
@@ -315,9 +327,12 @@ class NotifierTelegram {
         const precoStr = r.preco_atual ? `R$ ${r.preco_atual.toFixed(2)}` : 'Aguardando checagem';
         const silenciada = rotasRepo.estaSilenciada(r) ? ' 🔕 [Silenciada]' : '';
         const climaStr = r.clima_destino_resumo ? ` | 🌤️ ${r.clima_destino_resumo}` : '';
+        const tagFlex = r.sem_data ? ' 🗓️ [Flexível / Menor Preço]' : '';
 
-        resposta += `• <b>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</b>${silenciada}\n`;
-        resposta += `  📅 ${r.data_ida}${r.data_volta ? ' até ' + r.data_volta : ' (Só Ida)'}\n`;
+        resposta += `• <b>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</b>${tagFlex}${silenciada}\n`;
+        resposta += r.sem_data
+          ? `  📅 Melhor período: ${r.data_ida}${r.data_volta ? ' até ' + r.data_volta : ' (Só Ida)'}\n`
+          : `  📅 ${r.data_ida}${r.data_volta ? ' até ' + r.data_volta : ' (Só Ida)'}\n`;
         resposta += `  💰 Preço Atual: <b>${precoStr}</b> | Meta: R$ ${r.preco_alvo || '-'}\n`;
         resposta += `  🌡️ ${escapeHtml(r.termometro || 'Sem dados')}${climaStr}\n\n`;
       }

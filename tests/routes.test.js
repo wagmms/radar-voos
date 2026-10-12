@@ -69,6 +69,30 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.strictEqual(json.rota.data_volta, '2026-11-29');
   });
 
+  it('POST /api/rotas deve criar rota flexível sem data com sem_data: 1', async () => {
+    const rotaFlex = {
+      origem: 'Rio de Janeiro',
+      destino: 'Europa',
+      sem_data: 1,
+      dias_estadia: 15,
+      preco_alvo: 3900
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: rotaFlex
+    });
+
+    assert.strictEqual(res.statusCode, 201);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.rota.sem_data, 1);
+    assert.strictEqual(json.rota.dias_estadia, 15);
+    assert.ok(json.rota.data_ida);
+    assert.ok(json.rota.data_volta);
+  });
+
   it('GET /api/rotas deve listar as rotas criadas', async () => {
     const res = await app.inject({
       method: 'GET',
