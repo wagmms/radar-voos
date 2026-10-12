@@ -220,7 +220,8 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
           detalhes: detalhesVoo,
           dicaStopover: '-',
           link: linkBase,
-          provedor: this.nome
+          provedor: this.nome,
+          amostraVoos: voosDetalhados.slice(0, 10).map(v => `${v.cia}: R$ ${v.preco} (${v.duracaoTexto})`)
         }
       };
     } catch (err) {

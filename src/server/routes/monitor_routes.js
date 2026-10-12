@@ -83,4 +83,17 @@ export async function monitorRoutes(fastify) {
     );
     return { ok: enviado, mensagem: enviado ? 'Alerta de teste enviado com sucesso!' : 'Falha ao enviar mensagem.' };
   });
+
+  // Diagnóstico Google Flights Direct
+  fastify.get('/api/debug/google-flights', async (request, reply) => {
+    const { GoogleFlightsDirectProvider } = await import('../../services/providers/google_flights_direct_provider.js');
+    const p = new GoogleFlightsDirectProvider();
+    const res = await p.buscarOfertas({
+      origemCod: 'RIO',
+      destinoCod: 'RAO',
+      dataIda: '2027-01-17',
+      duracaoMaxHoras: 6
+    });
+    return { ok: true, debug: res };
+  });
 }
