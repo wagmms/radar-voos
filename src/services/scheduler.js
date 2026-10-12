@@ -16,11 +16,11 @@ class Scheduler {
 
     // Primeira varredura 15 segundos após startup
     setTimeout(() => {
-      this.executarCiclo(true);
+      this.executarCiclo(true).catch(err => console.error('❌ Erro no ciclo inicial do scheduler:', err));
     }, 15000);
 
     this.timer = setInterval(() => {
-      this.executarCiclo(true);
+      this.executarCiclo(true).catch(err => console.error('❌ Erro no ciclo periódico do scheduler:', err));
     }, this.intervaloMinutos * 60 * 1000);
   }
 
@@ -59,15 +59,19 @@ class Scheduler {
 
       let processadas = 0;
       for (const rota of rotas) {
-        console.log(`🛫 Verificando rota: ${rota.origem} ➔ ${rota.destino} (${rota.data_ida})`);
-        const res = await FlightScanner.escanearRota(rota);
+        try {
+          console.log(`🛫 Verificando rota: ${rota.origem} ➔ ${rota.destino} (${rota.data_ida})`);
+          const res = await FlightScanner.escanearRota(rota);
 
-        if (res.sucesso && res.encontrou) {
-          console.log(`✅ Preço obtido: R$ ${res.oferta.preco.toFixed(2)} (${res.oferta.termometro})`);
-        } else if (res.sucesso && !res.encontrou) {
-          console.log(`⚪ Sem voos no filtro: ${res.mensagem}`);
-        } else {
-          console.log(`⚠️ Falha na checagem: ${res.erro}`);
+          if (res.sucesso && res.encontrou) {
+            console.log(`✅ Preço obtido: R$ ${res.oferta.preco.toFixed(2)} (${res.oferta.termometro})`);
+          } else if (res.sucesso && !res.encontrou) {
+            console.log(`⚪ Sem voos no filtro: ${res.mensagem}`);
+          } else {
+            console.log(`⚠️ Falha na checagem: ${res.erro}`);
+          }
+        } catch (err) {
+          console.error(`❌ Erro inesperado ao escanear rota ${rota.origem} ➔ ${rota.destino}:`, err.message);
         }
 
         processadas++;

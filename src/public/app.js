@@ -221,6 +221,7 @@ async function carregarDadosCompletos(suave = false) {
     renderizarBugFares();
     renderizarPoolStatus();
   } catch (err) {
+    console.error('Falha ao carregar dados:', err);
     if (!suave) mostrarToast('Falha ao sincronizar dados com o servidor', true);
   }
 }
@@ -456,7 +457,7 @@ function renderizarPoolStatus() {
 function atualizarMetricasRotas() {
   if (metricRotasTotal) metricRotasTotal.textContent = state.rotas.length;
 
-  const naMeta = state.rotas.filter((r) => r.preco_atual && r.preco_alvo && r.preco_atual <= rota.preco_alvo).length;
+  const naMeta = state.rotas.filter((r) => r.preco_atual && r.preco_alvo && r.preco_atual <= r.preco_alvo).length;
   if (metricOportunidades) metricOportunidades.textContent = naMeta;
 }
 

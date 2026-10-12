@@ -16,6 +16,18 @@ class SerpApiPool {
     this.inicializado = true;
   }
 
+  temChaveDisponivel() {
+    this.inicializar();
+    const status = chavesRepo.listarStatus();
+    const agora = Date.now();
+    return status.some(
+      (ch) =>
+        (!ch.cooldown_ate || ch.cooldown_ate <= agora) &&
+        ch.contador_diario < this.limiteDiario &&
+        ch.contador_mensal < this.limiteMensal
+    );
+  }
+
   obterChaveDisponivel() {
     this.inicializar();
     chavesRepo.sincronizar(this.keys);

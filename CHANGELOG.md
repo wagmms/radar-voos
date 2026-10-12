@@ -7,6 +7,19 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.2.1] - 2026-10-12
+
+### 🐛 Correções Críticas de Renderização e Resiliência 24/7
+- **Correção de ReferenceError no Cockpit PWA (`src/public/app.js`)**:
+  - Corrigido typo na função `atualizarMetricasRotas` onde avaliava `rota.preco_alvo` em vez de `r.preco_alvo` no filtro de oportunidades, o que causava lançamento de exceção não tratada e impedia a execução de `renderizarRotas()`, deixando a tela sem nenhuma rota exibida.
+  - Atualizada versão de cache do Service Worker (`src/public/sw.js`) para `radar-voos-v2.2` garantindo invalidação imediata de cache legado no cliente.
+- **Implementação de `temChaveDisponivel()` no Pool SerpAPI (`src/services/serpapi_pool.js`)**:
+  - Implementado método `temChaveDisponivel()` ausente que causava `TypeError` durante a troca de provedor no `FlightProviderManager`, derrubando o processo Node do servidor no ciclo inicial.
+- **Blindagem e Resiliência em Falhas Inesperadas (`src/services/scheduler.js` e `src/services/flight_scanner.js`)**:
+  - Envolvido ciclo de monitoramento e cada rota individual em blocos defensivos com log de erros, garantindo que o servidor Fastify permaneça online 24/7 sem interrupções por falha de provedor individual.
+- **Suíte de Testes Ampliada**:
+  - Adicionado teste unitário cobrindo `SerpApiProvider.estaDisponivel()` e `serpApiPool.temChaveDisponivel()` (45/45 testes passando).
+
 ## [2.2.0] - 2026-10-12
 
 ### 🛫 Matriz de Flexibilidade de Datas, Bug Fares Estatísticos e Áudio de Cabine

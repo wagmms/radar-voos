@@ -86,4 +86,14 @@ describe('Provedores de Voos e Failover (FlightProviderManager)', () => {
     assert.equal(res.ok, false);
     assert.ok(res.mensagemErro.includes('Todos os provedores de voo falharam'));
   });
+
+  it('deve checar disponibilidade de chaves SerpApi através de estaDisponivel() sem estourar exceção', async () => {
+    const { SerpApiProvider } = await import('../src/services/providers/serpapi_provider.js');
+    const { serpApiPool } = await import('../src/services/serpapi_pool.js');
+
+    const provider = new SerpApiProvider();
+    assert.equal(typeof serpApiPool.temChaveDisponivel, 'function');
+    const disp = provider.estaDisponivel();
+    assert.equal(typeof disp, 'boolean');
+  });
 });

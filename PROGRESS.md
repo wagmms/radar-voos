@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.2.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.2 operacional, 100% autônomo (44/44 testes passando), com telemetria SSE, matriz de flexibilidade de datas (±0 a ±7 dias), alerta sonoro de cabine Web Audio API e motor estatístico de detecção de Bug Fares no GDS com zero dependência de RSS.
+- **Estado Geral**: 🟢 Radar v2.2.1 operacional, 100% autônomo (45/45 testes passando), com telemetria SSE, Cockpit PWA corrigido (renderização e métricas ativas), pool de chaves blindado e agendador 24/7 resiliente.
 - **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas e oportunidades aéreas no GDS com custo zero e zero atraso de blogs externos.
-- **Última Tarefa Concluída**: Implementação da Matriz de Flexibilidade de Datas (±0 a ±7 dias), detecção estatística de Bug Fares (pisos regionais Europa/EUA/América do Sul/Ásia e quedas >50%), eliminação do RSS e inclusão do Chime de cabine via Web Audio API.
+- **Última Tarefa Concluída**: Resolução do bug de exibição de rotas no Cockpit PWA (`src/public/app.js` corrigindo `r.preco_alvo`), implementação de `temChaveDisponivel()` no pool SerpAPI (`src/services/serpapi_pool.js`) e blindagem de exceções no agendador (`src/services/scheduler.js`), garantindo que todas as 8 rotas salvas no SQLite sejam renderizadas com precisão.
 
 ---
 

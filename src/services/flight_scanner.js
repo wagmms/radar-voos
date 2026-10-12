@@ -31,26 +31,27 @@ export class FlightScanner {
    * Executa varredura de uma rota cadastrada no banco de dados com flexibilidade de datas e detecção de Bug Fares
    */
   static async escanearRota(rota) {
-    // 1. Consulta meteorológica do destino em paralelo
-    const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
+    try {
+      // 1. Consulta meteorológica do destino em paralelo
+      const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
 
-    // 2. Busca de ofertas da data base
-    const resultadoBase = await FlightScanner.buscarOfertas(
-      rota.codigo_origem,
-      rota.codigo_destino,
-      rota.data_ida,
-      rota.data_volta,
-      rota.duracao_max_horas,
-      rota.cabine || 'economy',
-      1
-    );
+      // 2. Busca de ofertas da data base
+      const resultadoBase = await FlightScanner.buscarOfertas(
+        rota.codigo_origem,
+        rota.codigo_destino,
+        rota.data_ida,
+        rota.data_volta,
+        rota.duracao_max_horas,
+        rota.cabine || 'economy',
+        1
+      );
 
-    const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
+      const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
 
-    if (!resultadoBase.ok) {
-      rotasRepo.marcarFalhaChecagem(rota.id, resultadoBase.mensagemErro || 'Falha na checagem');
-      return { sucesso: false, erro: resultadoBase.mensagemErro };
-    }
+      if (!resultadoBase.ok) {
+        rotasRepo.marcarFalhaChecagem(rota.id, resultadoBase.mensagemErro || 'Falha na checagem');
+        return { sucesso: false, erro: resultadoBase.mensagemErro };
+      }
 
     if (!resultadoBase.encontrouVoos) {
       rotasRepo.atualizarResultadoChecagem(rota.id, {
@@ -204,5 +205,12 @@ export class FlightScanner {
       melhorOpcaoFlexivel,
       ehBugFare: analiseBug.ehBugFare
     };
+  } catch (err) {
+    rotasRepo.marcarFalhaChecagem(rota.id, `Erro inesperado: ${err.message}`);
+    return {
+      sucesso: false,
+      erro: err.message
+    };
   }
+}
 }
