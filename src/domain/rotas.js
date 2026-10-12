@@ -209,7 +209,8 @@ export const KGMID_PARA_NOME = {
   "/m/0f8l9c": "France",
   "/m/03rjj": "Italy",
   "/m/01n7q": "Chile",
-  "/m/06_1": "South America"
+  "/m/06_1": "South America",
+  "/m/02j1x": "Asia"
 };
 
 /**

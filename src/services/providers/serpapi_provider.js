@@ -36,6 +36,7 @@ export class SerpApiProvider extends FlightProviderInterface {
       currency: 'BRL',
       hl: 'pt',
       type: dataVolta ? '1' : '2',
+      sort_by: '2',
       api_key: chaveInfo.chave,
       adults: String(adultos || 1)
     });
@@ -125,6 +126,7 @@ export class SerpApiProvider extends FlightProviderInterface {
       }
 
       let melhorOpcao = null;
+      let vooEleito = null;
       const linkWebEstruturado = gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
 
       for (const voo of todosVoos) {
@@ -160,6 +162,7 @@ export class SerpApiProvider extends FlightProviderInterface {
           : gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta);
 
         if (!melhorOpcao || preco < melhorOpcao.preco) {
+          vooEleito = voo;
           melhorOpcao = {
             preco,
             duracaoHoras: duracaoMinutos / 60,
@@ -173,6 +176,49 @@ export class SerpApiProvider extends FlightProviderInterface {
             provedor: this.nome
           };
         }
+      }
+
+      // Se houver booking_token na opção eleita, checa se parceiros/OTAs oferecem tarifa menor (Cheapest)
+      if (melhorOpcao && vooEleito && vooEleito.booking_token) {
+        try {
+          const segs = Array.isArray(vooEleito.flights) ? vooEleito.flights : [];
+          const depAeroporto = (segs[0]?.departure_airport?.id) || origemSerp;
+          const arrAeroporto = (segs[segs.length - 1]?.arrival_airport?.id) || destinoSerp;
+
+          const bookingParams = new URLSearchParams({
+            engine: 'google_flights',
+            departure_id: depAeroporto,
+            arrival_id: arrAeroporto,
+            outbound_date: dataIda,
+            booking_token: vooEleito.booking_token,
+            currency: 'BRL',
+            hl: 'pt',
+            type: dataVolta ? '1' : '2',
+            api_key: chaveInfo.chave
+          });
+
+          const respBooking = await fetch(`https://serpapi.com/search.json?${bookingParams.toString()}`, {
+            headers: { 'Accept': 'application/json' },
+            signal: AbortSignal.timeout(8000)
+          });
+
+          if (respBooking.ok) {
+            const dataBooking = await respBooking.json();
+            serpApiPool.registrarUso(chaveInfo.indice);
+            const opcoes = (dataBooking.booking_options || [])
+              .map(b => b.together || b.separate || null)
+              .filter(Boolean);
+
+            for (const op of opcoes) {
+              const pOp = Number(op.price);
+              if (Number.isFinite(pOp) && pOp > 0 && pOp < melhorOpcao.preco) {
+                melhorOpcao.precoOriginal = melhorOpcao.preco;
+                melhorOpcao.preco = pOp;
+                melhorOpcao.detalhes = `${melhorOpcao.detalhes} | Menor Tarifa (${op.book_with || 'OTA'}: R$ ${pOp})`;
+              }
+            }
+          }
+        } catch (_) {}
       }
 
       if (!melhorOpcao) {

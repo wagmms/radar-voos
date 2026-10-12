@@ -26,6 +26,18 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverDestino('Europa'), '/m/02j9z');
     assert.strictEqual(resolverDestino('Estados Unidos'), '/m/09c7w0');
     assert.strictEqual(resolverDestino('Portugal'), '/m/05r4w');
+    assert.strictEqual(resolverDestino('América do Sul'), '/m/06_1');
+    assert.strictEqual(resolverDestino('america do sul'), '/m/06_1');
+    assert.strictEqual(resolverDestino('Ásia'), '/m/02j1x');
+    assert.strictEqual(resolverDestino('asia'), '/m/02j1x');
+  });
+
+  it('não deve mais resolver regiões brasileiras agrupadas', () => {
+    assert.strictEqual(resolverDestino('Nordeste'), null);
+    assert.notStrictEqual(resolverDestino('Sul'), 'CWB,POA,FLN');
+    assert.strictEqual(resolverDestino('Sudeste'), null);
+    assert.strictEqual(resolverDestino('Norte'), null);
+    assert.strictEqual(resolverDestino('Centro Oeste'), null);
   });
 
   it('deve normalizar metrópoles para aeroportos físicos compatíveis com SerpAPI', () => {

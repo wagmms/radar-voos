@@ -222,5 +222,32 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.strictEqual(json.ok, true);
     assert.strictEqual(json.importadas, 1);
   });
+
+  it('GET /api/bug-fares deve retornar lista compatível com items e bugFares', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/bug-fares'
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(Array.isArray(json.items));
+    assert.ok(Array.isArray(json.bugFares));
+  });
+
+  it('POST /api/bug-fares/escanear deve executar varredura proativa com sucesso', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/bug-fares/escanear',
+      payload: { limiteRotas: 1, incluirFeeds: false }
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.resultado);
+  });
 });
+
 

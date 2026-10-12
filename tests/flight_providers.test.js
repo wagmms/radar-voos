@@ -96,4 +96,50 @@ describe('Provedores de Voos e Failover (FlightProviderManager)', () => {
     const disp = provider.estaDisponivel();
     assert.equal(typeof disp, 'boolean');
   });
+
+  it('GoogleFlightsDirectProvider deve capturar o menor preço da aba Cheapest (R$ 587) em vez de ficar preso no voo regular (R$ 741)', async () => {
+    const { GoogleFlightsDirectProvider } = await import('../src/services/providers/google_flights_direct_provider.js');
+    const provider = new GoogleFlightsDirectProvider();
+
+    // Mock do fetch retornando HTML autêntico do Google Flights com a aba Cheapest
+    const htmlMock = `
+      <html>
+        <div aria-label="A partir de 741 Reais brasileiros. Voo da Azul com 1 parada. Duração total: 3 h 40 min."></div>
+        <div aria-label="A partir de 920 Reais brasileiros. Voo da Gol com 1 parada. Duração total: 2 h 55 min."></div>
+        <script>
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+              [[null, 587], "CjRIMS1mNTFfb3VtQ1FBQUpjMmdCRy0tLS0tLWNlYmNyMy1uMkFBQUFBR3JOTVBBSDFrZHNBEhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsIzMoDEAIaA0JSTDgdcPtb"]
+            ]
+          });
+        </script>
+      </html>
+    `;
+
+    const fetchOriginal = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: 'https://www.google.com/travel/flights',
+      text: async () => htmlMock
+    });
+
+    try {
+      const res = await provider.buscarOfertas({
+        origemCod: 'RIO',
+        destinoCod: 'RAO',
+        dataIda: '2027-01-17',
+        duracaoMaxHoras: 6
+      });
+
+      assert.ok(res.ok);
+      assert.ok(res.encontrouVoos);
+      assert.equal(res.oferta.preco, 587);
+      assert.equal(res.oferta.duracaoHoras, 3.7);
+      assert.ok(res.oferta.detalhes.includes('Aba Cheapest Google Flights'));
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
 });

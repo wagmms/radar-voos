@@ -282,6 +282,7 @@ class NotifierTelegram {
         `• /status - Relatório do pool de busca e sentinela autônomo\n` +
         `• /clima [cidade] - Previsão do tempo para um destino (ex: /clima Paris)\n` +
         `• /bugs - Últimos Bug Fares e Erros de Tarifa detectados\n` +
+        `• /varrerbugs - Dispara varredura proativa global nos corredores mundiais\n` +
         `• /ping - Verifica se o robô está ativo e operacional\n\n` +
         `<i>Acesse o Cockpit PWA completo em http://localhost:${config.port}</i>`;
       await this.enviarMensagem(resposta, null, '', false);
@@ -303,7 +304,7 @@ class NotifierTelegram {
     } else if (texto === '/status') {
       const relatorio = serpApiPool.obterRelatorio();
       let resposta =
-        `📊 <b>STATUS DO RADAR DE VOOS (v2.1)</b>\n\n` +
+        `📊 <b>STATUS DO RADAR DE VOOS</b>\n\n` +
         `• Provedores: Google Flights Direct (0 custo) + SerpAPI Pool\n` +
         `• Buscas Hoje: <b>${relatorio.buscasHoje} / ${relatorio.limiteDiarioTotal}</b>\n` +
         `• Buscas no Mês: <b>${relatorio.buscasMes} / ${relatorio.limiteMensalTotal}</b>\n` +
@@ -339,19 +340,42 @@ class NotifierTelegram {
 
       await this.enviarMensagem(resposta, null, '', false);
     } else if (texto === '/bugs') {
-      const bugs = bugFaresRepo.listarRecentes(5);
+      const bugs = bugFaresRepo.listarRecentes(8);
       if (bugs.length === 0) {
-        await this.enviarMensagem('Nenhum Bug Fare recente detectado no feed.', null, '', false);
+        await this.enviarMensagem('🔍 Nenhum Bug Fare registrado no momento.\nEnvie <code>/varrerbugs</code> para acionar a caçada proativa global!', null, '', false);
         return;
       }
 
       let resposta = `🚨 <b>ÚLTIMOS BUG FARES DETECTADOS</b>\n\n`;
       for (const b of bugs) {
-        resposta += `• <b>${escapeHtml(b.titulo)}</b>\n🔗 ${b.link}\n\n`;
+        resposta += `• <b>${escapeHtml(b.titulo)}</b>\n  🏷️ <i>${escapeHtml(b.tipo)}</i>\n  🔗 <a href="${escapeHtml(b.link)}">Ver no Google Flights</a>\n\n`;
       }
       await this.enviarMensagem(resposta, null, '', false);
+    } else if (texto === '/varrerbugs' || texto === '/radar') {
+      await this.enviarMensagem('🧭 <i>Iniciando varredura proativa em corredores mundiais... Aguarde cerca de 15 segundos.</i>', null, '', false);
+      try {
+        const { bugFareHunter } = await import('./bug_fare_hunter.js');
+        const { BugFareFeedWatcher } = await import('./bug_fare_feed_watcher.js');
+        const [resProativo, resFeeds] = await Promise.allSettled([
+          bugFareHunter.executarVarreduraProativa({ limiteRotas: 4, notificar: false }),
+          BugFareFeedWatcher.escanearFeeds({ notificar: false })
+        ]);
+        const bugs = bugFaresRepo.listarRecentes(5);
+        let rep = `🏁 <b>Varredura Proativa Concluída!</b>\n\n`;
+        if (bugs.length > 0) {
+          rep += `🚨 <b>Últimas anomalias registradas no Radar:</b>\n\n`;
+          for (const b of bugs) {
+            rep += `• <b>${escapeHtml(b.titulo)}</b>\n  🔗 <a href="${escapeHtml(b.link)}">Acessar Oferta</a>\n\n`;
+          }
+        } else {
+          rep += `Nenhum erro de tarifa anômalo nos corredores pesquisados neste instante. Tarifas dentro dos parâmetros regulares do GDS.`;
+        }
+        await this.enviarMensagem(rep, null, '', false);
+      } catch (err) {
+        await this.enviarMensagem(`⚠️ Falha ao executar varredura: ${escapeHtml(err.message)}`, null, '', false);
+      }
     } else if (texto === '/ping') {
-      await this.enviarMensagem('🏓 Pong! O Radar de Voos v2.1 está 100% online e operante.', null, '', false);
+      await this.enviarMensagem('🏓 Pong! O Radar de Voos v2.5.2 está 100% online e operante.', null, '', false);
     }
   }
 }

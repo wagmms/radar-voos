@@ -191,11 +191,16 @@ export class FlightScanner {
     );
 
     // 4. Detecção Estatística de Bug Fares em Tempo Real (Zero Delay)
+    const statsPreco = rotasRepo.obterEstatisticasPreco(rota.id);
+    const mediaReferencia = statsPreco.media || precoAnterior || rota.preco_atual;
+
     const analiseBug = detectarBugFareEstatistico({
       origemCod: rota.codigo_origem,
       destinoCod: rota.codigo_destino,
       preco: oferta.preco,
-      precoMedioHistorico: rota.menor_preco_historico || precoAnterior,
+      precoMedioHistorico: mediaReferencia,
+      desvioPadrao: statsPreco.desvioPadrao,
+      cabine: rota.cabine || 'economy',
       dataVolta: dataVoltaEfetiva
     });
 

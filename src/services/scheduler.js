@@ -1,6 +1,8 @@
 import { config } from '../config.js';
 import { rotasRepo } from '../db.js';
 import { FlightScanner } from './flight_scanner.js';
+import { bugFareHunter } from './bug_fare_hunter.js';
+import { BugFareFeedWatcher } from './bug_fare_feed_watcher.js';
 
 class Scheduler {
   constructor() {
@@ -8,6 +10,7 @@ class Scheduler {
     this.executando = false;
     this.intervaloMinutos = config.radar.scanIntervalMinutes;
     this.ultimaExecucao = null;
+    this.ciclosContador = 0;
   }
 
   iniciar() {
@@ -79,6 +82,18 @@ class Scheduler {
         if (rotas.length > 1) {
           const jitterMs = 2500 + Math.floor(Math.random() * 2000);
           await new Promise(r => setTimeout(r, jitterMs));
+        }
+      }
+
+      // Prospecção autônoma leve de Bug Fares (intercalada a cada 2 ciclos ou se forçado)
+      this.ciclosContador++;
+      if (this.ciclosContador % 2 === 0 || forcarTodas) {
+        try {
+          console.log('🧭 [Scheduler] Disparando sonda autônoma proativa de Bug Fares em corredores mundiais...');
+          await bugFareHunter.executarVarreduraProativa({ limiteRotas: 2, notificar: true });
+          await BugFareFeedWatcher.escanearFeeds({ notificar: true });
+        } catch (errHunter) {
+          console.warn('⚠️ [Scheduler] Falha na sonda proativa de bug fares:', errHunter.message);
         }
       }
 

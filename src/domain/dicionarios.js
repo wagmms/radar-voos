@@ -60,11 +60,7 @@ export const MAPA_AEROPORTOS_SERPAPI = {
   "TYO": "HND,NRT",
   "WAS": "IAD,DCA",
   "CHI": "ORD,MDW",
-  "BHZ": "CNF",
-  "NORDESTE": "REC,SSA",
-  "SUL": "CWB,POA,FLN",
-  "SUDESTE": "GRU,GIG,CNF",
-  "NORTE": "BEL,MAO"
+  "BHZ": "CNF"
 };
 
 // Regiões e Países (IDs KGMID/Freebase para busca abrangente no Google Flights)
@@ -73,6 +69,8 @@ export const DICIONARIO_REGIOES = {
   "estados unidos": "/m/09c7w0",
   "eua": "/m/09c7w0",
   "usa": "/m/09c7w0",
+  "asia": "/m/02j1x",
+  "america do sul": "/m/06_1",
   "portugal": "/m/05r4w",
   "espanha": "/m/06mkj",
   "franca": "/m/0f8l9c",
@@ -82,13 +80,6 @@ export const DICIONARIO_REGIOES = {
   "uruguai": "MVD",
   "peru": "LIM",
   "colombia": "BOG",
-  "america do sul": "BUE",
-  "nordeste": "REC,SSA",
-  "sul": "CWB,POA,FLN",
-  "sudeste": "SAO,RIO,BHZ",
-  "norte": "BEL,MAO",
-  "centro oeste": "BSB,GYN,CGB",
-  "centro-oeste": "BSB,GYN,CGB",
   "caribe": "CUN,PUJ"
 };
 
@@ -105,6 +96,7 @@ export const DICIONARIO_CUSTO_DESTINO = {
   "bogota": { texto: "🟢 $ Econômico (~R$ 180/dia)", diario: 180 },
   "colombia": { texto: "🟢 $ Econômico (~R$ 180/dia)", diario: 180 },
   "america do sul": { texto: "🟢 $ Econômico (~R$ 200/dia)", diario: 200 },
+  "asia": { texto: "🟡 $$ Moderado (~R$ 350/dia)", diario: 350 },
   "belem": { texto: "🟢 $ Nacional (~R$ 170/dia)", diario: 170 },
   "ribeirao preto": { texto: "🟢 $ Nacional (~R$ 160/dia)", diario: 160 },
   "curitiba": { texto: "🟢 $ Nacional (~R$ 190/dia)", diario: 190 },
@@ -112,7 +104,6 @@ export const DICIONARIO_CUSTO_DESTINO = {
   "recife": { texto: "🟢 $ Nacional (~R$ 180/dia)", diario: 180 },
   "fortaleza": { texto: "🟢 $ Nacional (~R$ 180/dia)", diario: 180 },
   "natal": { texto: "🟢 $ Nacional (~R$ 190/dia)", diario: 190 },
-  "nordeste": { texto: "🟢 $ Nacional (~R$ 180/dia)", diario: 180 },
   "lisboa": { texto: "🟡 $$ Moderado (~R$ 380/dia)", diario: 380 },
   "porto": { texto: "🟡 $$ Moderado (~R$ 340/dia)", diario: 340 },
   "portugal": { texto: "🟡 $$ Moderado (~R$ 360/dia)", diario: 360 },

@@ -7,6 +7,43 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.6.0] - 2026-10-12
+
+### 🧭 Caçador Proativo Global de Bug Fares, Detecção Multi-Cabine, Z-Score no SQLite e Cockpit Turbinado
+- **Caçador Proativo Autônomo de Corredores Mundiais (`src/services/bug_fare_hunter.js`)**:
+  - Implementado o serviço `BugFareHunter` com matriz estratégica de corredores de alta sensibilidade (*sweet spots*) partindo dos principais hubs brasileiros (SAO, RIO, BSB, CNF) rumo aos grandes eixos mundiais (Europa `/m/02j9z`, EUA `/m/09c7w0`, América do Sul, Caribe e Ásia).
+  - Execução 100% direta via `GoogleFlightsDirectProvider` a **custo zero de API** (zero consumo de cotas da SerpAPI), gerando janelas estratégicas de terça-feira no futuro com estadias típicas (7 a 14 dias).
+  - Integrado ao `Scheduler` com disparo intercalado automático para manter o radar global ativo 24/7.
+- **Inteligência Estatística Expandida e Multi-Cabine (`src/domain/bug_fares.js`, `src/db.js`)**:
+  - Adicionado suporte a novas regiões mundiais nos pisos estruturais: `CARIBE_AMERICA_CENTRAL` (R$ 1.300 ida/volta), `ORIENTE_MEDIO` (R$ 2.800) e `AFRICA` (R$ 2.200).
+  - Implementados multiplicadores de piso por classe de cabine (`MULTIPLICADORES_CABINE_BUG_FARE`: Executiva 2.8x, Premium 1.6x, Primeira Classe 4.5x), viabilizando a captura de erros de tarifa raros em classe Executiva (Business).
+  - Adicionado método `rotasRepo.obterEstatisticasPreco(rotaId)` para cálculo de média móvel real (`AVG(preco)`) e desvio padrão amostral no SQLite, alimentando a detecção de anomalias por **Z-Score** ($Z \le -2.2$) em `detectarBugFareEstatistico`.
+- **Monitor Híbrido de Feeds de Comunidade com Filtro Anti-Marketing (`src/services/bug_fare_feed_watcher.js`)**:
+  - Coletor assíncrono leve para feeds públicos de comunidades de viagens (Melhores Destinos, Passagens Imperdíveis, Secret Flying).
+  - Aplicação estrita de `classificarItemFeed` para descartar publiposts, afiliados, pacotes e milhas, retendo e alertando exclusivamente erros autênticos de tarifa.
+- **Correção Crítica e UX Renovada no Cockpit PWA (`src/public/app.js`, `src/public/index.html`)**:
+  - Corrigido o bug na leitura da resposta em `app.js` (`state.bugFares = resBugs.items || resBugs.bugFares || []`), que impedia a exibição das ofertas na aba de Bug Fares.
+  - Adicionado botão interativo **"🔍 Varrer Corredores Globais"** com spinner de progresso em tempo real no Cockpit e acionamento via `POST /api/bug-fares/escanear`.
+  - Novos badges visuais de severidade (🚨 Estrutural Crítico, ⚡ Anomalia Estatística, ✈️ Feed).
+- **Novos Comandos no Telegram Bot (`src/services/notifier_telegram.js`)**:
+  - Implementado comando `/varrerbugs` (ou `/radar`) para acionar a caçada proativa sob demanda diretamente pelo chat.
+  - Enriquecido o comando `/bugs` com tags de severidade e links estruturados do Google Flights.
+- **Suíte de Testes Expandida (`tests/bug_fares.test.js`, `tests/routes.test.js`)**:
+  - 5 novos testes cobrindo novas regiões, cabine executiva, Z-score, XML parser, estatísticas do SQLite e endpoint REST (67/67 testes passando, 100% de aprovação).
+
+## [2.5.3] - 2026-10-12
+
+### 🎯 Captura da Aba "Cheapest" do Google Flights e Menor Tarifa com Critérios Estritos
+- **Extração da Aba "Cheapest" (`src/services/providers/google_flights_direct_provider.js`)**:
+  - Adicionado extrator de dados da aba "Cheapest" (`comprehensiveness_lure` e blocos de dados `AF_initDataCallback`), permitindo capturar o menor preço absoluto da rota (ex: R$ 587 em vez do voo "Best" padrão de R$ 741 escolhido pelo algoritmo de conveniência do Google).
+  - Reformulação da Camada A de cartões para suportar múltiplos padrões textuais autênticos do Google Flights (`A partir de X Reais...`, `Preço total a partir de X Reais...`, `From X...`).
+  - Extração de duração real, companhias aéreas e paradas respeitando o teto de duração (`duracaoMaxHoras`) estipulado pelo usuário.
+- **Ordenação por Menor Preço e OTAs na SerpAPI (`src/services/providers/serpapi_provider.js`)**:
+  - Injeção obrigatória de `sort_by: '2'` (menor preço primeiro), substituindo a ordenação padrão por conveniência (`sort_by=1`).
+  - Inspeção de `booking_options` via `booking_token` com códigos físicos de aeroportos para desvendar tarifas menores de parceiros e OTAs.
+- **Suíte de Testes Expandida (`tests/flight_providers.test.js`)**:
+  - Novo teste automatizado garantindo que o provedor direto seleciona R$ 587 da aba Cheapest em vez de R$ 741 do voo regular. Total de 62 testes 100% aprovados.
+
 ## [2.5.2] - 2026-10-12
 
 ### 🔗 Correção de Links Diretos do Google Flights e Captura Canônica de Destino Real

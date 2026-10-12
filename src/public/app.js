@@ -191,6 +191,10 @@ function setupEventListeners() {
     tocarChimeCabine();
     mostrarToast('🔊 Aviso sonoro de cabine emitido via Web Audio API!');
   });
+  document.getElementById('btn-escanear-bugs')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    escanearBugFaresProativo();
+  });
   document.getElementById('btn-reset-hoje')?.addEventListener('click', () => {
     vibrarAoTocar();
     resetarCotasHoje();
@@ -241,7 +245,7 @@ async function carregarDadosCompletos(suave = false) {
     }
 
     if (resStatus.ok) state.poolStatus = resStatus.pool || null;
-    if (resBugs.ok) state.bugFares = resBugs.bugFares || [];
+    if (resBugs.ok) state.bugFares = resBugs.items || resBugs.bugFares || [];
 
     atualizarMetricasRotas();
     atualizarMetricasPool();
@@ -443,28 +447,75 @@ function renderizarBugFares() {
 
   if (state.bugFares.length === 0) {
     bugfaresContainer.innerHTML = `
-      <div style="text-align: center; padding: 40px; color: var(--text-dim);">
-        Nenhum Bug Fare recente registrado. O radar monitora o feed a cada ciclo.
+      <div style="text-align: center; padding: 48px 20px; background: var(--bg-surface); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg);">
+        <div style="font-size: 2.2rem; margin-bottom: 12px;">🧭</div>
+        <h3 style="font-size: 1.05rem; color: #ffffff; margin-bottom: 8px;">Nenhum Bug Fare Registrado no Momento</h3>
+        <p style="font-size: 0.85rem; color: var(--text-dim); max-width: 480px; margin: 0 auto 20px auto; line-height: 1.5;">
+          O robô pesquisa ativamente anomalias estatísticas, feeds e pisos estruturais no GDS. Você pode disparar uma caçada autônoma nos principais corredores mundiais agora mesmo a custo zero.
+        </p>
+        <button class="btn btn-primary" onclick="document.getElementById('btn-escanear-bugs')?.click()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
+          <span>Iniciar Varredura Proativa Global</span>
+        </button>
       </div>
     `;
     return;
   }
 
   bugfaresContainer.innerHTML = state.bugFares.map((bug) => {
+    const ehCritico = bug.tipo?.includes('ESTRUTURAL') || bug.tipo?.includes('IRREAL');
+    const ehZscore = bug.tipo?.includes('Z-SCORE') || bug.tipo?.includes('ESTATÍSTICA');
+    const badgeCor = ehCritico ? 'border-color: rgba(244, 63, 94, 0.4);' : (ehZscore ? 'border-color: rgba(245, 158, 11, 0.4);' : '');
+    const badgeIcon = ehCritico ? '🚨' : (ehZscore ? '⚡' : '✈️');
+
     return `
-      <div class="bugfare-card">
+      <div class="bugfare-card" style="${badgeCor}">
         <div class="bugfare-info">
           <h4>${escapeHtml(bug.titulo)}</h4>
           <div class="bugfare-meta">
-            ${escapeHtml(bug.tipo)} • Detectado em ${bug.detectado_em || 'Hoje'}
+            <span style="font-weight: 600; color: ${ehCritico ? 'var(--rose)' : (ehZscore ? 'var(--amber)' : 'var(--cyan)')};">
+              ${badgeIcon} ${escapeHtml(bug.tipo || 'Bug Fare')}
+            </span> • Registrado em: ${bug.detectado_em || 'Hoje'}
           </div>
         </div>
-        <a href="${bug.link}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">
-          Acessar Oferta
+        <a href="${bug.link}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="white-space: nowrap;">
+          <span>Ver no Google Flights ↗</span>
         </a>
       </div>
     `;
   }).join('');
+}
+
+async function escanearBugFaresProativo() {
+  const btn = document.getElementById('btn-escanear-bugs');
+  const label = document.getElementById('label-btn-escanear-bugs');
+  if (!btn) return;
+
+  const originalHtml = label ? label.textContent : '';
+  btn.disabled = true;
+  if (label) label.textContent = '⏳ Varrendo Corredores Mundiais...';
+  mostrarToast('🧭 Caçada proativa de Bug Fares iniciada nos corredores globais...');
+
+  try {
+    const resp = await fetch('/api/bug-fares/escanear', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limiteRotas: 6, incluirFeeds: true })
+    });
+    const data = await resp.json();
+
+    if (data.ok) {
+      mostrarToast(data.mensagem || 'Varredura proativa concluída!');
+      await carregarDados(true);
+    } else {
+      mostrarToast(data.mensagemErro || 'Erro ao escanear bug fares', true);
+    }
+  } catch (err) {
+    mostrarToast(`Falha na varredura: ${err.message}`, true);
+  } finally {
+    btn.disabled = false;
+    if (label) label.textContent = originalHtml;
+  }
 }
 
 // Renderização Pool SerpAPI

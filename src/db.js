@@ -402,6 +402,35 @@ export const rotasRepo = {
       LIMIT ?
     `).all(rotaId, limite);
     return rows.reverse();
+  },
+
+  obterEstatisticasPreco: (rotaId) => {
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT preco FROM historico_precos
+      WHERE rota_id = ? AND preco > 0
+      ORDER BY id DESC
+      LIMIT 60
+    `).all(rotaId);
+
+    if (!rows || rows.length === 0) {
+      return { total: 0, media: null, desvioPadrao: null, menor: null, maior: null };
+    }
+
+    const precos = rows.map(r => r.preco);
+    const total = precos.length;
+    const soma = precos.reduce((acc, p) => acc + p, 0);
+    const media = Math.round(soma / total);
+    const menor = Math.min(...precos);
+    const maior = Math.max(...precos);
+
+    let desvioPadrao = null;
+    if (total >= 3) {
+      const variancia = precos.reduce((acc, p) => acc + Math.pow(p - media, 2), 0) / (total - 1);
+      desvioPadrao = Math.round(Math.sqrt(variancia));
+    }
+
+    return { total, media, desvioPadrao, menor, maior };
   }
 };
 

@@ -104,25 +104,37 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       // 4. Parser multicamada de voos
       const voosDetalhados = [];
 
+      // Camada 0: Extração da aba 'Cheapest' (menor tarifa de referência do Google Flights / OTAs)
+      let precoCheapestTab = null;
+      const regexCheapestTab = /\[\[null,\s*(\d+)\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
+      const matchCheapest = html.match(regexCheapestTab);
+      if (matchCheapest) {
+        const p = parseInt(matchCheapest[1], 10);
+        if (p >= 120 && p <= 45000) precoCheapestTab = p;
+      }
+
       // Camada A: Detalhes ricos estruturados nos atributos aria-label
-      const regexAriaCard = /aria-label=[\"']Preço total a partir de\s*(\d+)\s*(?:Reais brasileiros|BRL|reais)[\s\S]*?Voo\s*([^.]*?)\s*da\s*([^.]+)\.[\s\S]*?Duração total:\s*([^.]+)\.[\s\S]*?[\"']/gi;
+      const regexAriaCard = /aria-label=["\x27](?:Preço total a partir de|A partir de|Total price from|From)\s*(\d+)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)[\s\S]*?(?:Voo|Flight)\s*([^.]*?)\s*(?:da|with)\s*([^.]+)\.[\s\S]*?(?:Duração total:|Total duration:)\s*([^.]+)\./gi;
       let matchCard;
       while ((matchCard = regexAriaCard.exec(html)) !== null) {
         const preco = parseInt(matchCard[1], 10);
         if (preco >= 120 && preco <= 45000) {
+          const tipoBruto = matchCard[2].trim();
+          const ciaBruta = matchCard[3].trim();
+          const durTexto = matchCard[4].trim();
           voosDetalhados.push({
             preco,
-            tipo: matchCard[2].trim(),
-            cia: matchCard[3].trim(),
-            duracaoTexto: matchCard[4].trim(),
-            duracaoHoras: converterDuracaoParaHoras(matchCard[4].trim())
+            tipo: tipoBruto,
+            cia: ciaBruta,
+            duracaoTexto: durTexto,
+            duracaoHoras: converterDuracaoParaHoras(durTexto)
           });
         }
       }
 
       // Camada B: Fallback de preços gerais em aria-label (quando texto não tiver formato completo de cartão)
       if (voosDetalhados.length === 0) {
-        const regexAriaPreco = /aria-label=[\"'](?:Preço total a partir de\s*)?(\d+)\s*Reais brasileiros[\"']/gi;
+        const regexAriaPreco = /aria-label=["\x27](?:Preço total a partir de|A partir de)?\s*(\d+)\s*Reais brasileiros["\x27]/gi;
         let matchPreco;
         while ((matchPreco = regexAriaPreco.exec(html)) !== null) {
           const preco = parseInt(matchPreco[1], 10);
@@ -166,17 +178,29 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       }
 
       // Filtrar por duração máxima estipulada pelo usuário (se aplicável)
-      const filtrados = duracaoMaxHoras && duracaoMaxHoras < 900
-        ? voosDetalhados.filter(v => v.duracaoHoras <= duracaoMaxHoras)
-        : voosDetalhados;
+      const duracaoMax = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900
+        ? duracaoMaxHoras
+        : 999;
+      const filtrados = voosDetalhados.filter(v => v.duracaoHoras <= duracaoMax);
 
       const listaFinal = filtrados.length > 0 ? filtrados : voosDetalhados;
       listaFinal.sort((a, b) => a.preco - b.preco);
-      const melhorOferta = listaFinal[0];
+      const melhorOferta = { ...listaFinal[0] };
 
-      const detalhesVoo = melhorOferta.cia !== 'Companhia Aérea'
-        ? `${melhorOferta.cia} | ${melhorOferta.tipo} | Duração: ${melhorOferta.duracaoTexto} | Tarifa Direta Stealth`
-        : `Tarifa Direta Google Flights (${melhorOferta.duracaoTexto})`;
+      // Se a aba Cheapest do Google Flights oferecer tarifa menor que o voo direto da cia aérea,
+      // prioriza o valor mais barato absoluto que atende aos critérios do usuário
+      let ehCheapestTab = false;
+      if (precoCheapestTab && precoCheapestTab < melhorOferta.preco) {
+        melhorOferta.precoOriginal = melhorOferta.preco;
+        melhorOferta.preco = precoCheapestTab;
+        ehCheapestTab = true;
+      }
+
+      const detalhesVoo = ehCheapestTab
+        ? `${melhorOferta.cia} | Duração: ${melhorOferta.duracaoTexto} | Menor Tarifa (Aba Cheapest Google Flights: R$ ${melhorOferta.preco})`
+        : (melhorOferta.cia !== 'Companhia Aérea'
+            ? `${melhorOferta.cia} | ${melhorOferta.tipo} | Duração: ${melhorOferta.duracaoTexto} | Tarifa Direta Stealth`
+            : `Tarifa Direta Google Flights (${melhorOferta.duracaoTexto})`);
 
       return {
         ok: true,
@@ -185,7 +209,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
           preco: melhorOferta.preco,
           duracaoHoras: melhorOferta.duracaoHoras,
           destinoReal: destinoCod,
-          termometro: '🟢 Preço Competitivo (Google Flights Direct)',
+          termometro: '🟢 Preço Mais Barato (Google Flights Cheapest)',
           nivelPreco: 'low',
           detalhes: detalhesVoo,
           dicaStopover: '-',
