@@ -125,10 +125,12 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.match(linkCheapestOneWay, /tfu=EgoIABAAGAAgAigD/);
     assert.match(linkCheapestOneWay, /curr=BRL/);
     assert.match(linkCheapestOneWay, /hl=pt-BR/);
+    assert.match(linkCheapestOneWay, /gl=BR/);
 
     const linkCheapestRoundTrip = gerarLinkGoogleFlightsCheapest('SAO', 'LIS', '2027-02-10', '2027-02-24', 15);
     assert.ok(linkCheapestRoundTrip);
     assert.match(linkCheapestRoundTrip, /tfs=/);
     assert.match(linkCheapestRoundTrip, /tfu=EgoIABAAGAAgAigD/);
+    assert.match(linkCheapestRoundTrip, /gl=BR/);
   });
 });

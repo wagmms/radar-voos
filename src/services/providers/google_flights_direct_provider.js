@@ -49,7 +49,10 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
   async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
     const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras) : null;
     const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
-    const linkConsulta = linkBase.includes('&hl=pt-BR') ? linkBase : `${linkBase}&hl=pt-BR&curr=BRL`;
+    let linkConsulta = linkBase;
+    if (!linkConsulta.includes('&hl=')) linkConsulta += '&hl=pt-BR';
+    if (!linkConsulta.includes('&gl=')) linkConsulta += '&gl=BR';
+    if (!linkConsulta.includes('&curr=')) linkConsulta += '&curr=BRL';
 
     try {
       // 1. Rotação dinâmica de fingerprint para evitar perfil estático de bot
@@ -71,6 +74,8 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         'Sec-Fetch-Site': 'none',
         'Sec-Fetch-User': '?1',
         'Upgrade-Insecure-Requests': '1',
+        // Injeta IP do Brasil para balanceadores geolocalizados do Google
+        'X-Forwarded-For': '177.16.24.12',
         // Injeta cookie de consentimento pré-aceito para evitar redirecionamento de tela de consentimento
         'Cookie': 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn'
       };

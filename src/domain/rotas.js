@@ -237,13 +237,13 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
   const destinoParam = encodeURIComponent(destinoRes);
 
   if (!dataIda) {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}&hl=pt-BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}&hl=pt-BR&gl=BR&curr=BRL`;
   }
 
   if (dataVolta) {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20through%20${dataVolta}&hl=pt-BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20through%20${dataVolta}&hl=pt-BR&gl=BR&curr=BRL`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20one-way&hl=pt-BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=BRL`;
   }
 }
 
@@ -346,7 +346,7 @@ export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, d
   const destinos = normalizarParaSerpApi(destinoCod).split(',').map(s => s.trim()).filter(Boolean);
   const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
   const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta, maxDurationMinutes: maxMin });
-  return `https://www.google.com/travel/flights?hl=pt-BR&curr=BRL&tfs=${tfs}&tfu=EgoIABAAGAAgAigD`;
+  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfs}&tfu=EgoIABAAGAAgAigD`;
 }
 
 /**

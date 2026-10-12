@@ -35,6 +35,7 @@ export class SerpApiProvider extends FlightProviderInterface {
       outbound_date: dataIda,
       currency: 'BRL',
       hl: 'pt',
+      gl: 'br',
       type: dataVolta ? '1' : '2',
       sort_by: '2',
       api_key: chaveInfo.chave,
@@ -195,6 +196,7 @@ export class SerpApiProvider extends FlightProviderInterface {
             booking_token: vooEleito.booking_token,
             currency: 'BRL',
             hl: 'pt',
+            gl: 'br',
             type: dataVolta ? '1' : '2',
             api_key: chaveInfo.chave
           });
