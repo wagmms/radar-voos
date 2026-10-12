@@ -48,15 +48,15 @@
     "origem": "São Paulo",
     "destino": "América do Sul",
     "codigo_origem": "SAO",
-    "codigo_destino": "BUE",
-    "data_ida": "2026-12-08",
-    "data_volta": "2026-12-22",
+    "codigo_destino": "/m/06_1",
+    "data_ida": "2027-03-09",
+    "data_volta": null,
     "duracao_max_horas": 8,
-    "preco_alvo": 1200,
+    "preco_alvo": 600,
     "cabine": "economy",
     "flexibilidade_dias": 7,
     "sem_data": 1,
-    "dias_estadia": 14,
+    "dias_estadia": 10,
     "ativa": 1
   }
 ]
