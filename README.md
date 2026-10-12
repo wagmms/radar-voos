@@ -62,6 +62,8 @@ Acesse o Cockpit PWA em: **http://localhost:3333**
 
 ---
 
+---
+
 ### 2. Execução com Docker
 
 ```bash
@@ -71,6 +73,24 @@ docker compose up -d --build
 # Ver logs em tempo real
 docker compose logs -f
 ```
+
+---
+
+### 3. Deploy no Render (render.com)
+
+O repositório já inclui o arquivo [`render.yaml`](render.yaml) configurado para deploy com 1 clique:
+
+- **Opção 1 (Blueprint Automático - Recomendado)**:
+  1. No painel do [Render Dashboard](https://dashboard.render.com/), clique em **New +** ➔ **Blueprint**.
+  2. Conecte seu repositório `wagmms/radar-voos`.
+  3. O Render detectará automaticamente o `render.yaml`, preencherá as variáveis de ambiente, portas e health check (`/api/health`).
+  4. Clique em **Apply** e o deploy iniciará imediatamente com Auto-Deploy a cada commit na branch `main`.
+
+- **Opção 2 (Web Service Tradicional)**:
+  1. Clique em **New +** ➔ **Web Service** e selecione o repositório.
+  2. Defina **Runtime**: `Node` (versão 22.12.0+ via `NODE_VERSION`) ou `Docker`.
+  3. **Build Command**: `npm install` | **Start Command**: `npm start`.
+  4. **Health Check Path**: `/api/health`.
 
 ---
 
