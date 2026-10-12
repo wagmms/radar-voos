@@ -7,6 +7,56 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.5.0] - 2026-10-12
+
+### 🔄 Sincronização Bidirecional Real (Two-Way Sync: Web/Produção ↔ Ambiente Local)
+- **Pull Automático Remoto do GitHub no Startup (`src/services/rotas_sync.js`, `src/index.js`)**:
+  - Implementado método `puxarDoGitHub()` que busca a versão canônica mais recente de `data/rotas.json` no GitHub Contents API e raw fallback.
+  - O startup do servidor (`src/index.js` -> `bootstrap()`) agora sincroniza o banco SQLite local (`data/radar_voos.sqlite`) com o repositório remoto antes de iniciar agendador e APIs.
+  - Alterações feitas pelo usuário no Cockpit Web do Render agora são puxadas automaticamente para o ambiente local sem perdas.
+- **Sincronização Atômica com o SQLite (`sincronizarRotasComBanco`)**:
+  - Algoritmo de merge que insere novas rotas criadas na nuvem, atualiza parâmetros de rotas modificadas e remove do SQLite local as rotas excluídas pelo usuário na Web.
+- **Blindagem Estrita do Ambiente de Testes**:
+  - `rotasSync.salvarArquivoRotas()` agora protege o arquivo canônico `data/rotas.json` em modo `NODE_ENV=test`, impedindo que execuções de testes automatizados sobrescrevam as rotas reais do usuário no disco.
+- **Endpoint e Ação de Sync no Cockpit (`POST /api/rotas/sync-pull`)**:
+  - Endpoint REST dedicado para acionar puxada e alinhamento imediato com o GitHub sob demanda.
+  - Suporte ao parâmetro `?sync=true` em `GET /api/rotas`.
+  - Botão "Sync GitHub" no Cockpit Web agora aciona a puxada e re-alinhamento da interface em tempo real.
+- **Suíte de Testes Expandida (`tests/rotas_sync.test.js`)**:
+  - 3 novos testes automatizados cobrindo inserção, atualização, remoção remota e proteção em modo teste (total de 60 testes, 100% aprovados).
+
+## [2.4.2] - 2026-10-12
+
+### 🔕 Política Estrita de Notificações Telegram: Fim de Alertas no Deploy e Oscilações Fora da Meta
+- **Bloqueio Absoluto de Alertas Pós-Deploy (`baseline_inicial_deploy`)**:
+  - Eliminado o gatilho automático de `PRIMEIRA_CHECAGEM` que inundava o canal do Telegram com todas as rotas a cada reinicialização ou novo deploy no Render.
+  - A primeira verificação de qualquer rota no motor agora calibra silenciosamente a linha de base no SQLite sem disparar alertas.
+- **Respeito Irrestrito aos Critérios do Usuário (`preco_alvo`)**:
+  - Quando a rota possui `preco_alvo`, o motor só autoriza notificações regulares se a tarifa estiver estritamente dentro da meta do usuário (`precoAtual <= precoAlvo`).
+  - Bloqueados falsos alertas de "queda relâmpago" ou "novo recorde" para passagens que caíram mas continuam acima do teto estipulado pelo usuário.
+- **Filtro Anti-Spam e Deduplicação de Mudanças de Preço**:
+  - Pequenas oscilações rotineiras (< 5% de melhoria em relação ao último alerta disparado) são sumariamente descartadas.
+  - Implementado cooldown mínimo de 48 horas para renotificação de uma mesma rota, evitando mensagens repetitivas a cada ciclo horário de varredura.
+- **Suíte de Testes Dedicada (`tests/alertas_criterios.test.js`)**:
+  - 4 novos testes unitários adicionados cobrindo rejeição de alertas no deploy, rejeição acima da meta, aprovação de cruze da meta e supressão de pequenas oscilações (total: 57 testes 100% aprovados).
+
+## [2.4.1] - 2026-10-12
+
+### 🛠️ Correção e Aprimoramento de Voos Flexíveis e Parsing de Dias de Estadia
+- **Resolução de Ambiguidade no Parsing de Dias vs Datas (`src/domain/rotas.js`)**:
+  - Implementada função `extrairDiasEstadia(valor, padrao)` para extrair números inteiros de expressões como `"10 dias"`, `"10"`, `"10d"`, `"14 (dias)"`.
+  - Atualizada a função `calcularDataVolta` para aceitar sufixos como `"dias"` ou `"d"` sem quebrar o cálculo de soma na data de ida.
+  - Removido o fallback cego `new Date(str)` de `formatarDataParaBusca`, que convertia strings curtas (como `"10"` ou `"10/10"`) em datas do ano 2001 (mês de outubro) de forma espúria.
+- **Tratamento de Rotas Flexíveis Sem Data Fixa (`src/db.js`, `src/server/routes/rotas_routes.js`)**:
+  - Ao criar ou atualizar rotas em modo `sem_data: 1`, `dias_estadia` agora é preservado e persistido corretamente a partir do input de volta.
+  - A data de volta agora é calculada somando a estadia na data de referência (ou mantida nula caso o usuário escolha "Só Ida"), sem forçar datas fixas rígidas de calendário.
+- **Aprimoramento Visual no Cockpit PWA (`src/public/app.js`, `src/public/index.html`)**:
+  - O card de rotas flexíveis agora exibe claramente `⏱️ Duração: 10 dias de estadia` (em vez de exibir `Volta: [data fixa]`), eliminando a confusão de que a data de retorno foi fixada no calendário.
+  - No modal de edição de rotas (`abrirEdicaoRota`), o campo de duração agora é preenchido com `10 dias` em vez da data calculada de volta.
+  - Placeholders dos campos ajustados para exemplificar `"Ex: 10 dias ou Só Ida"`.
+- **Suíte de Testes Expandida**:
+  - Testes unitários e de integração adicionados cobrindo `extrairDiasEstadia`, `calcularDataVolta` com sufixo "dias", `formatarDataParaBusca` com strings numéricas e `POST /api/rotas` com `"10 dias"` (total: 53 testes 100% aprovados).
+
 ## [2.4.0] - 2026-10-12
 
 ### 🔄 Persistência Canônica e Via de Mão Dupla de Rotas (Two-Way Sync com GitHub & LocalStorage)

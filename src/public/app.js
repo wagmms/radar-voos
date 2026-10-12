@@ -219,8 +219,12 @@ function setupEventListeners() {
 // Carregamento de Dados da API com Auto-Backup e Auto-Restore em LocalStorage
 async function carregarDadosCompletos(suave = false) {
   try {
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const rotasUrl = isLocal && !window.__radarSincronizado ? '/api/rotas?sync=true' : '/api/rotas';
+    window.__radarSincronizado = true;
+
     const [resRotas, resStatus, resBugs] = await Promise.all([
-      fetch('/api/rotas').then((r) => r.json()),
+      fetch(rotasUrl).then((r) => r.json()),
       fetch('/api/status').then((r) => r.json()),
       fetch('/api/bug-fares').then((r) => r.json())
     ]);
@@ -228,30 +232,11 @@ async function carregarDadosCompletos(suave = false) {
     if (resRotas.ok) {
       state.rotas = resRotas.rotas || [];
 
-      // Auto-Backup no LocalStorage para garantir via de mão dupla resiliente
+      // Auto-Backup no LocalStorage como cópia de segurança somente-leitura
       if (state.rotas.length > 0) {
         try {
           localStorage.setItem('radar_rotas_backup', JSON.stringify(state.rotas));
         } catch (_) {}
-      } else {
-        // Se o servidor voltou com 0 rotas (ex: deploy novo limpo), verifica se o navegador tem backup
-        const backupLocal = localStorage.getItem('radar_rotas_backup');
-        if (backupLocal) {
-          try {
-            const rotasSalvas = JSON.parse(backupLocal);
-            if (Array.isArray(rotasSalvas) && rotasSalvas.length > 0) {
-              console.log('🔄 [Auto-Restore] Restaurando rotas do backup do navegador para o servidor...');
-              mostrarToast('🔄 Restaurando rotas do seu navegador para o servidor...');
-              await fetch('/api/rotas/importar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ rotas: rotasSalvas })
-              });
-              const resRecarregada = await fetch('/api/rotas').then((r) => r.json());
-              if (resRecarregada.ok) state.rotas = resRecarregada.rotas || [];
-            }
-          } catch (_) {}
-        }
       }
     }
 
@@ -361,8 +346,8 @@ function renderizarRotas() {
 
         <div class="card-dates-box">
           ${rota.sem_data === 1 ? `
-            <div>🗓️ Período: <strong>${rota.preco_atual ? 'Melhor: ' + formatarDataBr(rota.data_ida) : 'Qualquer data (Flexível)'}</strong></div>
-            <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
+            <div>🗓️ Período: <strong>${rota.preco_atual ? 'Melhor: ' + formatarDataBr(rota.data_ida) + (rota.data_volta ? ' a ' + formatarDataBr(rota.data_volta) : '') : 'Qualquer data (Flexível)'}</strong></div>
+            <div>⏱️ Duração: <strong>${rota.data_volta ? (rota.dias_estadia || 10) + ' dias de estadia' : 'Só Ida'}</strong></div>
           ` : `
             <div>📅 Ida: <strong>${formatarDataBr(rota.data_ida)}</strong></div>
             <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
@@ -546,12 +531,12 @@ function atualizarVisualModoFlexivel() {
     inputDataIda.removeAttribute('required');
     labelDataIda.textContent = 'Data de Ida Estimada (Opcional)';
     if (labelDataVolta) labelDataVolta.textContent = 'Duração da Viagem (Dias, ex: 10) ou Só Ida';
-    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 10 (dias) ou Só Ida';
+    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 10 dias ou Só Ida';
   } else {
     inputDataIda.setAttribute('required', 'required');
     labelDataIda.textContent = 'Data de Ida';
     if (labelDataVolta) labelDataVolta.textContent = 'Volta (Data, Dias de viagem ou Só Ida)';
-    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 14 (dias), 2026-11-24 ou Só Ida';
+    if (inputDataVolta) inputDataVolta.placeholder = 'Ex: 14 dias, 2026-11-24 ou Só Ida';
   }
 }
 
@@ -580,20 +565,28 @@ window.abrirEdicaoRota = function(id) {
 
   document.getElementById('input-origem').value = rota.origem;
   document.getElementById('input-destino').value = rota.destino;
-  document.getElementById('input-data-ida').value = rota.data_ida;
-  document.getElementById('input-data-volta').value = rota.data_volta || 'Só Ida';
-  document.getElementById('input-preco-alvo').value = rota.preco_alvo || '';
-  document.getElementById('input-duracao-max').value = rota.duracao_max_horas || 16;
-  const selectCabine = document.getElementById('input-cabine');
-  if (selectCabine) selectCabine.value = rota.cabine || 'economy';
-  const selectFlex = document.getElementById('input-flexibilidade');
-  if (selectFlex) selectFlex.value = String(rota.flexibilidade_dias ?? 0);
+  document.getElementById('input-data-ida').value = rota.data_ida || '';
 
   const checkSemData = document.getElementById('input-sem-data');
   if (checkSemData) {
     checkSemData.checked = Boolean(rota.sem_data === 1);
   }
   atualizarVisualModoFlexivel();
+
+  if (rota.sem_data === 1) {
+    document.getElementById('input-data-volta').value = !rota.data_volta && !rota.dias_estadia
+      ? 'Só Ida'
+      : `${rota.dias_estadia || 10} dias`;
+  } else {
+    document.getElementById('input-data-volta').value = rota.data_volta || 'Só Ida';
+  }
+
+  document.getElementById('input-preco-alvo').value = rota.preco_alvo || '';
+  document.getElementById('input-duracao-max').value = rota.duracao_max_horas || 16;
+  const selectCabine = document.getElementById('input-cabine');
+  if (selectCabine) selectCabine.value = rota.cabine || 'economy';
+  const selectFlex = document.getElementById('input-flexibilidade');
+  if (selectFlex) selectFlex.value = String(rota.flexibilidade_dias ?? 0);
 
   abrirModal(modalRota);
 };
@@ -634,7 +627,10 @@ async function criarNovaRota(e) {
   const cabine = document.getElementById('input-cabine')?.value || 'economy';
   const flexibilidade_dias = parseInt(document.getElementById('input-flexibilidade')?.value || '0', 10);
   const sem_data = document.getElementById('input-sem-data')?.checked ? 1 : 0;
-  const dias_estadia = sem_data && data_volta && !isNaN(data_volta) ? parseInt(data_volta, 10) : 10;
+
+  const matchDias = data_volta.match(/^(\d+)/);
+  const dias_estadia = matchDias ? parseInt(matchDias[1], 10) : 10;
+  const ehSoIdaTexto = data_volta.toLowerCase().includes('só ida') || data_volta.toLowerCase().includes('so ida');
 
   const url = rotaId ? `/api/rotas/${rotaId}` : '/api/rotas';
   const method = rotaId ? 'PUT' : 'POST';
@@ -647,7 +643,7 @@ async function criarNovaRota(e) {
         origem,
         destino,
         data_ida: data_ida || undefined,
-        data_volta: data_volta || undefined,
+        data_volta: sem_data ? (ehSoIdaTexto ? 'Só Ida' : `${dias_estadia} dias`) : (data_volta || undefined),
         preco_alvo,
         duracao_max_horas,
         cabine,
@@ -848,14 +844,15 @@ async function importarRotasJson(e) {
 }
 
 async function sincronizarComGitHubRemoto() {
-  mostrarToast('🔄 Sincronizando rotas com o repositório GitHub...');
+  mostrarToast('🔄 Sincronizando rotas com a nuvem (GitHub)...');
   try {
-    const res = await fetch('/api/rotas/sincronizar-github', { method: 'POST' });
+    const res = await fetch('/api/rotas/sync-pull', { method: 'POST' });
     const data = await res.json();
     if (res.ok && data.ok) {
-      mostrarToast(`✅ Rotas sincronizadas no GitHub com sucesso! Commit: ${data.commitSha?.slice(0, 7) || 'ok'}`);
+      mostrarToast(`✅ ${data.total} rotas sincronizadas com a nuvem com sucesso!`);
+      await carregarDadosCompletos(true);
     } else {
-      mostrarToast(`Aviso: ${data.mensagem || data.erro || 'Falha no sync'}`, true);
+      mostrarToast(`Aviso: ${data.erro || 'Falha ao sincronizar com nuvem'}`, true);
     }
   } catch (err) {
     mostrarToast('Falha na comunicação de sincronização', true);

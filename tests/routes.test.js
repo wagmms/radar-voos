@@ -93,6 +93,35 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.ok(json.rota.data_volta);
   });
 
+  it('POST /api/rotas deve criar rota flexível quando usuário informa "10 dias" no campo de volta', async () => {
+    const rotaFlex = {
+      origem: 'São Paulo',
+      destino: 'Miami',
+      sem_data: 1,
+      data_volta: '10 dias',
+      preco_alvo: 3200
+    };
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: rotaFlex
+    });
+
+    assert.strictEqual(res.statusCode, 201);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.rota.sem_data, 1);
+    assert.strictEqual(json.rota.dias_estadia, 10);
+    assert.ok(json.rota.data_ida);
+    assert.ok(json.rota.data_volta);
+    // data_volta não deve ser nula e deve ser exatamente data_ida + 10 dias
+    const [anoI, mesI, diaI] = json.rota.data_ida.split('-').map(Number);
+    const [anoV, mesV, diaV] = json.rota.data_volta.split('-').map(Number);
+    const diffDias = Math.round((Date.UTC(anoV, mesV - 1, diaV) - Date.UTC(anoI, mesI - 1, diaI)) / (1000 * 3600 * 24));
+    assert.strictEqual(diffDias, 10);
+  });
+
   it('GET /api/rotas deve listar as rotas criadas', async () => {
     const res = await app.inject({
       method: 'GET',

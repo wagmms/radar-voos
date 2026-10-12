@@ -1,5 +1,6 @@
 import { config } from './config.js';
-import { getDb, popularDadosIniciaisSeVazio, closeDb } from './db.js';
+import { getDb, closeDb } from './db.js';
+import { rotasSync } from './services/rotas_sync.js';
 import { serpApiPool } from './services/serpapi_pool.js';
 import { scheduler } from './services/scheduler.js';
 import { notifierTelegram } from './services/notifier_telegram.js';
@@ -10,9 +11,9 @@ import { FlightScanner } from './services/flight_scanner.js';
 async function bootstrap() {
   console.log('🚀 Inicializando Radar de Voos - Travel Hacking Engine v2.1...');
 
-  // 1. Inicializar Banco de Dados
+  // 1. Inicializar Banco de Dados e Sincronização Canônica Two-Way Sync
   getDb();
-  popularDadosIniciaisSeVazio();
+  await rotasSync.sincronizarNoStartup();
   console.log('📦 Banco de Dados SQLite sincronizado com sucesso.');
 
   // 2. Inicializar Pool de Chaves SerpAPI

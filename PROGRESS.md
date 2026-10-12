@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.4.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.5.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.4.0 operacional, 100% autônomo (50/50 testes passando), com persistência canônica e Two-Way Sync de rotas com GitHub e LocalStorage, eliminando a perda de rotas após novos deploys.
-- **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas e oportunidades aéreas no GDS com custo zero e zero atraso de blogs externos.
-- **Última Tarefa Concluída**: Implementação da via de mão dupla de rotas: arquivo canônico versionado `data/rotas.json`, serviço `RotasSyncService` (`src/services/rotas_sync.js`) com auto-commit na GitHub Contents API, endpoints de backup/restauração (`GET /api/rotas/exportar`, `POST /api/rotas/importar`, `POST /api/rotas/sincronizar-github`) e botões com auto-contingência em LocalStorage no Cockpit PWA (`src/public/index.html`, `src/public/app.js`).
+- **Estado Geral**: 🟢 Radar v2.5.0 operacional e 100% autônomo (60/60 testes passando), com Sincronização Bidirecional Real (Two-Way Sync: Web/Produção ↔ Local): qualquer modificação feita no Cockpit Web do Render é automaticamente refletida no ambiente local e no banco SQLite, e os deploys nunca mais sobrescrevem as rotas do usuário.
+- **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas e oportunidades aéreas no GDS com custo zero, paridade total entre ambientes e zero spam de notificações.
+- **Última Tarefa Concluída**: Implementação do Two-Way Sync Bidirecional em `src/services/rotas_sync.js` (`puxarDoGitHub`, `sincronizarRotasComBanco`, `sincronizarNoStartup`), integração no startup de `src/index.js`, rota `POST /api/rotas/sync-pull` em `src/server/routes/rotas_routes.js`, sincronização em tempo real no Cockpit PWA `src/public/app.js`, blindagem contra sobrescrita de `data/rotas.json` em testes e criação da suíte `tests/rotas_sync.test.js`.
 
 ---
 

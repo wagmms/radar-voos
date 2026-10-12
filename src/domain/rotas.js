@@ -118,20 +118,36 @@ export function formatarDataParaBusca(valor) {
     return `${ano}-${mStr}-${dStr}`;
   }
 
-  const dataGen = new Date(str);
-  if (isNaN(dataGen.getTime())) return null;
-  return dataGen.toISOString().split('T')[0];
+  // Não aceita strings numéricas soltas como datas (ex: "10" não deve ser interpretado como data do ano 2001)
+  return null;
 }
 
 /**
- * Calcula a data de volta com base no campo (pode ser número de dias ou data)
+ * Extrai o número de dias de estadia de campos de texto ou números (ex: "10 dias", "10", "14d")
+ */
+export function extrairDiasEstadia(valor, padrao = 10) {
+  if (valor === undefined || valor === null || valor === '') return padrao;
+  if (typeof valor === 'number' && !isNaN(valor) && valor > 0) return Math.round(valor);
+  const str = String(valor).trim();
+  const match = str.match(/^(\d+)/);
+  if (match) {
+    const n = parseInt(match[1], 10);
+    if (n > 0) return n;
+  }
+  return padrao;
+}
+
+/**
+ * Calcula a data de volta com base no campo (pode ser número de dias, ex: "10 dias", ou data específica)
  */
 export function calcularDataVolta(dataIdaStr, campoVolta) {
   if (ehSoIda(campoVolta)) return null;
 
   const strTrim = String(campoVolta).trim();
-  if ((!isNaN(campoVolta) && typeof campoVolta === 'number') || /^\d+$/.test(strTrim)) {
-    const dias = parseInt(strTrim, 10);
+  // Reconhece formatos de duração como: "10", "10 dias", "10d", "14 (dias)", etc.
+  const matchDias = strTrim.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)))?$/i);
+  if ((!isNaN(campoVolta) && typeof campoVolta === 'number') || matchDias) {
+    const dias = matchDias ? parseInt(matchDias[1], 10) : parseInt(strTrim, 10);
     if (dias > 0 && dataIdaStr) {
       const [ano, mes, dia] = dataIdaStr.split('-').map(Number);
       const dataIda = new Date(Date.UTC(ano, mes - 1, dia));

@@ -54,6 +54,11 @@ export class RotasSyncService {
         ativa: r.ativa !== undefined ? r.ativa : 1
       }));
 
+      // Em ambiente de teste, não grava no disco para proteger arquivo canônico
+      if (process.env.NODE_ENV === 'test') {
+        return sanitizadas;
+      }
+
       const dir = path.dirname(this.arquivoRotas);
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
@@ -68,13 +73,162 @@ export class RotasSyncService {
   }
 
   /**
+   * Sincroniza uma lista canônica de rotas com o banco SQLite local,
+   * inserindo novas, atualizando modificadas e excluindo as removidas remotamente.
+   */
+  sincronizarRotasComBanco(rotasCanonica) {
+    if (!Array.isArray(rotasCanonica) || rotasCanonica.length === 0) {
+      return { inseridas: 0, atualizadas: 0, removidas: 0 };
+    }
+
+    const locais = rotasRepo.listarTodas(false);
+    const processadosIds = new Set();
+    let inseridas = 0;
+    let atualizadas = 0;
+    let removidas = 0;
+
+    for (const r of rotasCanonica) {
+      const match = locais.find(l => {
+        if (r.sem_data && l.sem_data) {
+          return l.origem === r.origem && l.destino === r.destino;
+        }
+        return l.origem === r.origem && l.destino === r.destino && l.data_ida === r.data_ida;
+      });
+
+      if (match) {
+        rotasRepo.atualizar(match.id, r);
+        processadosIds.add(match.id);
+        atualizadas++;
+      } else {
+        const nova = rotasRepo.criar(r);
+        if (nova && nova.id) {
+          processadosIds.add(nova.id);
+          inseridas++;
+        }
+      }
+    }
+
+    for (const l of locais) {
+      if (!processadosIds.has(l.id)) {
+        rotasRepo.excluir(l.id);
+        removidas++;
+      }
+    }
+
+    return { inseridas, atualizadas, removidas };
+  }
+
+  /**
+   * Puxa a versão canônica mais recente de rotas direto do GitHub
+   * e atualiza tanto o SQLite local quanto o arquivo data/rotas.json.
+   */
+  async puxarDoGitHub() {
+    if (process.env.NODE_ENV === 'test') {
+      const locais = this.lerArquivoRotas();
+      this.sincronizarRotasComBanco(locais);
+      return { ok: true, totalRotas: locais.length };
+    }
+
+    const token = config.github?.token;
+    const repo = config.github?.repo || 'wagmms/radar-voos';
+    const branch = config.github?.branch || 'main';
+
+    let jsonStr = null;
+
+    // 1. Tentar via GitHub Contents API (autenticado)
+    if (token) {
+      try {
+        const urlContents = `https://api.github.com/repos/${repo}/contents/data/rotas.json?ref=${branch}`;
+        const res = await fetch(urlContents, {
+          headers: {
+            'Authorization': `token ${token}`,
+            'User-Agent': 'RadarVoos-Sync',
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+        if (res.ok) {
+          const dados = await res.json();
+          if (dados.content) {
+            jsonStr = Buffer.from(dados.content, 'base64').toString('utf-8');
+          }
+        }
+      } catch (err) {
+        console.warn('⚠️ [Two-Way Sync] Falha ao consultar GitHub Contents API:', err.message);
+      }
+    }
+
+    // 2. Fallback via raw.githubusercontent.com
+    if (!jsonStr) {
+      try {
+        const urlRaw = `https://raw.githubusercontent.com/${repo}/${branch}/data/rotas.json`;
+        const resRaw = await fetch(urlRaw, {
+          headers: { 'User-Agent': 'RadarVoos-Sync' }
+        });
+        if (resRaw.ok) {
+          jsonStr = await resRaw.text();
+        }
+      } catch (err) {
+        console.warn('⚠️ [Two-Way Sync] Falha ao consultar raw GitHub:', err.message);
+      }
+    }
+
+    // 3. Processar conteúdo recebido do GitHub
+    if (jsonStr) {
+      try {
+        const rotasRemotas = JSON.parse(jsonStr);
+        if (Array.isArray(rotasRemotas) && rotasRemotas.length > 0) {
+          const stats = this.sincronizarRotasComBanco(rotasRemotas);
+          this.salvarArquivoRotas(rotasRemotas);
+          console.log(`✅ [Two-Way Sync] Rotas puxadas do GitHub com sucesso! Total: ${rotasRemotas.length} (inseridas: ${stats.inseridas}, atualizadas: ${stats.atualizadas}, removidas: ${stats.removidas})`);
+          return { ok: true, totalRotas: rotasRemotas.length, stats };
+        }
+      } catch (e) {
+        console.warn('⚠️ [Two-Way Sync] JSON de rotas retornado pelo GitHub inválido:', e.message);
+      }
+    }
+
+    // 4. Fallback: usar arquivo local data/rotas.json
+    const rotasLocais = this.lerArquivoRotas();
+    if (rotasLocais.length > 0) {
+      const stats = this.sincronizarRotasComBanco(rotasLocais);
+      console.log(`📁 [Two-Way Sync] Sincronizado a partir do arquivo local data/rotas.json (${rotasLocais.length} rotas)`);
+      return { ok: true, fallback: true, totalRotas: rotasLocais.length, stats };
+    }
+
+    return { ok: false, mensagem: 'Não foi possível puxar rotas do GitHub nem do arquivo local' };
+  }
+
+  /**
+   * Sincronização executada na inicialização do servidor (startup).
+   * Garante que o ambiente local e produção sempre comecem com as rotas canônicas.
+   */
+  async sincronizarNoStartup() {
+    const db = getDb();
+    const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
+
+    // Tentar puxar do GitHub para garantir paridade com as alterações feitas na Web
+    try {
+      const res = await this.puxarDoGitHub();
+      if (res.ok) {
+        return;
+      }
+    } catch (e) {
+      console.warn('⚠️ [Two-Way Sync] Não foi possível sincronizar com GitHub no startup:', e.message);
+    }
+
+    // Se o banco estava vazio e o GitHub falhou, restaurar do arquivo local
+    if (contagem === 0) {
+      this.inicializarRotasNoBancoSeVazio();
+    }
+  }
+
+  /**
    * Inicializa o banco de dados a partir de data/rotas.json se o SQLite estiver vazio
    */
   inicializarRotasNoBancoSeVazio() {
     const db = getDb();
     const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
     if (contagem > 0) {
-      // O banco já contém rotas do usuário; não sobrescreve
       return;
     }
 

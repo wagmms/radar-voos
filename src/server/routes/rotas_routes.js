@@ -1,5 +1,5 @@
 import { rotasRepo } from '../../db.js';
-import { resolverDestino, validarPeriodo, calcularDataVolta } from '../../domain/rotas.js';
+import { resolverDestino, validarPeriodo, calcularDataVolta, extrairDiasEstadia, ehSoIda } from '../../domain/rotas.js';
 import { FlightScanner } from '../../services/flight_scanner.js';
 import { weatherService } from '../../services/weather_service.js';
 import { telemetryEvents } from '../../services/telemetry_events.js';
@@ -8,6 +8,11 @@ import { rotasSync } from '../../services/rotas_sync.js';
 export async function rotasRoutes(fastify) {
   // Listar todas as rotas com histórico recente para sparklines
   fastify.get('/api/rotas', async (request, reply) => {
+    if (request.query && request.query.sync === 'true') {
+      try {
+        await rotasSync.puxarDoGitHub();
+      } catch (_) {}
+    }
     const rotas = rotasRepo.listarTodas(false);
     const rotasCompletas = rotas.map(r => ({
       ...r,
@@ -113,8 +118,13 @@ export async function rotasRoutes(fastify) {
       });
     }
 
+    const diasEstadiaEfetivo = extrairDiasEstadia(dias_estadia || data_volta, 10);
+    const soIda = ehSemData
+      ? (typeof data_volta === 'string' && !/\d/.test(data_volta) && ehSoIda(data_volta))
+      : ehSoIda(data_volta);
+
     let voltaCalculada = null;
-    if (data_ida) {
+    if (data_ida && !ehSemData) {
       voltaCalculada = calcularDataVolta(data_ida, data_volta);
       const validacao = validarPeriodo(data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way', ehSemData);
       if (!validacao.ok) {
@@ -130,13 +140,13 @@ export async function rotasRoutes(fastify) {
       origem,
       destino,
       data_ida: data_ida || null,
-      data_volta: voltaCalculada || data_volta,
+      data_volta: ehSemData ? (soIda ? 'Só Ida' : `${diasEstadiaEfetivo}`) : (voltaCalculada || data_volta),
       duracao_max_horas: parseFloat(duracao_max_horas) || 999,
       preco_alvo: parseFloat(preco_alvo) || null,
       cabine: cabine || 'economy',
       flexibilidade_dias: parseInt(flexibilidade_dias, 10) || 0,
       sem_data: ehSemData ? 1 : 0,
-      dias_estadia: parseInt(dias_estadia, 10) || (data_volta && !isNaN(data_volta) ? parseInt(data_volta, 10) : 10),
+      dias_estadia: diasEstadiaEfetivo,
       clima_destino_resumo: climaPreliminar?.ok ? climaPreliminar.resumo : null,
       clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
     });
@@ -159,7 +169,7 @@ export async function rotasRoutes(fastify) {
       ? Boolean(body.sem_data === true || body.sem_data === 1 || body.sem_data === 'true' || body.sem_data === '1')
       : Boolean(rota.sem_data);
 
-    if (body.data_ida && body.data_volta) {
+    if (!ehSemData && body.data_ida && body.data_volta) {
       const voltaCalculada = calcularDataVolta(body.data_ida, body.data_volta);
       const validacao = validarPeriodo(body.data_ida, voltaCalculada, voltaCalculada ? 'round_trip' : 'one_way', ehSemData);
       if (!validacao.ok) {
@@ -226,7 +236,18 @@ export async function rotasRoutes(fastify) {
     return { ok: true, importadas: criadas.length, total: rotasRepo.listarTodas(false).length };
   });
 
-  // Forçar sincronização imediata com o GitHub (Two-Way Sync)
+  // Puxar rotas da nuvem (GitHub) e sincronizar imediatamente com o SQLite local
+  fastify.post('/api/rotas/sync-pull', async (request, reply) => {
+    try {
+      const resSync = await rotasSync.puxarDoGitHub();
+      const rotas = rotasRepo.listarTodas(false);
+      return reply.send({ ok: true, sincronizado: resSync.ok, total: rotas.length, stats: resSync.stats || null, rotas });
+    } catch (err) {
+      return reply.code(500).send({ ok: false, erro: err.message });
+    }
+  });
+
+  // Forçar sincronização imediata com o GitHub (Two-Way Sync - Push)
   fastify.post('/api/rotas/sincronizar-github', async (request, reply) => {
     const resSync = await rotasSync.sincronizarComGitHub('chore(sync): sincronização manual de rotas via Cockpit');
     return resSync;

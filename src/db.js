@@ -7,7 +7,9 @@ import {
   calcularDataVolta,
   gerarLinkGoogleFlights,
   somarDiasData,
-  gerarDataPadraoInicial
+  gerarDataPadraoInicial,
+  extrairDiasEstadia,
+  ehSoIda
 } from './domain/rotas.js';
 
 let dbInstance = null;
@@ -150,15 +152,18 @@ export const rotasRepo = {
     }
 
     const semData = dados.sem_data ? 1 : 0;
-    const diasEstadia = parseInt(dados.dias_estadia, 10) || 10;
+    const diasEstadia = extrairDiasEstadia(dados.dias_estadia || dados.data_volta, 10);
+    const soIda = semData
+      ? (typeof dados.data_volta === 'string' && !/\d/.test(dados.data_volta) && ehSoIda(dados.data_volta))
+      : ehSoIda(dados.data_volta);
     let dataIda = dados.data_ida;
     if (semData && !dataIda) {
       dataIda = gerarDataPadraoInicial(25);
     }
 
-    const dataVolta = semData && (!dados.data_volta || dados.data_volta === 'flexivel')
-      ? somarDiasData(dataIda, diasEstadia)
-      : calcularDataVolta(dataIda, dados.data_volta);
+    const dataVolta = semData
+      ? (soIda ? null : somarDiasData(dataIda, diasEstadia))
+      : (soIda ? null : calcularDataVolta(dataIda, dados.data_volta));
 
     const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
@@ -202,9 +207,27 @@ export const rotasRepo = {
     const codigoOrigem = resolverDestino(origem) || rota.codigo_origem;
     const codigoDestino = resolverDestino(destino) || rota.codigo_destino;
     const semData = dados.sem_data !== undefined ? (dados.sem_data ? 1 : 0) : (rota.sem_data || 0);
-    const diasEstadia = dados.dias_estadia !== undefined ? (parseInt(dados.dias_estadia, 10) || 10) : (rota.dias_estadia || 10);
+    const diasEstadia = dados.dias_estadia !== undefined
+      ? extrairDiasEstadia(dados.dias_estadia, rota.dias_estadia || 10)
+      : (dados.data_volta !== undefined && semData ? extrairDiasEstadia(dados.data_volta, rota.dias_estadia || 10) : (rota.dias_estadia || 10));
     const dataIda = dados.data_ida || rota.data_ida;
-    const dataVolta = dados.data_volta !== undefined ? calcularDataVolta(dataIda, dados.data_volta) : rota.data_volta;
+
+    let dataVolta;
+    if (dados.data_volta !== undefined) {
+      const soIda = semData
+        ? (typeof dados.data_volta === 'string' && !/\d/.test(dados.data_volta) && ehSoIda(dados.data_volta))
+        : ehSoIda(dados.data_volta);
+      if (semData) {
+        dataVolta = soIda ? null : somarDiasData(dataIda, diasEstadia);
+      } else {
+        dataVolta = soIda ? null : calcularDataVolta(dataIda, dados.data_volta);
+      }
+    } else if (dados.dias_estadia !== undefined && semData && rota.data_volta) {
+      dataVolta = somarDiasData(dataIda, diasEstadia);
+    } else {
+      dataVolta = rota.data_volta;
+    }
+
     const precoAlvo = dados.preco_alvo !== undefined ? (parseFloat(dados.preco_alvo) || null) : rota.preco_alvo;
     const duracaoMaxHoras = dados.duracao_max_horas !== undefined ? (parseFloat(dados.duracao_max_horas) || 999) : rota.duracao_max_horas;
     const cabine = dados.cabine || rota.cabine || 'economy';
@@ -418,6 +441,28 @@ export const bugFaresRepo = {
  */
 export const alertasRepo = {
   deveDisparar: (chaveAlerta, precoAtual, precoAnterior, precoAlvo, ehRecordeMinimo, nivelPreco, pctVariacao) => {
+    // 1. REGRA ABSOLUTA DE DEPLOY / INICIALIZAÇÃO:
+    // Nunca disparar alerta na primeira checagem de uma rota. A primeira checagem serve estritamente para registrar baseline.
+    if (!precoAnterior || precoAnterior <= 0) {
+      return { deve: false, motivo: 'baseline_inicial_deploy' };
+    }
+
+    // 2. REGRA DOS CRITÉRIOS DO USUÁRIO (Preço Alvo):
+    // Se o usuário estipulou preço alvo, o preço atual DEVE estar dentro da meta (precoAtual <= precoAlvo).
+    const temPrecoAlvo = precoAlvo !== null && precoAlvo !== undefined && precoAlvo > 0;
+    const atendePrecoAlvo = temPrecoAlvo && precoAtual <= precoAlvo;
+
+    if (temPrecoAlvo && !atendePrecoAlvo) {
+      // O preço está acima do alvo definido pelo usuário: NUNCA notificar!
+      return { deve: false, motivo: 'acima_preco_alvo' };
+    }
+
+    // Se NÃO tem preço alvo definido pelo usuário:
+    // Só pode alertar se for uma oportunidade comprovada (nível LOW do Google Flights E queda expressiva).
+    if (!temPrecoAlvo && (nivelPreco !== 'LOW' || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
+      return { deve: false, motivo: 'sem_meta_e_fora_dos_criterios_estritos' };
+    }
+
     const db = getDb();
     const ultimo = db.prepare(`
       SELECT * FROM alertas_disparados
@@ -426,38 +471,49 @@ export const alertasRepo = {
       LIMIT 1
     `).get(chaveAlerta);
 
-    if (ultimo && Math.abs(ultimo.preco - precoAtual) < 0.01) {
-      return { deve: false };
-    }
-
     const agora = new Date();
     const horasDesdeUltimo = ultimo
       ? (agora.getTime() - new Date(ultimo.disparado_em).getTime()) / (1000 * 60 * 60)
       : Infinity;
 
-    const ehQuedaRelampago = pctVariacao <= -config.radar.gatilhoQuedaRelampagoPct;
+    // 3. REGRA ANTI-FLOOD / DEDUPLICAÇÃO DE MUDANÇA DE PREÇO:
+    // Se já alertamos para esta rota:
+    if (ultimo) {
+      // Se o preço for igual ou maior que o último alerta enviado, não alertar de novo
+      if (precoAtual >= ultimo.preco) {
+        return { deve: false, motivo: 'preco_nao_melhorou' };
+      }
+      // Se a redução for inferior a 5% em relação ao último alerta disparado, não incomodar
+      const melhoriaPct = ((ultimo.preco - precoAtual) / ultimo.preco) * 100;
+      if (melhoriaPct < 5) {
+        return { deve: false, motivo: 'variacao_insignificante' };
+      }
+      // Respeitar cooldown de no mínimo 48 horas entre alertas sucessivos
+      if (horasDesdeUltimo < 48) {
+        return { deve: false, motivo: 'cooldown_48h' };
+      }
+    }
+
+    // 4. IDENTIFICAÇÃO DO GATILHO VÁLIDO DENTRO DOS CRITÉRIOS DO USUÁRIO:
+    const cruzouMetaAbaixo = temPrecoAlvo && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
+    const ehQuedaExpressiva = pctVariacao <= -config.radar.gatilhoQuedaRelampagoPct;
     const ehNovoRecordeReal = ehRecordeMinimo && (!ultimo || precoAtual < ultimo.preco);
-    const cruzouMetaAbaixo = precoAnterior > 0 && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
-    const primeiraChecagemAtende = (!precoAnterior || precoAnterior === 0) && (precoAtual <= precoAlvo || nivelPreco === 'LOW');
 
     let deveAlertar = false;
     let tipoAlerta = null;
 
-    if (ehQuedaRelampago && horasDesdeUltimo >= 48) {
-      deveAlertar = true;
-      tipoAlerta = 'QUEDA_RELAMPAGO';
-    } else if (cruzouMetaAbaixo && horasDesdeUltimo >= 168) { // 7 dias
+    if (cruzouMetaAbaixo) {
       deveAlertar = true;
       tipoAlerta = 'ATINGIU_META';
-    } else if (ehNovoRecordeReal && horasDesdeUltimo >= 48) {
+    } else if (ehQuedaExpressiva) {
+      deveAlertar = true;
+      tipoAlerta = 'QUEDA_RELAMPAGO';
+    } else if (ehNovoRecordeReal) {
       deveAlertar = true;
       tipoAlerta = 'NOVO_RECORDE';
-    } else if (primeiraChecagemAtende) {
-      deveAlertar = true;
-      tipoAlerta = 'PRIMEIRA_CHECAGEM';
     }
 
-    if (!deveAlertar) return { deve: false };
+    if (!deveAlertar) return { deve: false, motivo: 'nenhum_gatilho_atingido' };
 
     db.prepare(`
       INSERT INTO alertas_disparados (chave_alerta, preco, tipo, disparado_em)

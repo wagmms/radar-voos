@@ -6,7 +6,9 @@ import {
   ehSoIda,
   calcularDataVolta,
   validarPeriodo,
-  gerarLinkGoogleFlights
+  gerarLinkGoogleFlights,
+  extrairDiasEstadia,
+  formatarDataParaBusca
 } from '../src/domain/rotas.js';
 
 describe('Domínio: Rotas e Resolução Aeronáutica', () => {
@@ -43,12 +45,33 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(ehSoIda('14'), false);
   });
 
-  it('deve calcular data de volta com número de dias de estadia', () => {
-    const volta = calcularDataVolta('2026-11-10', '14');
-    assert.strictEqual(volta, '2026-11-24');
+  it('deve extrair dias de estadia de múltiplos formatos numéricos e textuais', () => {
+    assert.strictEqual(extrairDiasEstadia('10 dias'), 10);
+    assert.strictEqual(extrairDiasEstadia('10'), 10);
+    assert.strictEqual(extrairDiasEstadia('10d'), 10);
+    assert.strictEqual(extrairDiasEstadia('14 (dias)'), 14);
+    assert.strictEqual(extrairDiasEstadia('7 dias de viagem'), 7);
+    assert.strictEqual(extrairDiasEstadia(15), 15);
+    assert.strictEqual(extrairDiasEstadia(null, 10), 10);
+    assert.strictEqual(extrairDiasEstadia('', 10), 10);
+  });
+
+  it('deve calcular data de volta com número de dias de estadia e sufixos de texto', () => {
+    assert.strictEqual(calcularDataVolta('2026-11-10', '14'), '2026-11-24');
+    assert.strictEqual(calcularDataVolta('2026-11-10', '10 dias'), '2026-11-20');
+    assert.strictEqual(calcularDataVolta('2026-11-10', '10d'), '2026-11-20');
+    assert.strictEqual(calcularDataVolta('2026-11-10', '14 (dias)'), '2026-11-24');
 
     const voltaSoIda = calcularDataVolta('2026-11-10', 'Só Ida');
     assert.strictEqual(voltaSoIda, null);
+  });
+
+  it('não deve converter números soltos em datas arbitrárias no formato de busca', () => {
+    assert.strictEqual(formatarDataParaBusca('10'), null);
+    assert.strictEqual(formatarDataParaBusca('10 dias'), null);
+    assert.strictEqual(formatarDataParaBusca('10/10'), null);
+    assert.strictEqual(formatarDataParaBusca('2026-10-10'), '2026-10-10');
+    assert.strictEqual(formatarDataParaBusca('10/10/2026'), '2026-10-10');
   });
 
   it('deve validar datas de ida e volta, rejeitando volta anterior à ida', () => {
