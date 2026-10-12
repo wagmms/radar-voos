@@ -50,7 +50,7 @@
     "codigo_origem": "SAO",
     "codigo_destino": "BUE",
     "data_ida": "2026-10-09",
-    "data_volta": null,
+    "data_volta": "2026-10-19",
     "duracao_max_horas": 8,
     "preco_alvo": 1000,
     "cabine": "economy",
