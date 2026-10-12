@@ -58,20 +58,5 @@
     "sem_data": 0,
     "dias_estadia": 10,
     "ativa": 1
-  },
-  {
-    "origem": "São Paulo",
-    "destino": "Nordeste",
-    "codigo_origem": "SAO",
-    "codigo_destino": "REC,SSA",
-    "data_ida": "2027-03-25",
-    "data_volta": "2027-03-28",
-    "duracao_max_horas": 6,
-    "preco_alvo": 1200,
-    "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 0,
-    "dias_estadia": 10,
-    "ativa": 1
   }
 ]
