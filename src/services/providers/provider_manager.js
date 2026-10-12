@@ -29,6 +29,7 @@ export class FlightProviderManager {
    * Busca ofertas iterando pelos provedores disponíveis na ordem de prioridade
    */
   async buscarOfertas(params) {
+    let melhorResultado = null;
     let ultimoErro = 'Nenhum provedor disponível';
 
     for (const provider of this.providers) {
@@ -39,20 +40,38 @@ export class FlightProviderManager {
       try {
         const resultado = await provider.buscarOfertas(params);
 
-        if (resultado.ok) {
+        if (resultado.ok && resultado.encontrouVoos && resultado.oferta?.preco) {
           if (provider instanceof GoogleFlightsDirectProvider) {
             this.stats.buscasDiretasSucesso++;
           } else if (provider instanceof SerpApiProvider) {
             this.stats.buscasSerpApiSucesso++;
           }
-          return resultado;
+
+          if (!melhorResultado || resultado.oferta.preco < melhorResultado.oferta.preco) {
+            melhorResultado = resultado;
+          }
+
+          // Se o provedor direto já capturou a menor tarifa via aba Cheapest ou se a SerpApi não estiver disponível,
+          // encerra imediatamente. Caso contrário, permite que a SerpApi busque descontos de parceiros e OTAs.
+          const ehDirect = provider instanceof GoogleFlightsDirectProvider;
+          const temSerpApiDisponivel = this.providers.some(p => p instanceof SerpApiProvider && p.estaDisponivel());
+          const jaTemDescontoOta = resultado.oferta.detalhes?.includes('Aba Cheapest') || Boolean(resultado.oferta.precoOriginal);
+
+          if (!ehDirect || !temSerpApiDisponivel || jaTemDescontoOta) {
+            return melhorResultado;
+          }
+        } else if (resultado.ok && !melhorResultado) {
+          melhorResultado = resultado;
         }
 
-        // Se o provedor reportou erro ou indisponibilidade, registra e tenta o próximo
         ultimoErro = resultado.mensagemErro || 'Erro desconhecido';
       } catch (err) {
         ultimoErro = err.message;
       }
+    }
+
+    if (melhorResultado) {
+      return melhorResultado;
     }
 
     this.stats.falhasTotais++;

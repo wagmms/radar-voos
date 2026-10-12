@@ -7,6 +7,16 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.6.3] - 2026-10-12
+
+### ⚡ Estratégia Híbrida de Provedores com Descoberta de Tarifas de OTAs em Nuvem
+- **Inteligência de Menor Preço no Gerenciador de Provedores (`src/services/providers/provider_manager.js`)**:
+  - Em ambientes de nuvem (datacenter do Render em Ohio), o Google Flights omite as tarifas de parceiros e OTAs brasileiras (Kiwi, Zupper) do HTML direto, entregando apenas as tarifas oficiais de cias aéreas (ex: Azul R$ 741).
+  - O `FlightProviderManager` agora detecta quando o provedor direto entrega apenas tarifa oficial sem desconto de agência e, se a SerpAPI estiver disponível com pool ativo, realiza busca complementar via proxy residencial.
+  - A menor tarifa encontrada entre os provedores é eleita automaticamente, capturando tarifas de parceiros (R$ 587 a R$ 593) com precisão absoluta.
+- **Limpeza e Fixação de Mercado Emissor**:
+  - Injeção obrigatória de `gl=BR` e headers nos provedores.
+
 ## [2.6.2] - 2026-10-12
 
 ### 🎯 Link Canônico Protobuf (tfs) e Forçamento da Aba Cheapest (tfu) do Google Flights

@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.6.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.6.3)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.6.2 operacional (68/68 testes passando). Implementada geração canônica de Protobuf `tfs` e parâmetro de interface `tfu=EgoIABAAGAAgAigD`, forçando o Google Flights a renderizar diretamente a aba **Cheapest** (Mais Baratos). A rota Rio de Janeiro ➔ Ribeirão Preto está confirmada e persistida em **R$ 587** (Azul com 1 parada, 3h 40min).
-- **Diretriz Prioritária**: Priorizar estritamente a menor tarifa real ("Cheapest") que respeite os critérios do usuário (duração máxima e datas) em vez da opção "Best" padrão do Google.
-- **Última Tarefa Concluída**: Implementação de `gerarTfs` e `gerarLinkGoogleFlightsCheapest` em `src/domain/rotas.js`, integração em `src/services/providers/google_flights_direct_provider.js`, aumento de timeout de booking para 25s em `src/services/providers/serpapi_provider.js` e validação da rota RIO ➔ RAO em R$ 587.
+- **Estado Geral**: 🟢 Radar v2.6.3 operacional (68/68 testes passando). Implementada estratégia híbrida em `FlightProviderManager`: quando o provedor direto no ambiente de nuvem (Render) recebe apenas a tarifa oficial da cia aérea (R$ 741), a SerpAPI com proxy residencial é acionada complementarmente para desvendar as tarifas de parceiros e OTAs (R$ 587 a R$ 593).
+- **Diretriz Prioritária**: Garantir que o menor preço absoluto da rota seja eleito e refletido no Cockpit PWA e alertas.
+- **Última Tarefa Concluída**: Integração de eleição de menor tarifa entre provedores no `FlightProviderManager`, garantindo captura de OTAs em nuvem e link direto para a aba Cheapest.
 
 ---
 
