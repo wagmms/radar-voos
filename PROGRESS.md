@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.7.3)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.7.4)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.3 operacional (102/102 testes passando). Cockpit PWA enriquecido com filtro por faixas de temperatura climática (`src/public/js/clima_filtro.js`), chips rápidos na toolbar (☀️ Quente >25°C, ⛅ Ameno 15-25°C, ❄️ Frio <15°C) e badges dinâmicos contextualizados com dados de `clima_temp_media`.
+- **Estado Geral**: 🟢 Radar v2.7.4 operacional (102/102 testes JS + 5/5 testes Python passando). Autoloop blindado com throttling de 5 min (300s), supressão de notificações redundantes por commit hash e bloqueio estrito pós-execução contra loops em falhas da IA.
 - **Diretriz Prioritária**: Aprimorar continuamente a precisão de busca do Google Flights (aba cheapest, conexões, bagagens), detecção de Bug Fares e refinamento de interface PWA via turnos autônomos orientados a skills.
-- **Última Tarefa Concluída**: Implementado filtro por faixas de temperatura climática no Cockpit PWA (`src/public/js/clima_filtro.js`, `src/public/app.js`, `src/public/index.html` e `src/public/styles.css`), com chips rápidos de seleção e badges meteorológicos enriquecidos com micro-tags de faixa, com 21 novos testes automatizados (102/102 testes aprovados).
+- **Última Tarefa Concluída**: Implementada blindagem completa contra rajadas de notificações no autoloop do Radar de Voos (`scripts/autoloop_radarvoos.py`, `autoloop-radarvoos` e `tests/test_autoloop_radarvoos_throttling.py`): supressão de notificações para o mesmo commit, cooldown protetor de 300s, bloqueio de relatórios quando o turno da IA falha (`ret_code != 0`), detecção de novos commits e salvaguarda automática (5 testes unitários aprovados).
 
 ---
 

@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.4] - 2026-10-12
+
+### 🛡️ Blindagem do Autoloop e Throttling Estrito Anti-Spam no Telegram
+- **Blindagem do Ciclo de Execução da IA (`scripts/autoloop_radarvoos.py` e `autoloop-radarvoos`)**:
+  - Implementado bloqueio estrito pós-execução do AGY: se `ret_code != 0`, o ciclo falha imediatamente, aciona auto-rollback defensivo, aplica pausa protetora de 15 segundos e NUNCA prossegue para envio de notificação ou falsa validação de sucesso.
+  - Adicionada detecção de alterações reais no repositório (`sha_final != sha_inicial`). Se o turno da IA não gerar commits novos nem arquivos modificados, nenhuma notificação é enviada.
+  - Implementada rotina de salvaguarda automática de commits para alterações válidas aprovadas na suíte de testes caso o agente não as tenha commitado.
+- **Deduplicação de Commit e Cooldown Estrito de Notificações**:
+  - Implementada checagem anti-redundância: se o commit já foi notificado anteriormente (`commit_hash == last_notified_commit`), a notificação é sumariamente suprimida.
+  - Estabelecido cooldown protetor de 300 segundos (5 minutos) entre relatórios automáticos consecutivos no Telegram.
+  - Persistência atômica do estado em `data/autoloop_telegram_state.json`.
+- **Mapeamento Preciso de Modelos Compatíveis com o CLI do AGY**:
+  - Normalizados identificadores de modelo em `MAPA_MODELOS` e `resolver_modelo_para_conta` para utilizar exclusivamente modelos válidos suportados pelo AGY CLI (`gemini-3.8-flash-high`, `gemini-3.8-flash-medium`, `claude-sonnet-4-6`, `claude-opus-4-6-thinking`), prevenindo falhas instantâneas de invocação.
+- **Cobertura de Testes Unitários (`tests/test_autoloop_radarvoos_throttling.py`)**:
+  - Criada suíte com 5 testes unitários validando persistência de estado, supressão por commit duplicado, cooldown de 300s, liberação após expiração e rejeição de hashes inválidos.
+
 ## [2.7.3] - 2026-10-12
 
 ### 🌡️ Cockpit PWA: Filtro por Faixa de Temperatura Climática e Badges Enriquecidos
