@@ -7,6 +7,19 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.1] - 2026-10-12
+
+### 🏷️ Identificação e Destaque Visual de Tarifas Especiais (Aba Cheapest & Parceiros/OTAs)
+- **Módulo de Detecção e Renderização de Tags (`src/public/js/tarifa_tags.js`)**:
+  - Criadas funções modulares `extrairInfoTarifaEspecial`, `renderizarTagTarifaEspecial` e `renderizarBannerTarifaEspecial`.
+  - Detecção inteligente da aba "Cheapest" via atributos de voo, palavras-chave e tokens canônicos Protobuf do Google Flights (`tfu=EgoIABAAGAAgAigD`).
+  - Reconhecimento automático de agências parceiras e OTAs integradas (Decolar, MyTrip, Gotogate, eDreams, ViajaNet ou OTA genérica).
+- **Interface Cockpit PWA Refinada (`src/public/app.js`, `src/public/index.html` e `src/public/styles.css`)**:
+  - Cards de voos ganham tags contextuais (`.tarifa-deal-pill`) no cabeçalho e banners estilizados (`.tarifa-deal-banner`) no corpo do cartão com contraste refinado, gradiente translúcido e ícones específicos (`⚡` para Cheapest e `🏷️` para Parceiros).
+  - Adicionado novo chip de filtro dinâmico no toolbar do Cockpit: `⚡ Cheapest / OTAs`.
+- **Cobertura de Testes Automatizados (`tests/tarifa_tags.test.js`)**:
+  - Implementada suíte completa de testes cobrindo todos os cenários (rotas regulares, aba Cheapest direta, parceiros OTAs com preço, parâmetro Protobuf canônico e janelas flexíveis), elevando a suíte para 76/76 testes aprovados.
+
 ## [2.7.0] - 2026-10-12
 
 ### 🛫 Motor Autônomo de Desenvolvimento Contínuo (Autoloop Radar de Voos) & Integração IA-Hub

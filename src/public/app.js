@@ -6,6 +6,11 @@
 
 import { renderizarSparkline } from './js/sparkline.js';
 import { renderizarArcoVooSvg } from './js/geo_routes.js';
+import {
+  extrairInfoTarifaEspecial,
+  renderizarTagTarifaEspecial,
+  renderizarBannerTarifaEspecial
+} from './js/tarifa_tags.js';
 
 // Registrar Service Worker PWA
 if ('serviceWorker' in navigator) {
@@ -302,6 +307,8 @@ function renderizarRotas() {
       bateCat = rota.termometro && (rota.termometro.includes('Super Barato') || rota.termometro.includes('Excelente'));
     } else if (state.filtroCategoria === 'flexivel') {
       bateCat = Boolean(rota.sem_data === 1);
+    } else if (state.filtroCategoria === 'cheapest') {
+      bateCat = Boolean(extrairInfoTarifaEspecial(rota));
     }
 
     return bateTexto && bateCat;
@@ -352,6 +359,10 @@ function renderizarRotas() {
     const arcoSvg = renderizarArcoVooSvg(rota.codigo_origem, rota.codigo_destino, 150, 36);
     const sparklineSvg = renderizarSparkline(rota.historico_recente || [], { width: 110, height: 32 });
 
+    const infoTarifa = extrairInfoTarifaEspecial(rota);
+    const tagTarifaHtml = renderizarTagTarifaEspecial(infoTarifa);
+    const bannerTarifaHtml = renderizarBannerTarifaEspecial(infoTarifa);
+
     let melhorOpcaoFlexivel = null;
     if (rota.melhor_opcao_flexivel) {
       try {
@@ -373,7 +384,10 @@ function renderizarRotas() {
               ${rota.destino_real && rota.destino_real !== rota.destino && rota.destino_real !== rota.codigo_destino ? `<span style="display:block; font-size:0.75rem; color:#10b981; font-weight:600; margin-top:2px;">📍 ${escapeHtml(rota.destino_real)}</span>` : ''}
             </div>
           </div>
-          <span class="trip-type-tag ${rota.sem_data === 1 ? 'tag-flexivel' : ''}">${tipoViagem}${flexTag}${cabineTag}</span>
+          <div class="card-header-tags">
+            <span class="trip-type-tag ${rota.sem_data === 1 ? 'tag-flexivel' : ''}">${tipoViagem}${flexTag}${cabineTag}</span>
+            ${tagTarifaHtml}
+          </div>
         </div>
 
         <!-- Arco Geodésico Great Circle (remotion-maps) -->
@@ -410,6 +424,8 @@ function renderizarRotas() {
         <div class="flight-specs">
           ${rota.detalhes_voo && rota.detalhes_voo !== '-' ? `✈️ ${escapeHtml(rota.detalhes_voo)}` : '⏱️ Duração máx: ' + (rota.duracao_max_horas || 16) + 'h'}
         </div>
+
+        ${bannerTarifaHtml}
 
         <div class="card-pricing-block">
           <div class="price-main">

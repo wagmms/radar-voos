@@ -1,28 +1,28 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.6.4)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.7.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.0 operacional (70/70 testes passando). Autoloop blindado (`autoloop-radarvoos`) criado e 100% integrado ao Mission Control IA-Hub no terminal visível e Telegram. Seletor de tipo de viagem explícito (Ida e Volta vs Apenas Ida), indicador de escopo de teto e caixa explicativa funcionando perfeitamente.
+- **Estado Geral**: 🟢 Radar v2.7.1 operacional (76/76 testes passando). Módulo `tarifa_tags.js` homologado com detecção cirúrgica da aba "Cheapest" e agências parceiras/OTAs (Decolar, MyTrip, Gotogate, etc.). Cards do Cockpit PWA ganharam tags pills contextuais, banners informativos translúcidos e novo filtro `⚡ Cheapest / OTAs` na toolbar.
 - **Diretriz Prioritária**: Aprimorar continuamente a precisão de busca do Google Flights (aba cheapest, conexões, bagagens), detecção de Bug Fares e refinamento de interface PWA via turnos autônomos orientados a skills.
-- **Última Tarefa Concluída**: Criação e homologação do Autoloop Radar de Voos (`autoloop-radarvoos`), script de validação de 3 camadas `validate.sh` e integração completa ao ecossistema do IA-Hub (runner de janela única, menus e comandos Telegram).
+- **Última Tarefa Concluída**: Adicionadas tags visuais e banners informativos para tarifas obtidas pela aba "Cheapest" ou parceiros no card da rota no Cockpit Web, com módulo `src/public/js/tarifa_tags.js`, estilização anti-ui-slop e 100% de cobertura com 6 novos testes automatizados.
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/public/app.js`
-- **Função/Componente/Seletor**: `renderizarRotas`
-- **Comportamento Esperado / Critério de Aceite**: Adicionar tag visual destacando tarifas obtidas pela aba "Cheapest" ou parceiros no card da rota no Cockpit Web.
+- **Arquivo/Módulo Alvo**: `src/services/providers/google_flights_direct_provider.js`
+- **Função/Componente/Seletor**: `buscarOfertas`
+- **Comportamento Esperado / Critério de Aceite**: Expandir parser de tarifas para extrair conexões detalhadas (escalas) e bagagens diretamente dos nós e atributos dos blocos de resultados do Google Flights.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/public/app.js` • `renderizarRotas` • Adicionar tag visual destacando tarifas obtidas pela aba "Cheapest" ou parceiros no card da rota no Cockpit Web.
-- [ ] `src/services/providers/google_flights_direct_provider.js` • `buscarOfertas` • Expandir parser de tarifas para extrair conexões detalhadas e bagagens diretamente dos blocos de resultados do Google Flights.
+- [ ] `src/services/providers/google_flights_direct_provider.js` • `buscarOfertas` • Expandir parser de tarifas para extrair conexões detalhadas (escalas) e bagagens diretamente dos blocos de resultados do Google Flights.
 - [ ] `src/public/app.js` • `renderizarRotas` • Adicionar filtro por faixa de temperatura climática no Cockpit (ex: destinos quentes >25°C vs frios <15°C).
 - [ ] `src/services/notifier_telegram.js` • `processarComando` • Adicionar comando `/paridade` para conversão de milhas aéreas (Smiles/Latam Pass) em valor equivalente em reais.
+- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Adicionar suporte a parâmetros de cabine (Premium Economy e Executiva) na varredura autônoma global.
 
 ---
 
