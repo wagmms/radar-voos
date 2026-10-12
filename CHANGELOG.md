@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.3] - 2026-10-12
+
+### 🌡️ Cockpit PWA: Filtro por Faixa de Temperatura Climática e Badges Enriquecidos
+- **Módulo Modular de Filtragem Climática (`src/public/js/clima_filtro.js`)**:
+  - Implementada função `extrairTemperaturaMedia` com priorização da coluna `clima_temp_media` do SQLite e fallback defensivo sobre strings textuais em `clima_destino_resumo`.
+  - Implementada função `classificarFaixaClima` mapeando temperaturas em faixas canônicas: **Quente** (>25°C), **Ameno** (15°C a 25°C) e **Frio** (<15°C).
+  - Implementada função `obterMetaFaixaClima` com metadados visuais, classes CSS, paleta de cores contextual e ícones semânticos (☀️, ⛅, ❄️).
+  - Implementada função `filtrarPorFaixaClima` permitindo filtragem precisa de rotas por temperatura ou integração como filtro combinável.
+  - Implementada função `renderizarWeatherBadge` gerando badges meteorológicos enriquecidos com micro-tags informativas de faixa no Cockpit PWA.
+- **Interface e Toolbar do Cockpit PWA (`src/public/index.html`, `src/public/styles.css` e `src/public/app.js`)**:
+  - Adicionado novo grupo visual de filtros rápidos na toolbar (`.filter-clima-group` com seletor de chips): **Todos**, **☀️ Quente (>25°C)**, **⛅ Ameno (15-25°C)** e **❄️ Frio (<15°C)**.
+  - Integração no `state.filtroClima` com disparo tátil (háptica via `vibrarAoTocar`) e renderização reativa instantânea em `renderizarRotas`.
+  - Cards de voos receberam badges estilizados com cores contextuais (âmbar/solar para quente, esmeralda para ameno e ciano/gelo para frio).
+- **Cobertura de Testes Automatizados (`tests/clima_filtro.test.js`)**:
+  - Criada suíte completa com 21 novos testes automatizados cobrindo extração numérica e textual de temperatura, faixas de borda, tratamento gracioso de valores nulos, filtragem de rotas e renderização de badges, elevando a suíte para 102/102 testes aprovados.
+
 ## [2.7.2] - 2026-10-12
 
 ### 🔍 Parser Enriquecido do Google Flights: Conexões Detalhadas (Escalas) e Bagagens

@@ -128,12 +128,21 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           <input type="text" id="filtro-rotas" placeholder="Filtrar por cidade, país ou aeroporto...">
         </div>
-        <div class="filter-toggles">
-          <button class="filter-chip active" data-filter="todas">Todas</button>
-          <button class="filter-chip" data-filter="flexivel">🗓️ Flexíveis</button>
-          <button class="filter-chip" data-filter="cheapest">⚡ Cheapest / OTAs</button>
-          <button class="filter-chip" data-filter="meta">Na Meta</button>
-          <button class="filter-chip" data-filter="promo">Super Baratos</button>
+        <div class="filter-toggles-wrapper">
+          <div class="filter-toggles" id="filter-categorias">
+            <button class="filter-chip active" data-filter="todas">Todas</button>
+            <button class="filter-chip" data-filter="flexivel">🗓️ Flexíveis</button>
+            <button class="filter-chip" data-filter="cheapest">⚡ Cheapest / OTAs</button>
+            <button class="filter-chip" data-filter="meta">Na Meta</button>
+            <button class="filter-chip" data-filter="promo">Super Baratos</button>
+          </div>
+          <div class="filter-clima-group" id="filter-clima-group">
+            <span class="filter-group-label">🌡️ Clima:</span>
+            <button class="filter-chip-clima active" data-filter-clima="todos">Todos</button>
+            <button class="filter-chip-clima chip-clima-quente" data-filter-clima="quente" title="Destinos quentes com média acima de 25°C">☀️ Quente (&gt;25°C)</button>
+            <button class="filter-chip-clima chip-clima-ameno" data-filter-clima="ameno" title="Destinos amenos entre 15°C e 25°C">⛅ Ameno (15-25°C)</button>
+            <button class="filter-chip-clima chip-clima-frio" data-filter-clima="frio" title="Destinos frios com média abaixo de 15°C">❄️ Frio (&lt;15°C)</button>
+          </div>
         </div>
       </div>
 

@@ -11,6 +11,10 @@ import {
   renderizarTagTarifaEspecial,
   renderizarBannerTarifaEspecial
 } from './js/tarifa_tags.js';
+import {
+  filtrarPorFaixaClima,
+  renderizarWeatherBadge
+} from './js/clima_filtro.js';
 
 // Registrar Service Worker PWA
 if ('serviceWorker' in navigator) {
@@ -82,6 +86,7 @@ const state = {
   poolStatus: null,
   filtroTexto: '',
   filtroCategoria: 'todas',
+  filtroClima: 'todos',
   abaAtiva: 'tab-rotas'
 };
 
@@ -163,13 +168,24 @@ function setupEventListeners() {
     renderizarRotas();
   });
 
-  // Filtro Chips
+  // Filtro Chips de Categorias
   document.querySelectorAll('.filter-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       vibrarAoTocar();
       document.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       state.filtroCategoria = chip.getAttribute('data-filter');
+      renderizarRotas();
+    });
+  });
+
+  // Filtro Chips de Faixas Climáticas (Quente, Ameno, Frio)
+  document.querySelectorAll('.filter-chip-clima').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      vibrarAoTocar();
+      document.querySelectorAll('.filter-chip-clima').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      state.filtroClima = chip.getAttribute('data-filter-clima') || 'todos';
       renderizarRotas();
     });
   });
@@ -309,9 +325,18 @@ function renderizarRotas() {
       bateCat = Boolean(rota.sem_data === 1);
     } else if (state.filtroCategoria === 'cheapest') {
       bateCat = Boolean(extrairInfoTarifaEspecial(rota));
+    } else if (state.filtroCategoria === 'clima-quente') {
+      bateCat = filtrarPorFaixaClima(rota, 'quente');
+    } else if (state.filtroCategoria === 'clima-ameno') {
+      bateCat = filtrarPorFaixaClima(rota, 'ameno');
+    } else if (state.filtroCategoria === 'clima-frio') {
+      bateCat = filtrarPorFaixaClima(rota, 'frio');
     }
 
-    return bateTexto && bateCat;
+    // Filtro por faixa de temperatura climática (clima_temp_media)
+    const bateClima = filtrarPorFaixaClima(rota, state.filtroClima);
+
+    return bateTexto && bateCat && bateClima;
   });
 
   if (filtradas.length === 0) {
@@ -415,11 +440,7 @@ function renderizarRotas() {
           </div>
         ` : ''}
 
-        ${rota.clima_destino_resumo ? `
-          <div class="weather-badge">
-            ${escapeHtml(rota.clima_destino_resumo)}
-          </div>
-        ` : ''}
+        ${renderizarWeatherBadge(rota)}
 
         <div class="flight-specs">
           ${rota.detalhes_voo && rota.detalhes_voo !== '-' ? `✈️ ${escapeHtml(rota.detalhes_voo)}` : '⏱️ Duração máx: ' + (rota.duracao_max_horas || 16) + 'h'}
