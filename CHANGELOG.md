@@ -7,6 +7,21 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.6.2] - 2026-10-12
+
+### 🎯 Link Canônico Protobuf (tfs) e Forçamento da Aba Cheapest (tfu) do Google Flights
+- **Geração Canônica de Protobuf `tfs` e Parâmetro `tfu` (`src/domain/rotas.js`)**:
+  - Implementadas funções `gerarTfs` e `gerarLinkGoogleFlightsCheapest` com codificação binária Protocol Buffers (varint e length-delimited) para os filtros de origens, destinos, datas e duração máxima.
+  - Injeção obrigatória do parâmetro canônico `&tfu=EgoIABAAGAAgAigD`, forçando o Google Flights a renderizar diretamente a aba **Cheapest** (Mais Baratos) no HTML inicial e ao abrir o link no navegador.
+- **Integração no Provedor Direto (`src/services/providers/google_flights_direct_provider.js`)**:
+  - Consulta inicial e links de retorno utilizam prioritariamente o link canônico `gerarLinkGoogleFlightsCheapest`, garantindo que os cartões extraídos correspondam à menor tarifa real (R$ 587 em vez do voo selecionado pela aba "Best" de R$ 741).
+- **Aumento de Timeout na SerpAPI (`src/services/providers/serpapi_provider.js`)**:
+  - Timeout da requisição de `booking_options` expandido de 8000ms para 25000ms, permitindo que as consultas a OTAs e parceiros retornem sem abort prematuro por timeout.
+- **Validação e Persistência da Rota RIO ➔ RAO**:
+  - Rota ID 4 (Rio de Janeiro ➔ Ribeirão Preto para 17/01/2027) escaneada e confirmada em **R$ 587** (Azul com 1 parada, 3h 40min, duração <= 6h) com link direto para a aba Cheapest.
+- **Suíte de Testes Automatizados (`tests/domain.test.js`)**:
+  - Adicionado teste unitário cobrindo a geração de `tfs` e links canônicos para a aba Cheapest em viagens só ida e ida e volta (68/68 testes passando, 100% de sucesso).
+
 ## [2.6.1] - 2026-10-12
 
 ### 🐛 Correção da Varredura Proativa no Cockpit PWA e Invalidação de Cache do Service Worker

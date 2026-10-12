@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.6.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.6.2)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.6.1 operacional (67/67 testes passando). Corrigida chamada de atualização pós-varredura proativa no Cockpit PWA (`carregarDadosCompletos`), adicionados aliases defensivos no escopo global e invalidado o cache do Service Worker para `radar-voos-v2.6.1`.
-- **Diretriz Prioritária**: Caçada proativa contínua de erros de tarifa genuínos nos eixos mundiais sem gerar custos de API ou poluição de marketing.
-- **Última Tarefa Concluída**: Correção cirúrgica de `carregarDadosCompletos` em `src/public/app.js`, invalidação de cache em `src/public/sw.js` (v2.6.1) e tratamento defensivo com `try/catch` em `src/server/routes/bug_fares_routes.js`.
+- **Estado Geral**: 🟢 Radar v2.6.2 operacional (68/68 testes passando). Implementada geração canônica de Protobuf `tfs` e parâmetro de interface `tfu=EgoIABAAGAAgAigD`, forçando o Google Flights a renderizar diretamente a aba **Cheapest** (Mais Baratos). A rota Rio de Janeiro ➔ Ribeirão Preto está confirmada e persistida em **R$ 587** (Azul com 1 parada, 3h 40min).
+- **Diretriz Prioritária**: Priorizar estritamente a menor tarifa real ("Cheapest") que respeite os critérios do usuário (duração máxima e datas) em vez da opção "Best" padrão do Google.
+- **Última Tarefa Concluída**: Implementação de `gerarTfs` e `gerarLinkGoogleFlightsCheapest` em `src/domain/rotas.js`, integração em `src/services/providers/google_flights_direct_provider.js`, aumento de timeout de booking para 25s em `src/services/providers/serpapi_provider.js` e validação da rota RIO ➔ RAO em R$ 587.
 
 ---
 

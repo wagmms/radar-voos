@@ -8,7 +8,9 @@ import {
   validarPeriodo,
   gerarLinkGoogleFlights,
   extrairDiasEstadia,
-  formatarDataParaBusca
+  formatarDataParaBusca,
+  gerarTfs,
+  gerarLinkGoogleFlightsCheapest
 } from '../src/domain/rotas.js';
 
 describe('Domínio: Rotas e Resolução Aeronáutica', () => {
@@ -103,5 +105,30 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
 
     const linkOneWay = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', null);
     assert.match(linkOneWay, /one-way/);
+  });
+
+  it('deve gerar payload Protobuf tfs e link canônico para a aba Cheapest do Google Flights', () => {
+    const tfs = gerarTfs({
+      origens: ['GIG', 'SDU'],
+      destinos: ['RAO'],
+      dataIda: '2027-01-17',
+      maxDurationMinutes: 360
+    });
+    assert.ok(tfs);
+    assert.strictEqual(typeof tfs, 'string');
+    assert.ok(tfs.length > 20);
+
+    const linkCheapestOneWay = gerarLinkGoogleFlightsCheapest('RIO', 'RAO', '2027-01-17', null, 6);
+    assert.ok(linkCheapestOneWay);
+    assert.match(linkCheapestOneWay, /google\.com\/travel\/flights/);
+    assert.match(linkCheapestOneWay, /tfs=/);
+    assert.match(linkCheapestOneWay, /tfu=EgoIABAAGAAgAigD/);
+    assert.match(linkCheapestOneWay, /curr=BRL/);
+    assert.match(linkCheapestOneWay, /hl=pt-BR/);
+
+    const linkCheapestRoundTrip = gerarLinkGoogleFlightsCheapest('SAO', 'LIS', '2027-02-10', '2027-02-24', 15);
+    assert.ok(linkCheapestRoundTrip);
+    assert.match(linkCheapestRoundTrip, /tfs=/);
+    assert.match(linkCheapestRoundTrip, /tfu=EgoIABAAGAAgAigD/);
   });
 });
