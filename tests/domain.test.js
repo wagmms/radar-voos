@@ -1,0 +1,72 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import {
+  resolverDestino,
+  normalizarParaSerpApi,
+  ehSoIda,
+  calcularDataVolta,
+  validarPeriodo,
+  gerarLinkGoogleFlights
+} from '../src/domain/rotas.js';
+
+describe('Domínio: Rotas e Resolução Aeronáutica', () => {
+  it('deve resolver metrópoles brasileiras e internacionais corretamente', () => {
+    assert.strictEqual(resolverDestino('São Paulo'), 'SAO');
+    assert.strictEqual(resolverDestino('sp'), 'SAO');
+    assert.strictEqual(resolverDestino('Rio de Janeiro'), 'RIO');
+    assert.strictEqual(resolverDestino('Buenos Aires'), 'BUE');
+    assert.strictEqual(resolverDestino('Nova York'), 'NYC');
+    assert.strictEqual(resolverDestino('Londres'), 'LON');
+    assert.strictEqual(resolverDestino('Paris'), 'PAR');
+  });
+
+  it('deve resolver códigos de regiões e países do Google Flights (KGMID)', () => {
+    assert.strictEqual(resolverDestino('Europa'), '/m/02j9z');
+    assert.strictEqual(resolverDestino('Estados Unidos'), '/m/09c7w0');
+    assert.strictEqual(resolverDestino('Portugal'), '/m/05r4w');
+  });
+
+  it('deve normalizar metrópoles para aeroportos físicos compatíveis com SerpAPI', () => {
+    assert.strictEqual(normalizarParaSerpApi('SAO'), 'GRU,CGH');
+    assert.strictEqual(normalizarParaSerpApi('RIO'), 'GIG,SDU');
+    assert.strictEqual(normalizarParaSerpApi('NYC'), 'JFK,EWR,LGA');
+    assert.strictEqual(normalizarParaSerpApi('BSB'), 'BSB');
+  });
+
+  it('deve identificar variações de Só Ida', () => {
+    assert.strictEqual(ehSoIda('Só Ida'), true);
+    assert.strictEqual(ehSoIda('so ida'), true);
+    assert.strictEqual(ehSoIda('one way'), true);
+    assert.strictEqual(ehSoIda(''), true);
+    assert.strictEqual(ehSoIda(null), true);
+    assert.strictEqual(ehSoIda('2026-11-20'), false);
+    assert.strictEqual(ehSoIda('14'), false);
+  });
+
+  it('deve calcular data de volta com número de dias de estadia', () => {
+    const volta = calcularDataVolta('2026-11-10', '14');
+    assert.strictEqual(volta, '2026-11-24');
+
+    const voltaSoIda = calcularDataVolta('2026-11-10', 'Só Ida');
+    assert.strictEqual(voltaSoIda, null);
+  });
+
+  it('deve validar datas de ida e volta, rejeitando volta anterior à ida', () => {
+    const ok = validarPeriodo('2026-11-10', '2026-11-20', 'round_trip');
+    assert.strictEqual(ok.ok, true);
+
+    const invalido = validarPeriodo('2026-11-20', '2026-11-10', 'round_trip');
+    assert.strictEqual(invalido.ok, false);
+    assert.match(invalido.erro, /anterior/);
+  });
+
+  it('deve gerar links canônicos estruturados do Google Flights', () => {
+    const linkRoundTrip = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', '2026-11-24');
+    assert.match(linkRoundTrip, /google\.com\/travel\/flights/);
+    assert.match(linkRoundTrip, /Flights%20to%20LIS%20from%20GRU/);
+    assert.match(linkRoundTrip, /through%202026-11-24/);
+
+    const linkOneWay = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', null);
+    assert.match(linkOneWay, /one-way/);
+  });
+});

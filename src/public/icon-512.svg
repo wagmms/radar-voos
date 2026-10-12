@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#06b6d4" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#0a0e17"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="#1e293b" stroke-width="8"/>
+  <circle cx="256" cy="256" r="120" fill="none" stroke="#1e293b" stroke-width="4" stroke-dasharray="8 8"/>
+  <circle cx="256" cy="256" r="60" fill="none" stroke="#1e293b" stroke-width="4"/>
+  <!-- Sweep line -->
+  <line x1="256" y1="256" x2="380" y2="132" stroke="url(#glow)" stroke-width="6" stroke-linecap="round"/>
+  <!-- Airplane icon -->
+  <path d="M256 120 L280 200 L380 230 L380 260 L280 245 L280 340 L310 365 L310 390 L256 375 L202 390 L202 365 L232 340 L232 245 L132 260 L132 230 L232 200 Z" fill="url(#grad)" filter="drop-shadow(0 4px 12px rgba(6, 182, 212, 0.4))"/>
+</svg>
