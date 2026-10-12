@@ -248,6 +248,108 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
 }
 
 /**
+ * Codifica inteiro como varint do Protocol Buffers
+ */
+export function encodeVarint(num) {
+  const bytes = [];
+  let n = num;
+  while (n > 0x7f) {
+    bytes.push((n & 0x7f) | 0x80);
+    n >>>= 7;
+  }
+  bytes.push(n & 0x7f);
+  return Buffer.from(bytes);
+}
+
+/**
+ * Codifica campo length-delimited do Protocol Buffers (wire type 2)
+ */
+export function encodeLengthDelimited(tag, buf) {
+  const tagByte = (tag << 3) | 2;
+  return Buffer.concat([Buffer.from([tagByte]), encodeVarint(buf.length), buf]);
+}
+
+/**
+ * Gera o payload binário protobuf (tfs) compatível com o Google Flights
+ */
+export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null }) {
+  const leg1Parts = [];
+  leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataIda)]));
+  if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
+    leg1Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
+  }
+  for (const orig of origens) {
+    const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
+    const origBytes = Buffer.from(orig);
+    const sub = Buffer.concat([
+      Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
+      Buffer.from([0x12, origBytes.length]),
+      origBytes
+    ]);
+    leg1Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
+  }
+  for (const dest of destinos) {
+    const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
+    const destBytes = Buffer.from(dest);
+    const sub = Buffer.concat([
+      Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
+      Buffer.from([0x12, destBytes.length]),
+      destBytes
+    ]);
+    leg1Parts.push(Buffer.concat([Buffer.from([0x72]), encodeVarint(sub.length), sub]));
+  }
+
+  const rootParts = [
+    Buffer.from([0x08, 0x1c, 0x10, 0x02]),
+    encodeLengthDelimited(3, Buffer.concat(leg1Parts))
+  ];
+
+  if (dataVolta) {
+    const leg2Parts = [];
+    leg2Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataVolta)]));
+    if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
+      leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
+    }
+    for (const dest of destinos) {
+      const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
+      const destBytes = Buffer.from(dest);
+      const sub = Buffer.concat([
+        Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
+        Buffer.from([0x12, destBytes.length]),
+        destBytes
+      ]);
+      leg2Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
+    }
+    for (const orig of origens) {
+      const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
+      const origBytes = Buffer.from(orig);
+      const sub = Buffer.concat([
+        Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
+        Buffer.from([0x12, origBytes.length]),
+        origBytes
+      ]);
+      leg2Parts.push(Buffer.concat([Buffer.from([0x72]), encodeVarint(sub.length), sub]));
+    }
+    rootParts.push(encodeLengthDelimited(3, Buffer.concat(leg2Parts)));
+  }
+
+  rootParts.push(Buffer.from([0x40, 0x01, 0x48, 0x01, 0x70, 0x01, 0x98, 0x01, 0x02]));
+  return Buffer.concat(rootParts).toString('base64url');
+}
+
+/**
+ * Gera link direto e estruturado para o Google Flights que abre FORÇADAMENTE na aba Cheapest (Menor Preço)
+ */
+export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
+  if (!dataIda) return null;
+  const origens = normalizarParaSerpApi(origemCod).split(',').map(s => s.trim()).filter(Boolean);
+  const destinos = normalizarParaSerpApi(destinoCod).split(',').map(s => s.trim()).filter(Boolean);
+  const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
+  const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta, maxDurationMinutes: maxMin });
+  return `https://www.google.com/travel/flights?hl=pt-BR&curr=BRL&tfs=${tfs}&tfu=EgoIABAAGAAgAigD`;
+}
+
+/**
  * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo)
  */
 export function somarDiasData(dataStr, dias) {

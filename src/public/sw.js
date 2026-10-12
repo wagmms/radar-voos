@@ -1,9 +1,11 @@
-const CACHE_NAME = 'radar-voos-v2.2';
+const CACHE_NAME = 'radar-voos-v2.6.1';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/js/geo_routes.js',
+  '/js/sparkline.js',
   '/manifest.json',
   '/icon-192.svg',
   '/icon-512.svg'

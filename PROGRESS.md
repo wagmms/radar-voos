@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.6.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.6.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.6.0 operacional (67/67 testes passando), com caçador proativo global de Bug Fares a custo zero de API (`BugFareHunter`), inteligência multi-cabine (Econômica, Premium e Executiva), detecção de anomalias por Z-Score no SQLite, ingestão de feeds de viagem anti-marketing (`BugFareFeedWatcher`), correção completa de renderização no Cockpit PWA e novos comandos `/varrerbugs` no Telegram.
+- **Estado Geral**: 🟢 Radar v2.6.1 operacional (67/67 testes passando). Corrigida chamada de atualização pós-varredura proativa no Cockpit PWA (`carregarDadosCompletos`), adicionados aliases defensivos no escopo global e invalidado o cache do Service Worker para `radar-voos-v2.6.1`.
 - **Diretriz Prioritária**: Caçada proativa contínua de erros de tarifa genuínos nos eixos mundiais sem gerar custos de API ou poluição de marketing.
-- **Última Tarefa Concluída**: Implementação do pacote completo da Pesquisadora de Bug Fares em `src/services/bug_fare_hunter.js`, `src/services/bug_fare_feed_watcher.js`, `src/domain/bug_fares.js`, `src/db.js`, `src/public/app.js` e `src/server/routes/bug_fares_routes.js` com suíte de testes expandida para 67 testes aprovados.
+- **Última Tarefa Concluída**: Correção cirúrgica de `carregarDadosCompletos` em `src/public/app.js`, invalidação de cache em `src/public/sw.js` (v2.6.1) e tratamento defensivo com `try/catch` em `src/server/routes/bug_fares_routes.js`.
 
 ---
 

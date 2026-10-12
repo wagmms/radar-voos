@@ -260,6 +260,13 @@ async function carregarDadosCompletos(suave = false) {
   }
 }
 
+// Aliases defensivos globais para garantir compatibilidade irrestrita
+const carregarDados = carregarDadosCompletos;
+if (typeof window !== 'undefined') {
+  window.carregarDados = carregarDadosCompletos;
+  window.carregarDadosCompletos = carregarDadosCompletos;
+}
+
 // Renderização Rotas
 function renderizarRotas() {
   if (!rotasContainer) return;
@@ -506,12 +513,13 @@ async function escanearBugFaresProativo() {
 
     if (data.ok) {
       mostrarToast(data.mensagem || 'Varredura proativa concluída!');
-      await carregarDados(true);
+      await carregarDadosCompletos(true);
     } else {
-      mostrarToast(data.mensagemErro || 'Erro ao escanear bug fares', true);
+      mostrarToast(data.mensagemErro || data.erro || 'Erro ao escanear bug fares', true);
     }
   } catch (err) {
-    mostrarToast(`Falha na varredura: ${err.message}`, true);
+    const erroTexto = (err && (err.message || String(err))) || 'Falha de comunicação';
+    mostrarToast(`Falha na varredura: ${erroTexto}`, true);
   } finally {
     btn.disabled = false;
     if (label) label.textContent = originalHtml;

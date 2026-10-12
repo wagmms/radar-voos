@@ -1,6 +1,6 @@
 import { FlightProviderInterface } from './flight_provider_interface.js';
 import { serpApiPool } from '../serpapi_pool.js';
-import { normalizarParaSerpApi, gerarLinkGoogleFlights } from '../../domain/rotas.js';
+import { normalizarParaSerpApi, gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest } from '../../domain/rotas.js';
 import { avaliarTermometro, analisarLayoversEStopover } from '../../domain/calculadora.js';
 
 export class SerpApiProvider extends FlightProviderInterface {
@@ -159,7 +159,9 @@ export class SerpApiProvider extends FlightProviderInterface {
         // Se o destino da rota era uma região/KGMID, o link deve apontar direto para o aeroporto do voo encontrado
         const linkVooEspecifico = (json.search_metadata && json.search_metadata.google_flights_url)
           ? json.search_metadata.google_flights_url
-          : gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta);
+          : (dataIda
+              ? (gerarLinkGoogleFlightsCheapest(origemCod, codigoDestinoReal, dataIda, dataVolta, duracaoMaxHoras) || gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta))
+              : gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta));
 
         if (!melhorOpcao || preco < melhorOpcao.preco) {
           vooEleito = voo;
@@ -199,7 +201,7 @@ export class SerpApiProvider extends FlightProviderInterface {
 
           const respBooking = await fetch(`https://serpapi.com/search.json?${bookingParams.toString()}`, {
             headers: { 'Accept': 'application/json' },
-            signal: AbortSignal.timeout(8000)
+            signal: AbortSignal.timeout(25000)
           });
 
           if (respBooking.ok) {

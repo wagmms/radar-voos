@@ -1,5 +1,5 @@
 import { FlightProviderInterface } from './flight_provider_interface.js';
-import { gerarLinkGoogleFlights } from '../../domain/rotas.js';
+import { gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest } from '../../domain/rotas.js';
 
 /**
  * Google Flights Direct Provider (v2.1)
@@ -47,8 +47,9 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
   }
 
   async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
-    const linkBase = gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
-    const linkConsulta = `${linkBase}&hl=pt-BR&curr=BRL`;
+    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras) : null;
+    const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+    const linkConsulta = linkBase.includes('&hl=pt-BR') ? linkBase : `${linkBase}&hl=pt-BR&curr=BRL`;
 
     try {
       // 1. Rotação dinâmica de fingerprint para evitar perfil estático de bot

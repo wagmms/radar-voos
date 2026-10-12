@@ -7,6 +7,19 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.6.1] - 2026-10-12
+
+### 🐛 Correção da Varredura Proativa no Cockpit PWA e Invalidação de Cache do Service Worker
+- **Correção da Chamada de Atualização no Cockpit PWA (`src/public/app.js`)**:
+  - Corrigido o erro que disparava exceção ao invocar `carregarDados(true)` após o retorno positivo da varredura proativa; ajustado cirurgicamente para a função real `carregarDadosCompletos(true)`.
+  - Implementados aliases globais defensivos `carregarDados = carregarDadosCompletos` (e expostos em `window.carregarDados`), eliminando qualquer risco de `ReferenceError`.
+  - Robustece a captura e exibição de mensagens de falha no toast de notificação in-app com fallbacks defensivos.
+- **Invalidação de Cache e Atualização do Service Worker (`src/public/sw.js`)**:
+  - Elevada a chave de cache do Service Worker de `radar-voos-v2.2` para `radar-voos-v2.6.1`, forçando o ciclo de ativação e limpeza de cache antigo em todos os navegadores e PWAs instalados.
+  - Adicionados os módulos estáticos `/js/geo_routes.js` e `/js/sparkline.js` à lista de pré-cache de assets.
+- **Tratamento Defensivo no Backend Fastify (`src/server/routes/bug_fares_routes.js`)**:
+  - Envolvido o handler do endpoint `POST /api/bug-fares/escanear` com bloco `try/catch` defensivo, garantindo resposta JSON estruturada `{ ok: false, mensagemErro: ... }` com status 500 em qualquer eventualidade.
+
 ## [2.6.0] - 2026-10-12
 
 ### 🧭 Caçador Proativo Global de Bug Fares, Detecção Multi-Cabine, Z-Score no SQLite e Cockpit Turbinado

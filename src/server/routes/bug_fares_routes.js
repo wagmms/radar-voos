@@ -18,29 +18,37 @@ export async function bugFaresRoutes(fastify) {
 
   // Forçar varredura proativa completa (Corredores Globais + Feeds de Comunidade + Rotas Monitored)
   fastify.post('/api/bug-fares/escanear', async (request, reply) => {
-    const { limiteRotas = 5, incluirFeeds = true, incluirRotas = false } = request.body || {};
+    try {
+      const { limiteRotas = 5, incluirFeeds = true, incluirRotas = false } = request.body || {};
 
-    const [resProativo, resFeeds, resRotas] = await Promise.allSettled([
-      bugFareHunter.executarVarreduraProativa({ limiteRotas: parseInt(limiteRotas, 10) || 5, notificar: true }),
-      incluirFeeds ? BugFareFeedWatcher.escanearFeeds({ notificar: true }) : Promise.resolve(null),
-      incluirRotas ? scheduler.executarCiclo(false) : Promise.resolve({ ok: true, pulado: true })
-    ]);
+      const [resProativo, resFeeds, resRotas] = await Promise.allSettled([
+        bugFareHunter.executarVarreduraProativa({ limiteRotas: parseInt(limiteRotas, 10) || 5, notificar: true }),
+        incluirFeeds ? BugFareFeedWatcher.escanearFeeds({ notificar: true }) : Promise.resolve(null),
+        incluirRotas ? scheduler.executarCiclo(false) : Promise.resolve({ ok: true, pulado: true })
+      ]);
 
-    const proativo = resProativo.status === 'fulfilled' ? resProativo.value : { erro: resProativo.reason?.message };
-    const feeds = resFeeds.status === 'fulfilled' ? resFeeds.value : { erro: resFeeds.reason?.message };
-    const rotas = resRotas.status === 'fulfilled' ? resRotas.value : { erro: resRotas.reason?.message };
+      const proativo = resProativo.status === 'fulfilled' ? resProativo.value : { erro: resProativo.reason?.message };
+      const feeds = resFeeds.status === 'fulfilled' ? resFeeds.value : { erro: resFeeds.reason?.message };
+      const rotas = resRotas.status === 'fulfilled' ? resRotas.value : { erro: resRotas.reason?.message };
 
-    const totalNovosBugs = (proativo.totalBugsEncontrados || 0) + (feeds?.totalBugsEncontrados || 0);
+      const totalNovosBugs = (proativo.totalBugsEncontrados || 0) + (feeds?.totalBugsEncontrados || 0);
 
-    return {
-      ok: true,
-      mensagem: `Varredura proativa de Bug Fares concluída com sucesso (${totalNovosBugs} anomalias encontradas)`,
-      resultado: {
-        proativo,
-        feeds,
-        rotas
-      }
-    };
+      return {
+        ok: true,
+        mensagem: `Varredura proativa de Bug Fares concluída com sucesso (${totalNovosBugs} anomalias encontradas)`,
+        resultado: {
+          proativo,
+          feeds,
+          rotas
+        }
+      };
+    } catch (err) {
+      request.log?.error?.(err, 'Erro durante varredura proativa de Bug Fares');
+      return reply.code(500).send({
+        ok: false,
+        mensagemErro: err.message || 'Falha ao processar varredura proativa de Bug Fares'
+      });
+    }
   });
 }
 
