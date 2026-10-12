@@ -22,9 +22,9 @@
     "data_ida": "2027-01-17",
     "data_volta": null,
     "duracao_max_horas": 8,
-    "preco_alvo": 550,
+    "preco_alvo": 700,
     "cabine": "economy",
-    "flexibilidade_dias": 1,
+    "flexibilidade_dias": 0,
     "sem_data": 0,
     "dias_estadia": 10,
     "ativa": 1
@@ -37,9 +37,9 @@
     "data_ida": "2027-01-17",
     "data_volta": null,
     "duracao_max_horas": 6,
-    "preco_alvo": 300,
+    "preco_alvo": 800,
     "cabine": "economy",
-    "flexibilidade_dias": 1,
+    "flexibilidade_dias": 0,
     "sem_data": 0,
     "dias_estadia": 10,
     "ativa": 1
@@ -54,7 +54,7 @@
     "duracao_max_horas": 8,
     "preco_alvo": 1000,
     "cabine": "economy",
-    "flexibilidade_dias": 0,
+    "flexibilidade_dias": 7,
     "sem_data": 1,
     "dias_estadia": 10,
     "ativa": 1
