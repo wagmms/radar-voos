@@ -14,13 +14,13 @@ class Scheduler {
     if (this.timer) return;
     console.log(`⏰ Agendador autônomo iniciado (ciclo a cada ${this.intervaloMinutos} minutos)`);
 
-    // Primeira varredura leve 15 segundos após startup
+    // Primeira varredura 15 segundos após startup
     setTimeout(() => {
-      this.executarCiclo(false);
+      this.executarCiclo(true);
     }, 15000);
 
     this.timer = setInterval(() => {
-      this.executarCiclo(false);
+      this.executarCiclo(true);
     }, this.intervaloMinutos * 60 * 1000);
   }
 
@@ -71,9 +71,10 @@ class Scheduler {
         }
 
         processadas++;
-        // Pausa defensiva de 2 segundos entre consultas para não estressar a API
+        // Pausa defensiva com jitter pseudo-aleatório (2.5s a 4.5s) para simular comportamento humano e quebrar cadência de bot
         if (rotas.length > 1) {
-          await new Promise(r => setTimeout(r, 2000));
+          const jitterMs = 2500 + Math.floor(Math.random() * 2000);
+          await new Promise(r => setTimeout(r, jitterMs));
         }
       }
 
