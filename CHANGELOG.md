@@ -7,6 +7,25 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.4.0] - 2026-10-12
+
+### 🔄 Persistência Canônica e Via de Mão Dupla de Rotas (Two-Way Sync com GitHub & LocalStorage)
+- **Fim da Sobrescrita Hardcoded em Novos Deploys**:
+  - Eliminado o reset/reinserção forçada de rotas hardcoded de código que sobrescrevia as preferências do usuário no Render.
+  - Implementado arquivo canônico versionado `data/rotas.json` como fonte canônica da verdade.
+  - `popularDadosIniciaisSeVazio()` agora lê primeiro `data/rotas.json` e respeita integralmente qualquer dado já existente (`contagem > 0`).
+- **Two-Way Sync Automático com Repositório GitHub (`src/services/rotas_sync.js`)**:
+  - Criado serviço de sincronização remota via GitHub Contents API (`PUT /repos/wagmms/radar-voos/contents/data/rotas.json`).
+  - Qualquer criação, edição ou exclusão de rotas no Cockpit PWA salva localmente em `data/rotas.json` e dispara auto-commit silencioso remoto.
+  - No próximo deploy no Render, o container efêmero já clona o repositório com o `data/rotas.json` atualizado pelo usuário.
+- **Backup, Restauração e Contingência LocalStorage no Cockpit PWA (`src/public/app.js`, `src/public/index.html`)**:
+  - Adicionado botão **Backup** (`GET /api/rotas/exportar`) para baixar snapshot `.json` das rotas monitoradas com 1 clique.
+  - Adicionado botão **Restaurar** (`POST /api/rotas/importar`) com diálogo para substituição total ou agregação de rotas.
+  - Adicionado botão **Sync GitHub** (`POST /api/rotas/sincronizar-github`) para forçar alinhamento com a nuvem a qualquer momento.
+  - Mecanismo de contingência local: o navegador salva automaticamente snapshot no `localStorage` e, se detectar que o backend reiniciou sem rotas, dispara auto-restore instantâneo para o servidor.
+- **Suíte de Testes Expandida**:
+  - 50 testes automatizados cobrindo exportação e importação de rotas e sincronização (100% aprovados).
+
 ## [2.3.0] - 2026-10-12
 
 ### 🌐 Voo Flexível Sem Data Fixa (Best Price Explorer - Movido a Menor Preço)

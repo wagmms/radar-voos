@@ -155,5 +155,43 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.strictEqual(json.ok, true);
     assert.ok(json.rota.silenciada_ate);
   });
+
+  it('GET /api/rotas/exportar deve exportar rotas sanitizadas para backup', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/rotas/exportar'
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(Array.isArray(json.rotas));
+    assert.ok(json.rotas.length >= 1);
+    assert.ok(json.rotas[0].origem);
+    assert.ok(json.rotas[0].destino);
+  });
+
+  it('POST /api/rotas/importar deve importar lote de rotas com sucesso', async () => {
+    const lote = [
+      {
+        origem: 'Brasília',
+        destino: 'Miami',
+        data_ida: '2026-12-01',
+        data_volta: '10',
+        preco_alvo: 3000
+      }
+    ];
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/rotas/importar',
+      payload: { rotas: lote, substituir: false }
+    });
+
+    assert.strictEqual(res.statusCode, 200);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.importadas, 1);
+  });
 });
 

@@ -1,13 +1,13 @@
 {
   "name": "radar-voos",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Travel Hacking Engine - Radar Autônomo de Voos, Bug Fares e Oportunidades Aéreas",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "start": "node --experimental-sqlite src/index.js",
     "dev": "node --experimental-sqlite --watch src/index.js",
-    "test": "node --experimental-sqlite --test --test-concurrency=1 tests/**/*.test.js"
+    "test": "NODE_ENV=test node --experimental-sqlite --test --test-concurrency=1 tests/**/*.test.js"
   },
   "engines": {
     "node": ">=22.5.0"

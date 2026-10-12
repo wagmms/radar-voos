@@ -3,6 +3,7 @@ import { resolverDestino, validarPeriodo, calcularDataVolta } from '../../domain
 import { FlightScanner } from '../../services/flight_scanner.js';
 import { weatherService } from '../../services/weather_service.js';
 import { telemetryEvents } from '../../services/telemetry_events.js';
+import { rotasSync } from '../../services/rotas_sync.js';
 
 export async function rotasRoutes(fastify) {
   // Listar todas as rotas com histórico recente para sparklines
@@ -140,6 +141,7 @@ export async function rotasRoutes(fastify) {
       clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
     });
 
+    rotasSync.notificarAlteracaoRotas('criacao');
     telemetryEvents.emitirAtualizacao('nova_rota', { rota: novaRota });
     return reply.code(201).send({ ok: true, rota: novaRota });
   });
@@ -169,6 +171,8 @@ export async function rotasRoutes(fastify) {
       ...body,
       sem_data: body.sem_data !== undefined ? (ehSemData ? 1 : 0) : undefined
     });
+
+    rotasSync.notificarAlteracaoRotas('atualizacao');
     telemetryEvents.emitirAtualizacao('rota_atualizada', { rota: rotaAtualizada });
     return { ok: true, rota: rotaAtualizada };
   });
@@ -180,8 +184,52 @@ export async function rotasRoutes(fastify) {
     if (res.changes === 0) {
       return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
     }
+
+    rotasSync.notificarAlteracaoRotas('remocao');
     telemetryEvents.emitirAtualizacao('rota_removida', { id });
     return { ok: true, mensagem: 'Rota removida com sucesso' };
+  });
+
+  // Exportar todas as rotas salvas em formato JSON canônico (backup / mão dupla)
+  fastify.get('/api/rotas/exportar', async (request, reply) => {
+    const rotas = rotasSync.salvarArquivoRotas();
+    reply.header('Content-Disposition', 'attachment; filename="rotas_radar.json"');
+    return { ok: true, total: rotas.length, rotas };
+  });
+
+  // Importar / Restaurar lote de rotas no banco e arquivo JSON (mão dupla)
+  fastify.post('/api/rotas/importar', async (request, reply) => {
+    const body = request.body || {};
+    const lista = Array.isArray(body.rotas) ? body.rotas : (Array.isArray(body) ? body : []);
+
+    if (lista.length === 0) {
+      return reply.code(400).send({ ok: false, erro: 'Nenhuma rota informada no corpo da requisição.' });
+    }
+
+    const { substituir = false } = body;
+    if (substituir) {
+      const db = rotasRepo.listarTodas(false);
+      for (const r of db) {
+        rotasRepo.excluir(r.id);
+      }
+    }
+
+    const criadas = [];
+    for (const r of lista) {
+      try {
+        const nova = rotasRepo.criar(r);
+        criadas.push(nova);
+      } catch (_) {}
+    }
+
+    rotasSync.notificarAlteracaoRotas('importacao');
+    return { ok: true, importadas: criadas.length, total: rotasRepo.listarTodas(false).length };
+  });
+
+  // Forçar sincronização imediata com o GitHub (Two-Way Sync)
+  fastify.post('/api/rotas/sincronizar-github', async (request, reply) => {
+    const resSync = await rotasSync.sincronizarComGitHub('chore(sync): sincronização manual de rotas via Cockpit');
+    return resSync;
   });
 
   // Forçar verificação imediata de uma rota específica

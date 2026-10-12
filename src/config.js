@@ -40,5 +40,11 @@ export const config = {
   radar: {
     gatilhoQuedaRelampagoPct: parseFloat(process.env.GATILHO_QUEDA_RELAMPAGO_PCT || '15'),
     scanIntervalMinutes: parseInt(process.env.SCAN_INTERVAL_MINUTES || '60', 10)
+  },
+
+  github: {
+    token: process.env.GITHUB_TOKEN || '',
+    repo: process.env.GITHUB_REPO || 'wagmms/radar-voos',
+    branch: process.env.GITHUB_BRANCH || 'main'
   }
 };

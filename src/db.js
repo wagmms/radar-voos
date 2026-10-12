@@ -540,28 +540,40 @@ export const chavesRepo = {
 };
 
 /**
- * Inicialização com Rotas Canônicas e Feriados de 2026/2027 se o banco estiver vazio
+ * Inicialização com Rotas Canônicas a partir de data/rotas.json (Via de Mão Dupla)
  */
 export function popularDadosIniciaisSeVazio() {
   const db = getDb();
   const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
-  if (contagem >= 7) return;
+  if (contagem > 0) {
+    // Banco já inicializado com as rotas do usuário; nunca sobrescrever
+    return;
+  }
 
-  const rotasIniciais = [
-    { origem: 'São Paulo', destino: 'Europa', data_ida: '2026-11-10', data_volta: '14', duracao_max_horas: 16, preco_alvo: 4200 },
-    { origem: 'São Paulo', destino: 'Buenos Aires', data_ida: '2026-10-15', data_volta: '7', duracao_max_horas: 8, preco_alvo: 1900 },
-    { origem: 'Rio de Janeiro', destino: 'Belém', data_ida: '2027-01-17', data_volta: 'Só Ida', duracao_max_horas: 8, preco_alvo: 700 },
-    { origem: 'Rio de Janeiro', destino: 'Ribeirão Preto', data_ida: '2027-01-17', data_volta: 'Só Ida', duracao_max_horas: 6, preco_alvo: 800 },
-    // Feriados prolongados 2026/2027
-    { origem: 'São Paulo', destino: 'América do Sul', data_ida: '2026-10-09', data_volta: '2026-10-12', duracao_max_horas: 8, preco_alvo: 2000 },
-    { origem: 'São Paulo', destino: 'Estados Unidos', data_ida: '2026-12-23', data_volta: '2027-01-02', duracao_max_horas: 15, preco_alvo: 4800 },
-    { origem: 'São Paulo', destino: 'Nordeste', data_ida: '2027-03-25', data_volta: '2027-03-28', duracao_max_horas: 6, preco_alvo: 1200 }
-  ];
+  const arquivoRotas = path.resolve(path.dirname(config.dbPath), 'rotas.json');
+  let rotasParaInserir = [];
 
-  for (const r of rotasIniciais) {
-    const jaExiste = db.prepare('SELECT id FROM rotas WHERE origem = ? AND destino = ? AND data_ida = ?').get(r.origem, r.destino, r.data_ida);
-    if (!jaExiste) {
+  if (fs.existsSync(arquivoRotas)) {
+    try {
+      const conteudo = fs.readFileSync(arquivoRotas, 'utf-8');
+      const parsed = JSON.parse(conteudo);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        rotasParaInserir = parsed;
+      }
+    } catch (_) {}
+  }
+
+  if (rotasParaInserir.length === 0) {
+    rotasParaInserir = [
+      { origem: 'São Paulo', destino: 'Europa', data_ida: '2026-11-10', data_volta: '14', duracao_max_horas: 16, preco_alvo: 4200 },
+      { origem: 'São Paulo', destino: 'Buenos Aires', data_ida: '2026-10-15', data_volta: '7', duracao_max_horas: 8, preco_alvo: 1900 },
+      { origem: 'Rio de Janeiro', destino: 'Belém', data_ida: '2027-01-17', data_volta: 'Só Ida', duracao_max_horas: 8, preco_alvo: 700 }
+    ];
+  }
+
+  for (const r of rotasParaInserir) {
+    try {
       rotasRepo.criar(r);
-    }
+    } catch (_) {}
   }
 }

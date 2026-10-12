@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.3.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.4.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.3.0 operacional, 100% autônomo (48/48 testes passando), com recurso de Voo Flexível Sem Data Fixa (Best Price Explorer / Anytime), telemetria SSE, Cockpit PWA com chip de filtro flexível e agendador 24/7 resiliente.
+- **Estado Geral**: 🟢 Radar v2.4.0 operacional, 100% autônomo (50/50 testes passando), com persistência canônica e Two-Way Sync de rotas com GitHub e LocalStorage, eliminando a perda de rotas após novos deploys.
 - **Diretriz Prioritária**: Monitoramento proativo 24/7 de tarifas e oportunidades aéreas no GDS com custo zero e zero atraso de blogs externos.
-- **Última Tarefa Concluída**: Implementação completa da opção de voo flexível sem data fixa movida a menor preço (`sem_data: 1`), gerador de janelas estratégicas multi-mês (`src/domain/rotas.js`), eleição da menor tarifa (`src/services/flight_scanner.js`), endpoints REST (`src/server/routes/rotas_routes.js`), alertas do Telegram (`src/services/notifier_telegram.js`) e interface PWA (`src/public/index.html`, `src/public/app.js`, `src/public/styles.css`).
+- **Última Tarefa Concluída**: Implementação da via de mão dupla de rotas: arquivo canônico versionado `data/rotas.json`, serviço `RotasSyncService` (`src/services/rotas_sync.js`) com auto-commit na GitHub Contents API, endpoints de backup/restauração (`GET /api/rotas/exportar`, `POST /api/rotas/importar`, `POST /api/rotas/sincronizar-github`) e botões com auto-contingência em LocalStorage no Cockpit PWA (`src/public/index.html`, `src/public/app.js`).
 
 ---
 

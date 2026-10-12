@@ -196,12 +196,27 @@ function setupEventListeners() {
     resetarCotasHoje();
   });
 
+  // Botões de Mão Dupla (Backup, Restaurar e Sync GitHub)
+  document.getElementById('btn-backup-rotas')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    exportarRotasJson();
+  });
+  document.getElementById('btn-restaurar-rotas')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    document.getElementById('input-importar-rotas')?.click();
+  });
+  document.getElementById('input-importar-rotas')?.addEventListener('change', importarRotasJson);
+  document.getElementById('btn-sync-github')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    sincronizarComGitHubRemoto();
+  });
+
   // Form Nova Rota e Toggle de Voo Flexível
   document.getElementById('input-sem-data')?.addEventListener('change', atualizarVisualModoFlexivel);
   document.getElementById('form-nova-rota')?.addEventListener('submit', criarNovaRota);
 }
 
-// Carregamento de Dados da API
+// Carregamento de Dados da API com Auto-Backup e Auto-Restore em LocalStorage
 async function carregarDadosCompletos(suave = false) {
   try {
     const [resRotas, resStatus, resBugs] = await Promise.all([
@@ -210,7 +225,36 @@ async function carregarDadosCompletos(suave = false) {
       fetch('/api/bug-fares').then((r) => r.json())
     ]);
 
-    if (resRotas.ok) state.rotas = resRotas.rotas || [];
+    if (resRotas.ok) {
+      state.rotas = resRotas.rotas || [];
+
+      // Auto-Backup no LocalStorage para garantir via de mão dupla resiliente
+      if (state.rotas.length > 0) {
+        try {
+          localStorage.setItem('radar_rotas_backup', JSON.stringify(state.rotas));
+        } catch (_) {}
+      } else {
+        // Se o servidor voltou com 0 rotas (ex: deploy novo limpo), verifica se o navegador tem backup
+        const backupLocal = localStorage.getItem('radar_rotas_backup');
+        if (backupLocal) {
+          try {
+            const rotasSalvas = JSON.parse(backupLocal);
+            if (Array.isArray(rotasSalvas) && rotasSalvas.length > 0) {
+              console.log('🔄 [Auto-Restore] Restaurando rotas do backup do navegador para o servidor...');
+              mostrarToast('🔄 Restaurando rotas do seu navegador para o servidor...');
+              await fetch('/api/rotas/importar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ rotas: rotasSalvas })
+              });
+              const resRecarregada = await fetch('/api/rotas').then((r) => r.json());
+              if (resRecarregada.ok) state.rotas = resRecarregada.rotas || [];
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
     if (resStatus.ok) state.poolStatus = resStatus.pool || null;
     if (resBugs.ok) state.bugFares = resBugs.bugFares || [];
 
@@ -738,6 +782,83 @@ async function resetarCotasHoje() {
     }
   } catch (err) {
     mostrarToast('Erro ao resetar contadores', true);
+  }
+}
+
+async function exportarRotasJson() {
+  mostrarToast('Exportando backup das rotas em JSON...');
+  try {
+    const res = await fetch('/api/rotas/exportar');
+    const data = await res.json();
+    if (res.ok && data.rotas) {
+      const blob = new Blob([JSON.stringify(data.rotas, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `radar_rotas_${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      mostrarToast(`📥 Backup de ${data.rotas.length} rotas baixado com sucesso!`);
+    } else {
+      mostrarToast('Falha ao exportar rotas', true);
+    }
+  } catch (err) {
+    mostrarToast('Erro ao exportar backup', true);
+  }
+}
+
+async function importarRotasJson(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const leitor = new FileReader();
+  leitor.onload = async (evento) => {
+    try {
+      const rotas = JSON.parse(evento.target.result);
+      if (!Array.isArray(rotas) || rotas.length === 0) {
+        mostrarToast('Arquivo JSON inválido ou sem rotas', true);
+        return;
+      }
+
+      const substituir = confirm(`Deseja substituir as rotas atuais por essas ${rotas.length} rotas do arquivo?\n(OK = Substituir todas | Cancelar = Apenas adicionar novas)`);
+
+      mostrarToast(`Importando ${rotas.length} rotas...`);
+      const res = await fetch('/api/rotas/importar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rotas, substituir })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        mostrarToast(`✅ ${data.importadas} rotas importadas e sincronizadas com sucesso!`);
+        carregarDadosCompletos(true);
+      } else {
+        mostrarToast(`Erro ao importar: ${data.erro}`, true);
+      }
+    } catch (err) {
+      mostrarToast('Erro ao processar arquivo JSON', true);
+    } finally {
+      e.target.value = '';
+    }
+  };
+  leitor.readAsText(file);
+}
+
+async function sincronizarComGitHubRemoto() {
+  mostrarToast('🔄 Sincronizando rotas com o repositório GitHub...');
+  try {
+    const res = await fetch('/api/rotas/sincronizar-github', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok && data.ok) {
+      mostrarToast(`✅ Rotas sincronizadas no GitHub com sucesso! Commit: ${data.commitSha?.slice(0, 7) || 'ok'}`);
+    } else {
+      mostrarToast(`Aviso: ${data.mensagem || data.erro || 'Falha no sync'}`, true);
+    }
+  } catch (err) {
+    mostrarToast('Falha na comunicação de sincronização', true);
   }
 }
 
