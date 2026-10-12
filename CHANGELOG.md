@@ -7,6 +7,23 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.0] - 2026-10-12
+
+### 🛫 Motor Autônomo de Desenvolvimento Contínuo (Autoloop Radar de Voos) & Integração IA-Hub
+- **Orquestrador Especializado (`autoloop-radarvoos` em `~/.local/bin/autoloop-radarvoos`)**:
+  - Motor de autoloop multi-contas e multi-modelos acoplado ao Antigravity CLI (`agy`).
+  - Isolamento rigoroso de branch operando na `autoloop/dev` com salvaguarda total da `main`.
+  - Validação estrita por gates (`./validate.sh fast`) e auto-rollback defensivo em caso de regressão.
+  - Injeção contextual das skills especializadas (`google-flights`, `scrapling`, `fastify-best-practices`, `sqlite`, `smart-charts`, `remotion-maps`, `telegram-compose`, `anti-ui-slop`, `weather` e `tdd`).
+  - Roteamento cognitivo de modelos: Gemini Pro para inteligência aeronáutica, Bug Fares, Z-score, paridade de milhas e concorrência SQLite; Gemini Flash para Cockpit PWA, rotas Fastify, notificações e testes.
+- **Validação Automatizada em Camadas (`validate.sh`)**:
+  - Script executável validando sintaxe JS em todos os arquivos de `src/` e `tests/`, integridade do `PROGRESS.md` e 100% de aprovação na suíte de 70 testes automatizados.
+- **Integração Completa ao Mission Control IA-Hub**:
+  - Adicionado botão interativo `✈️ RadarVoos` no menu do Telegram.
+  - Comandos `/radarvoos` e `/radar` mapeados no router do IA-Hub.
+  - Suporte completo no executor visual de janela única do PC (`ia-hub-janela-runner`).
+  - Inclusão do Radar de Voos no ciclo de revezamento periódico 24/7 e telemetria de saúde do sistema.
+
 ## [2.6.4] - 2026-10-12
 
 ### 🎯 Escopo Cristalino do Teto de Preço para Voos Flexíveis (Só Ida vs Ida e Volta)

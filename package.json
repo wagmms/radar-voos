@@ -1,6 +1,6 @@
 {
   "name": "radar-voos",
-  "version": "2.6.4",
+  "version": "2.7.0",
   "description": "Travel Hacking Engine - Radar Autônomo de Voos, Bug Fares e Oportunidades Aéreas",
   "main": "src/index.js",
   "type": "module",

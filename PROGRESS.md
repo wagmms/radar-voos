@@ -5,9 +5,9 @@
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.6.4 operacional (70/70 testes passando). Implementado seletor de tipo de viagem explícito (Ida e Volta vs Apenas Ida), indicador dinâmico de escopo de teto (`#badge-teto-escopo`) e caixa explicativa contextual (`#hint-teto-explicacao`) para voos de datas flexíveis e fixas no Cockpit PWA, cards de rotas e Telegram.
-- **Diretriz Prioritária**: Fornecer máxima clareza ao usuário sobre para qual modalidade (Só Ida vs Ida e Volta) o teto de preço está sendo configurado e monitorado pelo radar.
-- **Última Tarefa Concluída**: Implementação do seletor de tipo de viagem, indicador dinâmico contextual do teto no modal, exibição de teto nos cards e cobertura automatizada de testes para flexibilidade Só Ida vs Ida e Volta.
+- **Estado Geral**: 🟢 Radar v2.7.0 operacional (70/70 testes passando). Autoloop blindado (`autoloop-radarvoos`) criado e 100% integrado ao Mission Control IA-Hub no terminal visível e Telegram. Seletor de tipo de viagem explícito (Ida e Volta vs Apenas Ida), indicador de escopo de teto e caixa explicativa funcionando perfeitamente.
+- **Diretriz Prioritária**: Aprimorar continuamente a precisão de busca do Google Flights (aba cheapest, conexões, bagagens), detecção de Bug Fares e refinamento de interface PWA via turnos autônomos orientados a skills.
+- **Última Tarefa Concluída**: Criação e homologação do Autoloop Radar de Voos (`autoloop-radarvoos`), script de validação de 3 camadas `validate.sh` e integração completa ao ecossistema do IA-Hub (runner de janela única, menus e comandos Telegram).
 
 ---
 
