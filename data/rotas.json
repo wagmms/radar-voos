@@ -61,21 +61,6 @@
   },
   {
     "origem": "São Paulo",
-    "destino": "Buenos Aires",
-    "codigo_origem": "SAO",
-    "codigo_destino": "BUE",
-    "data_ida": "2026-10-15",
-    "data_volta": "2026-10-22",
-    "duracao_max_horas": 8,
-    "preco_alvo": 1900,
-    "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 0,
-    "dias_estadia": 10,
-    "ativa": 1
-  },
-  {
-    "origem": "São Paulo",
     "destino": "Nordeste",
     "codigo_origem": "SAO",
     "codigo_destino": "REC,SSA",
