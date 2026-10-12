@@ -7,11 +7,11 @@
     "data_ida": "2026-11-10",
     "data_volta": "2026-11-24",
     "duracao_max_horas": 16,
-    "preco_alvo": 4200,
+    "preco_alvo": 3000,
     "cabine": "economy",
     "flexibilidade_dias": 0,
-    "sem_data": 0,
-    "dias_estadia": 10,
+    "sem_data": 1,
+    "dias_estadia": 14,
     "ativa": 1
   },
   {
