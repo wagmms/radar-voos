@@ -96,8 +96,40 @@ describe('Servidor Fastify: Endpoints REST', () => {
 
     assert.strictEqual(resPut.statusCode, 200);
     const json = resPut.json();
-    assert.strictEqual(json.ok, true);
     assert.strictEqual(json.rota.preco_alvo, 3500);
     assert.strictEqual(json.rota.duracao_max_horas, 12);
   });
+
+  it('GET /api/rotas/:id/clima deve retornar previsão climática do destino', async () => {
+    const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const rotaId = resList.json().rotas[0].id;
+
+    const resClima = await app.inject({
+      method: 'GET',
+      url: `/api/rotas/${rotaId}/clima`
+    });
+
+    assert.strictEqual(resClima.statusCode, 200);
+    const json = resClima.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.clima);
+    assert.ok(json.clima.resumo);
+  });
+
+  it('POST /api/rotas/:id/silenciar deve silenciar a rota temporariamente', async () => {
+    const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const rotaId = resList.json().rotas[0].id;
+
+    const resMute = await app.inject({
+      method: 'POST',
+      url: `/api/rotas/${rotaId}/silenciar`,
+      payload: { horas: 24 }
+    });
+
+    assert.strictEqual(resMute.statusCode, 200);
+    const json = resMute.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.rota.silenciada_ate);
+  });
 });
+

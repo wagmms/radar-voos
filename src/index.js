@@ -5,8 +5,10 @@ import { scheduler } from './services/scheduler.js';
 import { notifierTelegram } from './services/notifier_telegram.js';
 import { buildApp } from './server/app.js';
 
+import { FlightScanner } from './services/flight_scanner.js';
+
 async function bootstrap() {
-  console.log('🚀 Inicializando Radar de Voos - Travel Hacking Engine v2.0...');
+  console.log('🚀 Inicializando Radar de Voos - Travel Hacking Engine v2.1...');
 
   // 1. Inicializar Banco de Dados
   getDb();
@@ -25,7 +27,11 @@ async function bootstrap() {
   // 4. Iniciar Agendador de Varreduras Periódicas
   scheduler.iniciar();
 
-  // 5. Iniciar Bot do Telegram (Comandos Interativos)
+  // 5. Iniciar Bot do Telegram (Comandos Interativos e Callbacks)
+  notifierTelegram.registrarCallbackVerificacao((rota) => {
+    console.log(`⚡ Telegram acionou varredura imediata para a rota ${rota.origem} -> ${rota.destino}`);
+    FlightScanner.escanearRota(rota).catch(err => console.error('Erro na varredura Telegram:', err));
+  });
   notifierTelegram.iniciarPolling();
 
   // Tratamento de Encerramento Gracioso (Graceful Shutdown)

@@ -24,4 +24,51 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(bugFareIngles.valido, true);
     assert.strictEqual(bugFareIngles.ehBugFare, true);
   });
+
+  it('deve identificar corretamente a região do destino para checagem de piso estrutural', async () => {
+    const { identificarRegiaoDestino } = await import('../src/domain/bug_fares.js');
+    assert.strictEqual(identificarRegiaoDestino('LIS'), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino('CDG'), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino('MIA'), 'AMERICA_NORTE');
+    assert.strictEqual(identificarRegiaoDestino('JFK'), 'AMERICA_NORTE');
+    assert.strictEqual(identificarRegiaoDestino('EZE'), 'AMERICA_SUL');
+    assert.strictEqual(identificarRegiaoDestino('HND'), 'ASIA_OCEANIA');
+    assert.strictEqual(identificarRegiaoDestino('REC'), 'DOMESTICO');
+  });
+
+  it('deve detectar Bug Fares estatísticos por queda abrupta ou valor abaixo do piso regional', async () => {
+    const { detectarBugFareEstatistico } = await import('../src/domain/bug_fares.js');
+
+    // Caso 1: Tarifa para Europa abaixo do piso estrutural de R$ 1.950 (ida e volta)
+    const bugPiso = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: 1450,
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugPiso.ehBugFare, true);
+    assert.match(bugPiso.tipo, /BUG FARE/);
+    assert.match(bugPiso.motivo, /abaixo do piso estrutural/);
+
+    // Caso 2: Queda estatística >= 50% em relação à média histórica
+    const bugQueda = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'REC',
+      preco: 400,
+      precoMedioHistorico: 1200,
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugQueda.ehBugFare, true);
+    assert.match(bugQueda.tipo, /ANOMALIA ESTATÍSTICA/);
+
+    // Caso 3: Tarifa normal e equilibrada
+    const vooNormal = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'CDG',
+      preco: 3900,
+      precoMedioHistorico: 4100,
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(vooNormal.ehBugFare, false);
+  });
 });

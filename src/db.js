@@ -19,6 +19,9 @@ export function getDb(customPath = null) {
   dbInstance = new DatabaseSync(dbFilePath);
   dbInstance.exec('PRAGMA foreign_keys = ON;');
   dbInstance.exec('PRAGMA journal_mode = WAL;');
+  dbInstance.exec('PRAGMA busy_timeout = 5000;');
+  dbInstance.exec('PRAGMA synchronous = NORMAL;');
+  dbInstance.exec('PRAGMA cache_size = -64000;');
 
   initSchema(dbInstance);
   return dbInstance;
@@ -52,6 +55,10 @@ function initSchema(db) {
       dica_stopover TEXT,
       link_google_flights TEXT,
       ultima_checagem TEXT,
+      clima_destino_resumo TEXT,
+      clima_temp_media REAL,
+      silenciada_ate TEXT,
+      cabine TEXT DEFAULT 'economy',
       ativa INTEGER DEFAULT 1,
       criada_em TEXT DEFAULT (datetime('now', 'localtime'))
     );
@@ -92,8 +99,17 @@ function initSchema(db) {
     );
 
     CREATE INDEX IF NOT EXISTS idx_rotas_ultima_checagem ON rotas(ultima_checagem, ativa);
+    CREATE INDEX IF NOT EXISTS idx_rotas_ativas_fila ON rotas(ultima_checagem) WHERE ativa = 1;
     CREATE INDEX IF NOT EXISTS idx_historico_rota ON historico_precos(rota_id, data_checagem);
   `);
+
+  // Migrações dinâmicas para bases SQLite existentes
+  try { db.exec('ALTER TABLE rotas ADD COLUMN clima_destino_resumo TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN clima_temp_media REAL;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN silenciada_ate TEXT;'); } catch (_) {}
+  try { db.exec("ALTER TABLE rotas ADD COLUMN cabine TEXT DEFAULT 'economy';"); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN flexibilidade_dias INTEGER DEFAULT 0;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN melhor_opcao_flexivel TEXT;'); } catch (_) {}
 }
 
 /**
@@ -128,12 +144,14 @@ export const rotasRepo = {
     const dataVolta = calcularDataVolta(dados.data_ida, dados.data_volta);
     const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dados.data_ida, dataVolta);
 
+    const flexibilidadeDias = parseInt(dados.flexibilidade_dias, 10) || 0;
+
     const stmt = db.prepare(`
       INSERT INTO rotas (
         origem, destino, codigo_origem, codigo_destino,
         data_ida, data_volta, duracao_max_horas, preco_alvo,
-        link_google_flights, ativa
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        link_google_flights, cabine, flexibilidade_dias, ativa
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `);
 
     const res = stmt.run(
@@ -145,7 +163,9 @@ export const rotasRepo = {
       dataVolta,
       dados.duracao_max_horas || 999,
       dados.preco_alvo || null,
-      link
+      link,
+      dados.cabine || 'economy',
+      flexibilidadeDias
     );
 
     return rotasRepo.buscarPorId(res.lastInsertRowid);
@@ -164,6 +184,8 @@ export const rotasRepo = {
     const dataVolta = dados.data_volta !== undefined ? calcularDataVolta(dataIda, dados.data_volta) : rota.data_volta;
     const precoAlvo = dados.preco_alvo !== undefined ? (parseFloat(dados.preco_alvo) || null) : rota.preco_alvo;
     const duracaoMaxHoras = dados.duracao_max_horas !== undefined ? (parseFloat(dados.duracao_max_horas) || 999) : rota.duracao_max_horas;
+    const cabine = dados.cabine || rota.cabine || 'economy';
+    const flexibilidadeDias = dados.flexibilidade_dias !== undefined ? (parseInt(dados.flexibilidade_dias, 10) || 0) : (rota.flexibilidade_dias || 0);
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
     const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
@@ -177,12 +199,14 @@ export const rotasRepo = {
         data_volta = ?,
         preco_alvo = ?,
         duracao_max_horas = ?,
+        cabine = ?,
+        flexibilidade_dias = ?,
         link_google_flights = ?,
         ativa = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, link, ativa, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, link, ativa, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -192,9 +216,14 @@ export const rotasRepo = {
     if (!rota) return null;
 
     const agora = new Date().toISOString();
-    const menorHistorico = rota.menor_preco_historico
-      ? Math.min(rota.menor_preco_historico, resultado.preco)
-      : resultado.preco;
+    const preco = resultado.preco !== undefined ? resultado.preco : (resultado.preco_atual !== undefined ? resultado.preco_atual : null);
+    const menorHistorico = rota.menor_preco_historico && preco
+      ? Math.min(rota.menor_preco_historico, preco)
+      : preco;
+
+    const melhorFlexivelStr = resultado.melhor_opcao_flexivel !== undefined && resultado.melhor_opcao_flexivel !== null
+      ? (typeof resultado.melhor_opcao_flexivel === 'object' ? JSON.stringify(resultado.melhor_opcao_flexivel) : String(resultado.melhor_opcao_flexivel))
+      : null;
 
     const stmt = db.prepare(`
       UPDATE rotas SET
@@ -206,29 +235,35 @@ export const rotasRepo = {
         detalhes_voo = ?,
         dica_stopover = ?,
         link_google_flights = ?,
+        clima_destino_resumo = COALESCE(?, clima_destino_resumo),
+        clima_temp_media = COALESCE(?, clima_temp_media),
+        melhor_opcao_flexivel = COALESCE(?, melhor_opcao_flexivel),
         ultima_checagem = ?
       WHERE id = ?
     `);
 
     stmt.run(
-      resultado.preco,
-      menorHistorico,
-      resultado.variacao_texto,
-      resultado.termometro,
-      resultado.custo_destino_texto,
-      resultado.detalhes_voo,
-      resultado.dica_stopover,
-      resultado.link_google_flights,
+      preco ?? null,
+      menorHistorico ?? null,
+      resultado.variacao_texto ?? null,
+      resultado.termometro ?? null,
+      resultado.custo_destino_texto ?? null,
+      resultado.detalhes_voo ?? null,
+      resultado.dica_stopover ?? null,
+      resultado.link_google_flights ?? null,
+      resultado.clima_destino_resumo ?? null,
+      resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
+      melhorFlexivelStr,
       agora,
       id
     );
 
     // Salvar no histórico para séries temporais e gráficos
-    if (resultado.preco && resultado.preco > 0) {
+    if (preco && preco > 0) {
       db.prepare(`
         INSERT INTO historico_precos (rota_id, preco, termometro, data_checagem)
         VALUES (?, ?, ?, ?)
-      `).run(id, resultado.preco, resultado.termometro, agora);
+      `).run(id, preco, resultado.termometro ?? null, agora);
     }
 
     return rotasRepo.buscarPorId(id);
@@ -249,6 +284,29 @@ export const rotasRepo = {
     const db = getDb();
     const stmt = db.prepare('DELETE FROM rotas WHERE id = ?');
     return stmt.run(id);
+  },
+
+  atualizarClima: (id, resumo, tempMedia) => {
+    const db = getDb();
+    db.prepare(`
+      UPDATE rotas SET
+        clima_destino_resumo = ?,
+        clima_temp_media = ?
+      WHERE id = ?
+    `).run(resumo, tempMedia, id);
+    return rotasRepo.buscarPorId(id);
+  },
+
+  silenciarRota: (id, horas = 24) => {
+    const db = getDb();
+    const dataLimite = new Date(Date.now() + horas * 3600 * 1000).toISOString();
+    db.prepare(`UPDATE rotas SET silenciada_ate = ? WHERE id = ?`).run(dataLimite, id);
+    return rotasRepo.buscarPorId(id);
+  },
+
+  estaSilenciada: (rota) => {
+    if (!rota || !rota.silenciada_ate) return false;
+    return new Date(rota.silenciada_ate).getTime() > Date.now();
   },
 
   // Fila justa anti-inanição (LRU): busca rotas que estão há mais tempo sem checagem
@@ -273,6 +331,18 @@ export const rotasRepo = {
       ORDER BY data_checagem DESC
       LIMIT ?
     `).all(rotaId, limite);
+  },
+
+  obterHistoricoRecente: (rotaId, limite = 10) => {
+    const db = getDb();
+    const rows = db.prepare(`
+      SELECT preco, termometro, data_checagem
+      FROM historico_precos
+      WHERE rota_id = ?
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(rotaId, limite);
+    return rows.reverse();
   }
 };
 

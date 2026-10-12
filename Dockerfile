@@ -27,9 +27,9 @@ COPY --chown=node:node src ./src
 # Diretório de persistência do banco SQLite
 RUN mkdir -p /app/data
 
-EXPOSE 3333
+EXPOSE 3333 10000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:3333/api/health || exit 1
+  CMD curl -f http://localhost:${PORT:-3333}/api/health || exit 1
 
 CMD ["node", "src/index.js"]

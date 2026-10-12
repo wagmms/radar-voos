@@ -194,3 +194,51 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
     return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20one-way`;
   }
 }
+
+/**
+ * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo)
+ */
+export function somarDiasData(dataStr, dias) {
+  if (!dataStr) return null;
+  const [ano, mes, dia] = dataStr.split('-').map(Number);
+  const d = new Date(Date.UTC(ano, mes - 1, dia));
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().split('T')[0];
+}
+
+/**
+ * Gera as combinações de datas na janela de flexibilidade (±0 a ±7 dias)
+ */
+export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeDias = 0) {
+  const flex = Math.min(7, Math.max(0, parseInt(flexibilidadeDias, 10) || 0));
+  if (flex === 0) {
+    return [{ dataIda, dataVolta, deltaDias: 0, label: 'Data Base' }];
+  }
+
+  const combinacoes = [
+    { dataIda, dataVolta, deltaDias: 0, label: 'Data Base' }
+  ];
+
+  for (let delta = 1; delta <= flex; delta++) {
+    const idaMenos = somarDiasData(dataIda, -delta);
+    const voltaMenos = dataVolta ? somarDiasData(dataVolta, -delta) : null;
+    combinacoes.push({
+      dataIda: idaMenos,
+      dataVolta: voltaMenos,
+      deltaDias: -delta,
+      label: `${-delta}d`
+    });
+
+    const idaMais = somarDiasData(dataIda, delta);
+    const voltaMais = dataVolta ? somarDiasData(dataVolta, delta) : null;
+    combinacoes.push({
+      dataIda: idaMais,
+      dataVolta: voltaMais,
+      deltaDias: delta,
+      label: `+${delta}d`
+    });
+  }
+
+  return combinacoes;
+}
+

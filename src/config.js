@@ -39,7 +39,6 @@ export const config = {
 
   radar: {
     gatilhoQuedaRelampagoPct: parseFloat(process.env.GATILHO_QUEDA_RELAMPAGO_PCT || '15'),
-    feedPromocoesUrl: process.env.FEED_PROMOCOES_URL || 'https://www.melhoresdestinos.com.br/feed',
     scanIntervalMinutes: parseInt(process.env.SCAN_INTERVAL_MINUTES || '60', 10)
   }
 };

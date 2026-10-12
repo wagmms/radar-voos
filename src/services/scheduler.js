@@ -1,7 +1,6 @@
 import { config } from '../config.js';
 import { rotasRepo } from '../db.js';
 import { FlightScanner } from './flight_scanner.js';
-import { RssScanner } from './rss_scanner.js';
 
 class Scheduler {
   constructor() {
@@ -45,20 +44,10 @@ class Scheduler {
 
     this.executando = true;
     this.ultimaExecucao = new Date().toISOString();
-    console.log(`🔍 [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo do Radar de Voos...`);
+    console.log(`🔍 [${new Date().toLocaleTimeString('pt-BR')}] Iniciando ciclo de varredura do Radar de Voos...`);
 
     try {
-      // 1. Checar Bug Fares e Erros de Tarifa via RSS
-      try {
-        const resRss = await RssScanner.verificarFeed();
-        if (resRss.ok && resRss.novos > 0) {
-          console.log(`🚨 ${resRss.novos} novos Bug Fares autênticos detectados no feed!`);
-        }
-      } catch (e) {
-        console.error('Erro na checagem RSS:', e.message);
-      }
-
-      // 2. Fila justa LRU de rotas
+      // Fila justa LRU de rotas (varre voos diretamente no motor com detecção de Bug Fares)
       const rotas = forcarTodas
         ? rotasRepo.listarTodas(true)
         : rotasRepo.obterFilaLru(1);

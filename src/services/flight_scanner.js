@@ -1,217 +1,111 @@
-import { serpApiPool } from './serpapi_pool.js';
-import { normalizarParaSerpApi, gerarLinkGoogleFlights } from '../domain/rotas.js';
+import { flightProviderManager } from './providers/provider_manager.js';
+import { weatherService } from './weather_service.js';
 import {
   parsePreco,
   calcularVariacao,
-  avaliarCustoDestinoComTotal,
-  avaliarTermometro,
-  analisarLayoversEStopover
+  avaliarCustoDestinoComTotal
 } from '../domain/calculadora.js';
-import { rotasRepo, alertasRepo } from '../db.js';
+import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
+import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
+import { gerarCombinacoesFlexibilidade } from '../domain/rotas.js';
+import { telemetryEvents } from './telemetry_events.js';
 
 export class FlightScanner {
   /**
-   * Consulta a API SerpAPI para uma busca específica
+   * Consulta os provedores de voo através do gerenciador de estratégias
    */
-  static async buscarOfertas(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999) {
-    const chaveInfo = serpApiPool.obterChaveDisponivel();
-    if (!chaveInfo) {
-      return {
-        ok: false,
-        erro: true,
-        mensagemErro: 'Pool esgotado: todas as chaves atingiram o limite diário/mensal ou estão em cooldown.'
-      };
-    }
-
-    serpApiPool.registrarUso(chaveInfo.indice);
-
-    const origemSerp = normalizarParaSerpApi(origemCod);
-    const destinoSerp = normalizarParaSerpApi(destinoCod);
-    const duracaoMaxMinutos = duracaoMaxHoras && duracaoMaxHoras > 0 ? Math.round(duracaoMaxHoras * 60) : Infinity;
-
-    const params = new URLSearchParams({
-      engine: 'google_flights',
-      departure_id: origemSerp,
-      arrival_id: destinoSerp,
-      outbound_date: dataIda,
-      currency: 'BRL',
-      hl: 'pt',
-      type: dataVolta ? '1' : '2',
-      api_key: chaveInfo.chave
+  static async buscarOfertas(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1) {
+    return flightProviderManager.buscarOfertas({
+      origemCod,
+      destinoCod,
+      dataIda,
+      dataVolta,
+      duracaoMaxHoras,
+      cabine,
+      adultos
     });
-
-    if (duracaoMaxMinutos !== Infinity) {
-      params.append('max_duration', String(duracaoMaxMinutos));
-    }
-
-    if (dataVolta) {
-      params.append('return_date', dataVolta);
-    }
-
-    const url = `https://serpapi.com/search.json?${params.toString()}`;
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 35000);
-
-      const resposta = await fetch(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
-      const codigoHttp = resposta.status;
-      const textoResposta = await resposta.text();
-
-      if (codigoHttp === 429) {
-        serpApiPool.registrarRateLimit(chaveInfo.indice, 30);
-        return {
-          ok: false,
-          erro: true,
-          mensagemErro: `HTTP 429 Rate Limit atingido na Chave ${chaveInfo.indice + 1}. Cooldown ativado por 30m.`
-        };
-      }
-
-      if (codigoHttp >= 400) {
-        return {
-          ok: false,
-          erro: true,
-          mensagemErro: `HTTP ${codigoHttp}: ${textoResposta.slice(0, 150)}`
-        };
-      }
-
-      let json;
-      try {
-        json = JSON.parse(textoResposta);
-      } catch (e) {
-        return { ok: false, erro: true, mensagemErro: 'Resposta da SerpAPI não é um JSON válido.' };
-      }
-
-      if (json.error) {
-        const errStr = String(json.error).toLowerCase();
-        if (
-          errStr.includes("hasn't returned any results") ||
-          errStr.includes('no results') ||
-          errStr.includes("hasn't returned any flight")
-        ) {
-          return {
-            ok: true,
-            encontrouVoos: false,
-            mensagem: 'Sem voos para esta rota/filtro no Google Flights'
-          };
-        }
-        return { ok: false, erro: true, mensagemErro: `SerpAPI: ${json.error}` };
-      }
-
-      const { nivelPreco, termometro } = avaliarTermometro(json.price_insights);
-      const todosVoos = [...(json.best_flights || []), ...(json.other_flights || [])];
-
-      if (todosVoos.length === 0) {
-        return {
-          ok: true,
-          encontrouVoos: false,
-          mensagem: 'Sem voos disponíveis no Google Flights para esta data'
-        };
-      }
-
-      let melhorOpcao = null;
-      const linkWebEstruturado = gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
-
-      for (const voo of todosVoos) {
-        const duracaoMinutos = Number(voo.total_duration);
-        const preco = Number(voo.price);
-
-        if (!Number.isFinite(duracaoMinutos) || !Number.isFinite(preco) || preco <= 0) continue;
-        if (duracaoMinutos > duracaoMaxMinutos) continue;
-
-        let destinoFinal = destinoCod;
-        const segmentos = Array.isArray(voo.flights) ? voo.flights : [];
-        if (segmentos.length > 0) {
-          const ult = segmentos[segmentos.length - 1];
-          if (ult && ult.arrival_airport) {
-            destinoFinal = `${ult.arrival_airport.name} (${ult.arrival_airport.id})`;
-          }
-        }
-
-        const cias = [...new Set(
-          segmentos
-            .map(f => (f && (f.airline || f.airline_code)) || null)
-            .filter(Boolean)
-        )].join(', ') || 'Companhia não informada';
-
-        const escalas = Math.max(0, segmentos.length - 1);
-        const { dicaStopover } = analisarLayoversEStopover(voo);
-
-        if (!melhorOpcao || preco < melhorOpcao.preco) {
-          melhorOpcao = {
-            preco,
-            duracaoHoras: duracaoMinutos / 60,
-            destinoReal: destinoFinal,
-            termometro,
-            nivelPreco,
-            detalhes: `${escalas} escala(s) | ${cias}`,
-            dicaStopover,
-            link: linkWebEstruturado
-          };
-        }
-      }
-
-      if (!melhorOpcao) {
-        return {
-          ok: true,
-          encontrouVoos: false,
-          mensagem: `Sem voos dentro da duração máxima solicitada (${duracaoMaxHoras}h)`
-        };
-      }
-
-      return {
-        ok: true,
-        encontrouVoos: true,
-        oferta: melhorOpcao
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        erro: true,
-        mensagemErro: `Erro de rede ao conectar à SerpAPI: ${err.message}`
-      };
-    }
   }
 
   /**
-   * Executa varredura de uma rota cadastrada no banco de dados
+   * Executa varredura de uma rota cadastrada no banco de dados com flexibilidade de datas e detecção de Bug Fares
    */
   static async escanearRota(rota) {
-    const resultado = await FlightScanner.buscarOfertas(
+    // 1. Consulta meteorológica do destino em paralelo
+    const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
+
+    // 2. Busca de ofertas da data base
+    const resultadoBase = await FlightScanner.buscarOfertas(
       rota.codigo_origem,
       rota.codigo_destino,
       rota.data_ida,
       rota.data_volta,
-      rota.duracao_max_horas
+      rota.duracao_max_horas,
+      rota.cabine || 'economy',
+      1
     );
 
-    if (!resultado.ok) {
-      rotasRepo.marcarFalhaChecagem(rota.id, resultado.mensagemErro || 'Falha na checagem');
-      return { sucesso: false, erro: resultado.mensagemErro };
+    const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
+
+    if (!resultadoBase.ok) {
+      rotasRepo.marcarFalhaChecagem(rota.id, resultadoBase.mensagemErro || 'Falha na checagem');
+      return { sucesso: false, erro: resultadoBase.mensagemErro };
     }
 
-    if (!resultado.encontrouVoos) {
+    if (!resultadoBase.encontrouVoos) {
       rotasRepo.atualizarResultadoChecagem(rota.id, {
         preco: 0,
         variacao_texto: '-',
-        termometro: resultado.mensagem || '⚪ Sem voos no filtro',
+        termometro: resultadoBase.mensagem || '⚪ Sem voos no filtro',
         custo_destino_texto: '-',
         detalhes_voo: '-',
         dica_stopover: '-',
-        link_google_flights: rota.link_google_flights
+        link_google_flights: rota.link_google_flights,
+        clima_destino_resumo: clima.ok ? clima.resumo : null,
+        clima_temp_media: clima.ok ? clima.tempMedia : null,
+        melhor_opcao_flexivel: null
       });
-      return { sucesso: true, encontrou: false, mensagem: resultado.mensagem };
+      return { sucesso: true, encontrou: false, mensagem: resultadoBase.mensagem };
     }
 
-    const { oferta } = resultado;
+    let { oferta } = resultadoBase;
+    let melhorOpcaoFlexivel = null;
+
+    // 3. Matriz de Flexibilidade de Datas (se flexibilidade_dias > 0)
+    const flexDias = rota.flexibilidade_dias || 0;
+    if (flexDias > 0) {
+      const combinacoes = gerarCombinacoesFlexibilidade(rota.data_ida, rota.data_volta, flexDias);
+      // Analisa até 2 combinações adjacentes na janela para encontrar tarifas ainda menores
+      for (const comb of combinacoes.slice(1, 3)) {
+        try {
+          const resAdj = await FlightScanner.buscarOfertas(
+            rota.codigo_origem,
+            rota.codigo_destino,
+            comb.dataIda,
+            comb.dataVolta,
+            rota.duracao_max_horas,
+            rota.cabine || 'economy',
+            1
+          );
+
+          if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta.preco < oferta.preco) {
+            const economia = oferta.preco - resAdj.oferta.preco;
+            const economiaPct = Math.round((economia / oferta.preco) * 100);
+            melhorOpcaoFlexivel = {
+              dataIda: comb.dataIda,
+              dataVolta: comb.dataVolta,
+              preco: resAdj.oferta.preco,
+              economia,
+              economiaPct,
+              deltaDias: comb.deltaDias,
+              link: resAdj.oferta.link
+            };
+            break; // Encontrou economia na janela
+          }
+        } catch (_) {}
+      }
+    }
+
     const precoAnterior = parsePreco(rota.preco_atual);
     const variacao = calcularVariacao(oferta.preco, precoAnterior);
 
@@ -223,17 +117,50 @@ export class FlightScanner {
       rota.data_volta
     );
 
+    // 4. Detecção Estatística de Bug Fares em Tempo Real (Zero Delay)
+    const analiseBug = detectarBugFareEstatistico({
+      origemCod: rota.codigo_origem,
+      destinoCod: rota.codigo_destino,
+      preco: oferta.preco,
+      precoMedioHistorico: rota.menor_preco_historico || precoAnterior,
+      dataVolta: rota.data_volta
+    });
+
+    if (analiseBug.ehBugFare) {
+      const tituloBug = `🚨 BUG FARE: ${rota.origem} ➔ ${rota.destino} por R$ ${oferta.preco.toFixed(0)}! (${analiseBug.motivo})`;
+      bugFaresRepo.inserir(tituloBug, oferta.link, analiseBug.tipo);
+
+      telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
+        titulo: tituloBug,
+        link: oferta.link,
+        preco: oferta.preco,
+        rotaId: rota.id,
+        origem: rota.origem,
+        destino: rota.destino
+      });
+
+      // Alerta de urgência máxima no Telegram (quebra modo noturno)
+      await notifierTelegram.enviarAlertaBugFare(
+        tituloBug,
+        oferta.link,
+        `🚨 ${analiseBug.tipo}`
+      );
+    }
+
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
       preco: oferta.preco,
       variacao_texto: variacao.texto,
-      termometro: oferta.termometro,
+      termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : oferta.termometro,
       custo_destino_texto: custoInfo.textoResumo,
       detalhes_voo: `${oferta.duracaoHoras.toFixed(1)}h | ${oferta.detalhes}`,
       dica_stopover: oferta.dicaStopover,
-      link_google_flights: oferta.link
+      link_google_flights: oferta.link,
+      clima_destino_resumo: clima.ok ? clima.resumo : null,
+      clima_temp_media: clima.ok ? clima.tempMedia : null,
+      melhor_opcao_flexivel: melhorOpcaoFlexivel
     });
 
-    // Inteligência de Alertas
+    // 5. Inteligência de Alertas Regulares
     const chaveAlerta = `${rota.codigo_origem}_${rota.codigo_destino}_${rota.data_ida}_${rota.data_volta || 'SO_IDA'}`;
     const ehRecorde = !rota.menor_preco_historico || oferta.preco < rota.menor_preco_historico;
 
@@ -247,8 +174,11 @@ export class FlightScanner {
       variacao.pct
     );
 
-    if (decisaoAlerta.deve) {
+    const rotaSilenciada = rotasRepo.estaSilenciada(rotaAtualizada);
+
+    if (decisaoAlerta.deve && !rotaSilenciada && !analiseBug.ehBugFare) {
       await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: rota.id,
         origem: rota.origem,
         destinoReal: oferta.destinoReal,
         dataIda: rota.data_ida,
@@ -260,10 +190,19 @@ export class FlightScanner {
         duracaoHoras: oferta.duracaoHoras,
         detalhes: oferta.detalhes,
         dicaStopover: oferta.dicaStopover,
-        link: oferta.link
+        link: oferta.link,
+        clima: clima.ok ? clima : null
       });
     }
 
-    return { sucesso: true, encontrou: true, oferta, rotaAtualizada };
+    return {
+      sucesso: true,
+      encontrou: true,
+      oferta,
+      rotaAtualizada,
+      clima,
+      melhorOpcaoFlexivel,
+      ehBugFare: analiseBug.ehBugFare
+    };
   }
 }

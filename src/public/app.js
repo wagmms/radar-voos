@@ -1,6 +1,11 @@
 /**
- * RADAR DE VOOS - TRAVEL HACKING COCKPIT APP
+ * RADAR DE VOOS - TRAVEL HACKING COCKPIT APP (v2.1)
+ * Integrado com Sparklines em SVG, Arcos Geodésicos Great Circle,
+ * Telemetria SSE em tempo real, Previsão do Clima e Háptica iOS.
  */
+
+import { renderizarSparkline } from './js/sparkline.js';
+import { renderizarArcoVooSvg } from './js/geo_routes.js';
 
 // Registrar Service Worker PWA
 if ('serviceWorker' in navigator) {
@@ -10,6 +15,61 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+function vibrarAoTocar() {
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate(12); } catch (_) {}
+  }
+}
+
+// Sintetizador nativo de Chime de Cabine (Aviso Sonoro de Aeronave via Web Audio API)
+let audioCtx = null;
+export function tocarChimeCabine() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioCtx) {
+      audioCtx = new AudioContextClass();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+
+    const agora = audioCtx.currentTime;
+
+    // Primeiro tom (D5 - 587.33 Hz) com ataque rápido e decaimento exponencial
+    const osc1 = audioCtx.createOscillator();
+    const gain1 = audioCtx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, agora);
+    gain1.gain.setValueAtTime(0, agora);
+    gain1.gain.linearRampToValueAtTime(0.3, agora + 0.03);
+    gain1.gain.exponentialRampToValueAtTime(0.001, agora + 0.55);
+
+    osc1.connect(gain1);
+    gain1.connect(audioCtx.destination);
+    osc1.start(agora);
+    osc1.stop(agora + 0.55);
+
+    // Segundo tom (A4 - 440.00 Hz) formando o ding-dong clássico de cabine
+    const delay = 0.28;
+    const osc2 = audioCtx.createOscillator();
+    const gain2 = audioCtx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(440.00, agora + delay);
+    gain2.gain.setValueAtTime(0, agora + delay);
+    gain2.gain.linearRampToValueAtTime(0.28, agora + delay + 0.03);
+    gain2.gain.exponentialRampToValueAtTime(0.001, agora + delay + 0.7);
+
+    osc2.connect(gain2);
+    gain2.connect(audioCtx.destination);
+    osc2.start(agora + delay);
+    osc2.stop(agora + delay + 0.7);
+  } catch (e) {
+    console.warn('Erro ao reproduzir chime de cabine:', e);
+  }
+}
+window.tocarChimeCabine = tocarChimeCabine;
 
 const state = {
   rotas: [],
@@ -35,20 +95,54 @@ const metricBugFares = document.getElementById('metric-bugfares');
 const modalRota = document.getElementById('modal-rota');
 const modalHistorico = document.getElementById('modal-historico');
 const toastContainer = document.getElementById('toast-container');
+const sseBadge = document.getElementById('sse-badge');
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
   setupEventListeners();
   carregarDadosCompletos();
+  iniciarSseTelemetria();
 
-  // Polling automático de atualização a cada 30 segundos
-  setInterval(carregarDadosCompletos, 30000);
+  // Polling de segurança a cada 45s (como contingência ao SSE)
+  setInterval(() => carregarDadosCompletos(true), 45000);
 });
+
+function iniciarSseTelemetria() {
+  try {
+    const eventSource = new EventSource('/api/stream/telemetria');
+
+    eventSource.addEventListener('conectado', () => {
+      if (sseBadge) sseBadge.style.opacity = '1';
+    });
+
+    eventSource.addEventListener('telemetria', (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        console.log('⚡ [SSE Telemetria]:', payload.tipo);
+
+        // Se detectar Bug Fare ou meta atingida, dispara o Chime sonoro de cabine
+        if (payload.tipo === 'bug_fare_detectado' || payload.tipo === 'meta_atingida') {
+          tocarChimeCabine();
+          mostrarToast(`🚨 ${payload.dados?.titulo || 'Oportunidade crítica ou Bug Fare detectado!'}`);
+        }
+
+        carregarDadosCompletos(true);
+      } catch (_) {}
+    });
+
+    eventSource.onerror = () => {
+      if (sseBadge) sseBadge.style.opacity = '0.4';
+    };
+  } catch (err) {
+    console.warn('SSE indisponível no cliente, operando em polling normal.');
+  }
+}
 
 function setupEventListeners() {
   // Tabs
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
+      vibrarAoTocar();
       document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
       document.querySelectorAll('.tab-content').forEach((c) => c.classList.remove('active'));
       btn.classList.add('active');
@@ -67,6 +161,7 @@ function setupEventListeners() {
   // Filtro Chips
   document.querySelectorAll('.filter-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
+      vibrarAoTocar();
       document.querySelectorAll('.filter-chip').forEach((c) => c.classList.remove('active'));
       chip.classList.add('active');
       state.filtroCategoria = chip.getAttribute('data-filter');
@@ -75,22 +170,38 @@ function setupEventListeners() {
   });
 
   // Botões de Ação Topo
-  document.getElementById('btn-forcar-varredura')?.addEventListener('click', executarVarreduraManual);
-  document.getElementById('btn-testar-telegram')?.addEventListener('click', testarTelegram);
-  document.getElementById('btn-abrir-modal-rota')?.addEventListener('click', abrirModalNovaRota);
+  document.getElementById('btn-forcar-varredura')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    executarVarreduraManual();
+  });
+  document.getElementById('btn-testar-telegram')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    testarTelegram();
+  });
+  document.getElementById('btn-abrir-modal-rota')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    abrirModalNovaRota();
+  });
   document.getElementById('btn-fechar-modal-rota')?.addEventListener('click', () => fecharModal(modalRota));
   document.getElementById('btn-cancelar-modal-rota')?.addEventListener('click', () => fecharModal(modalRota));
 
   document.getElementById('btn-fechar-modal-historico')?.addEventListener('click', () => fecharModal(modalHistorico));
-  document.getElementById('btn-escanear-rss')?.addEventListener('click', escanearRss);
-  document.getElementById('btn-reset-hoje')?.addEventListener('click', resetarCotasHoje);
+  document.getElementById('btn-testar-chime')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    tocarChimeCabine();
+    mostrarToast('🔊 Aviso sonoro de cabine emitido via Web Audio API!');
+  });
+  document.getElementById('btn-reset-hoje')?.addEventListener('click', () => {
+    vibrarAoTocar();
+    resetarCotasHoje();
+  });
 
   // Form Nova Rota
   document.getElementById('form-nova-rota')?.addEventListener('submit', criarNovaRota);
 }
 
 // Carregamento de Dados da API
-async function carregarDadosCompletos() {
+async function carregarDadosCompletos(suave = false) {
   try {
     const [resRotas, resStatus, resBugs] = await Promise.all([
       fetch('/api/rotas').then((r) => r.json()),
@@ -98,45 +209,40 @@ async function carregarDadosCompletos() {
       fetch('/api/bug-fares').then((r) => r.json())
     ]);
 
-    if (resRotas.ok) {
-      state.rotas = resRotas.rotas;
-      renderizarRotas();
-      atualizarMetricasRotas();
-    }
+    if (resRotas.ok) state.rotas = resRotas.rotas || [];
+    if (resStatus.ok) state.poolStatus = resStatus.pool || null;
+    if (resBugs.ok) state.bugFares = resBugs.bugFares || [];
 
-    if (resStatus.ok) {
-      state.poolStatus = resStatus.pool;
-      renderizarPoolStatus();
-      atualizarMetricasPool();
-    }
+    atualizarMetricasRotas();
+    atualizarMetricasPool();
+    atualizarMetricasBugs();
 
-    if (resBugs.ok) {
-      state.bugFares = resBugs.items;
-      renderizarBugFares();
-      atualizarMetricasBugs();
-    }
+    renderizarRotas();
+    renderizarBugFares();
+    renderizarPoolStatus();
   } catch (err) {
-    console.error('Erro ao buscar dados da API:', err);
+    if (!suave) mostrarToast('Falha ao sincronizar dados com o servidor', true);
   }
 }
 
-// Renderização das Rotas
+// Renderização Rotas
 function renderizarRotas() {
   if (!rotasContainer) return;
 
-  let filtradas = state.rotas.filter((rota) => {
+  const filtradas = state.rotas.filter((rota) => {
+    // Filtro texto
     const busca = `${rota.origem} ${rota.destino} ${rota.codigo_origem} ${rota.codigo_destino}`.toLowerCase();
     const bateTexto = !state.filtroTexto || busca.includes(state.filtroTexto);
 
-    if (!bateTexto) return false;
-
+    // Filtro categoria
+    let bateCat = true;
     if (state.filtroCategoria === 'meta') {
-      return rota.preco_atual && rota.preco_alvo && rota.preco_atual <= rota.preco_alvo;
+      bateCat = rota.preco_atual && rota.preco_alvo && rota.preco_atual <= rota.preco_alvo;
+    } else if (state.filtroCategoria === 'promo') {
+      bateCat = rota.termometro && (rota.termometro.includes('Super Barato') || rota.termometro.includes('Excelente'));
     }
-    if (state.filtroCategoria === 'promo') {
-      return rota.termometro && (rota.termometro.includes('Super Barato') || rota.termometro.includes('Promoção'));
-    }
-    return true;
+
+    return bateTexto && bateCat;
   });
 
   if (filtradas.length === 0) {
@@ -165,12 +271,25 @@ function renderizarRotas() {
     } else if (rota.termometro && rota.termometro.includes('Caro')) {
       cardClass = 'status-alta';
       termoClass = 'high';
-    } else if (rota.termometro && rota.termometro.includes('Super Barato')) {
+    } else if (rota.termometro && (rota.termometro.includes('Super Barato') || rota.termometro.includes('Excelente'))) {
       cardClass = 'status-promo';
       termoClass = 'low';
     }
 
     const tipoViagem = rota.data_volta ? 'IDA E VOLTA' : 'SÓ IDA';
+    const flexTag = rota.flexibilidade_dias && rota.flexibilidade_dias > 0 ? ` • ±${rota.flexibilidade_dias}d FLEX` : '';
+    const cabineTag = rota.cabine && rota.cabine !== 'economy' ? ` • ${rota.cabine.toUpperCase()}` : '';
+    const arcoSvg = renderizarArcoVooSvg(rota.codigo_origem, rota.codigo_destino, 150, 36);
+    const sparklineSvg = renderizarSparkline(rota.historico_recente || [], { width: 110, height: 32 });
+
+    let melhorOpcaoFlexivel = null;
+    if (rota.melhor_opcao_flexivel) {
+      try {
+        melhorOpcaoFlexivel = typeof rota.melhor_opcao_flexivel === 'string'
+          ? JSON.parse(rota.melhor_opcao_flexivel)
+          : rota.melhor_opcao_flexivel;
+      } catch (_) {}
+    }
 
     return `
       <div class="flight-card ${cardClass}" id="card-rota-${rota.id}">
@@ -181,13 +300,34 @@ function renderizarRotas() {
             <span class="airport-badge">${escapeHtml(rota.codigo_destino || 'DEST')}</span>
             <div class="city-names">${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}</div>
           </div>
-          <span class="trip-type-tag">${tipoViagem}</span>
+          <span class="trip-type-tag">${tipoViagem}${flexTag}${cabineTag}</span>
         </div>
+
+        <!-- Arco Geodésico Great Circle (remotion-maps) -->
+        ${arcoSvg}
 
         <div class="card-dates-box">
           <div>📅 Ida: <strong>${formatarDataBr(rota.data_ida)}</strong></div>
           <div>${rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : 'Só Ida'}</div>
         </div>
+
+        ${melhorOpcaoFlexivel && melhorOpcaoFlexivel.preco ? `
+          <div class="flex-saving-badge">
+            <div>
+              ✨ <strong>Janela Flexível:</strong> ${formatarDataBr(melhorOpcaoFlexivel.data_ida)}${melhorOpcaoFlexivel.data_volta ? ' a ' + formatarDataBr(melhorOpcaoFlexivel.data_volta) : ''}
+              (R$ ${melhorOpcaoFlexivel.preco.toFixed(2).replace('.', ',')})
+            </div>
+            ${melhorOpcaoFlexivel.economia && melhorOpcaoFlexivel.economia > 0 ? `
+              <span class="badge-saving">Economia de R$ ${melhorOpcaoFlexivel.economia.toFixed(2).replace('.', ',')}</span>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        ${rota.clima_destino_resumo ? `
+          <div class="weather-badge">
+            ${escapeHtml(rota.clima_destino_resumo)}
+          </div>
+        ` : ''}
 
         <div class="flight-specs">
           ${rota.detalhes_voo && rota.detalhes_voo !== '-' ? `✈️ ${escapeHtml(rota.detalhes_voo)}` : '⏱️ Duração máx: ' + (rota.duracao_max_horas || 16) + 'h'}
@@ -198,9 +338,10 @@ function renderizarRotas() {
             <span class="price-label">Preço Atual</span>
             <span class="price-amount">${precoFormatado}</span>
           </div>
-          <div class="price-meta-block">
-            <div>Meta: <span class="val-meta">${precoAlvoFormatado}</span></div>
-            <div>Recorde: <span class="val-menor">${menorHistorico}</span></div>
+          <!-- Sparkline de Tendência (smart-charts) -->
+          <div class="sparkline-wrap">
+            ${sparklineSvg}
+            <span style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">Recorde: ${menorHistorico}</span>
           </div>
         </div>
 
@@ -229,6 +370,9 @@ function renderizarRotas() {
             <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z"/></svg>
             Google Flights
           </a>
+          <button class="btn-icon-action ${rota.esta_silenciada ? 'active-muted' : ''}" onclick="alternarSilenciamentoRota(${rota.id})" title="${rota.esta_silenciada ? 'Silenciada por 24h (clique para reativar)' : 'Silenciar alertas por 24h'}">
+            ${rota.esta_silenciada ? '🔕' : '🔔'}
+          </button>
           <button class="btn-icon-action" onclick="abrirEdicaoRota(${rota.id})" title="Alterar opções desta rota">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           </button>
@@ -312,7 +456,7 @@ function renderizarPoolStatus() {
 function atualizarMetricasRotas() {
   if (metricRotasTotal) metricRotasTotal.textContent = state.rotas.length;
 
-  const naMeta = state.rotas.filter((r) => r.preco_atual && r.preco_alvo && r.preco_atual <= r.preco_alvo).length;
+  const naMeta = state.rotas.filter((r) => r.preco_atual && r.preco_alvo && r.preco_atual <= rota.preco_alvo).length;
   if (metricOportunidades) metricOportunidades.textContent = naMeta;
 }
 
@@ -337,10 +481,13 @@ function abrirModalNovaRota() {
   document.getElementById('modal-rota-titulo').textContent = '✈️ Monitorar Nova Rota';
   document.getElementById('btn-salvar-rota-submit').textContent = 'Ativar Monitoramento';
   document.getElementById('form-nova-rota').reset();
+  const selectFlex = document.getElementById('input-flexibilidade');
+  if (selectFlex) selectFlex.value = '3';
   abrirModal(modalRota);
 }
 
 window.abrirEdicaoRota = function(id) {
+  vibrarAoTocar();
   const rota = state.rotas.find((r) => r.id === id);
   if (!rota) return;
 
@@ -354,12 +501,40 @@ window.abrirEdicaoRota = function(id) {
   document.getElementById('input-data-volta').value = rota.data_volta || 'Só Ida';
   document.getElementById('input-preco-alvo').value = rota.preco_alvo || '';
   document.getElementById('input-duracao-max').value = rota.duracao_max_horas || 16;
+  const selectCabine = document.getElementById('input-cabine');
+  if (selectCabine) selectCabine.value = rota.cabine || 'economy';
+  const selectFlex = document.getElementById('input-flexibilidade');
+  if (selectFlex) selectFlex.value = String(rota.flexibilidade_dias ?? 0);
 
   abrirModal(modalRota);
 };
 
+window.alternarSilenciamentoRota = async function(id) {
+  vibrarAoTocar();
+  const rota = state.rotas.find((r) => r.id === id);
+  if (!rota) return;
+
+  const novoSilencio = !rota.esta_silenciada;
+  const horas = novoSilencio ? 24 : 0;
+
+  try {
+    const res = await fetch(`/api/rotas/${id}/silenciar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ horas })
+    });
+    if (res.ok) {
+      mostrarToast(novoSilencio ? 'Rota silenciada por 24h.' : 'Alertas reativados para a rota.');
+      carregarDadosCompletos(true);
+    }
+  } catch (_) {
+    mostrarToast('Falha ao alterar silenciamento', true);
+  }
+};
+
 async function criarNovaRota(e) {
   e.preventDefault();
+  vibrarAoTocar();
   const rotaId = document.getElementById('input-rota-id').value;
   const origem = document.getElementById('input-origem').value.trim();
   const destino = document.getElementById('input-destino').value.trim();
@@ -367,6 +542,8 @@ async function criarNovaRota(e) {
   const data_volta = document.getElementById('input-data-volta').value.trim();
   const preco_alvo = document.getElementById('input-preco-alvo').value;
   const duracao_max_horas = document.getElementById('input-duracao-max').value;
+  const cabine = document.getElementById('input-cabine')?.value || 'economy';
+  const flexibilidade_dias = parseInt(document.getElementById('input-flexibilidade')?.value || '0', 10);
 
   const url = rotaId ? `/api/rotas/${rotaId}` : '/api/rotas';
   const method = rotaId ? 'PUT' : 'POST';
@@ -381,7 +558,9 @@ async function criarNovaRota(e) {
         data_ida,
         data_volta,
         preco_alvo,
-        duracao_max_horas
+        duracao_max_horas,
+        cabine,
+        flexibilidade_dias
       })
     });
 
@@ -402,16 +581,17 @@ async function criarNovaRota(e) {
 }
 
 window.verificarRotaIndividual = async function(id) {
+  vibrarAoTocar();
   mostrarToast('Iniciando checagem da rota no Google Flights...');
   try {
     const res = await fetch(`/api/rotas/${id}/verificar`, { method: 'POST' });
     const data = await res.json();
     if (res.ok && data.resultado.sucesso) {
       mostrarToast('Cotação atualizada com sucesso!');
-      carregarDadosCompletos();
+      carregarDadosCompletos(true);
     } else {
       mostrarToast(`Aviso: ${data.resultado?.erro || 'Sem voos no filtro'}`, true);
-      carregarDadosCompletos();
+      carregarDadosCompletos(true);
     }
   } catch (err) {
     mostrarToast('Falha na requisição de checagem', true);
@@ -419,6 +599,7 @@ window.verificarRotaIndividual = async function(id) {
 };
 
 window.excluirRota = async function(id) {
+  vibrarAoTocar();
   if (!confirm('Deseja realmente remover esta rota do monitoramento?')) return;
 
   try {
@@ -433,6 +614,7 @@ window.excluirRota = async function(id) {
 };
 
 window.abrirHistorico = async function(id) {
+  vibrarAoTocar();
   const rota = state.rotas.find((r) => r.id === id);
   if (!rota) return;
 
@@ -472,7 +654,7 @@ async function executarVarreduraManual() {
     const data = await res.json();
     if (res.ok) {
       mostrarToast('Varredura concluída!');
-      carregarDadosCompletos();
+      carregarDadosCompletos(true);
     } else {
       mostrarToast(`Aviso: ${data.erro || 'Falha na varredura'}`, true);
     }
@@ -493,20 +675,6 @@ async function testarTelegram() {
     }
   } catch (err) {
     mostrarToast('Erro ao testar Telegram', true);
-  }
-}
-
-async function escanearRss() {
-  mostrarToast('Consultando feed RSS do Melhores Destinos...');
-  try {
-    const res = await fetch('/api/bug-fares/escanear', { method: 'POST' });
-    const data = await res.json();
-    if (res.ok) {
-      mostrarToast(`Feed analisado! ${data.resultado.novos || 0} novos bugs encontrados.`);
-      carregarDadosCompletos();
-    }
-  } catch (err) {
-    mostrarToast('Erro ao analisar feed', true);
   }
 }
 
