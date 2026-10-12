@@ -50,13 +50,13 @@
     "codigo_origem": "SAO",
     "codigo_destino": "BUE",
     "data_ida": "2026-10-09",
-    "data_volta": "2026-10-12",
+    "data_volta": "2026-10-23",
     "duracao_max_horas": 8,
-    "preco_alvo": 2000,
+    "preco_alvo": 1200,
     "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 0,
-    "dias_estadia": 10,
+    "flexibilidade_dias": 7,
+    "sem_data": 1,
+    "dias_estadia": 14,
     "ativa": 1
   }
 ]
