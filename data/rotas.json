@@ -61,21 +61,6 @@
   },
   {
     "origem": "São Paulo",
-    "destino": "Lisboa",
-    "codigo_origem": "SAO",
-    "codigo_destino": "LIS",
-    "data_ida": "2026-11-10",
-    "data_volta": "2026-11-24",
-    "duracao_max_horas": 999,
-    "preco_alvo": 3500,
-    "cabine": "economy",
-    "flexibilidade_dias": 3,
-    "sem_data": 0,
-    "dias_estadia": 10,
-    "ativa": 1
-  },
-  {
-    "origem": "São Paulo",
     "destino": "Estados Unidos",
     "codigo_origem": "SAO",
     "codigo_destino": "/m/09c7w0",
