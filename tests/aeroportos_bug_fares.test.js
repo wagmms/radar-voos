@@ -232,4 +232,54 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.ok(infoBarra);
     assert.strictEqual(infoBarra.iata, 'DOH');
   });
+
+  it('deve lidar defensivamente com casos de borda adversariais em montarCardBugFare (nulos, preços monetários/NaN e instâncias Date)', () => {
+    // 1. Chamada sem parâmetros, null ou objeto vazio não deve lançar TypeError
+    const vazio = montarCardBugFare();
+    assert.ok(vazio);
+    assert.strictEqual(vazio.preco, 0);
+    assert.ok(vazio.titulo.includes('por R$ 0!'));
+    assert.strictEqual(vazio.periodo_texto, 'Data a Definir');
+    assert.strictEqual(vazio.link, null);
+
+    const nulo = montarCardBugFare(null);
+    assert.ok(nulo);
+    assert.strictEqual(nulo.preco, 0);
+
+    // 2. Preço em string monetária brasileira ("R$ 414,50" ou "1.250") ou corrompido ("NaN")
+    const cardMoeda = montarCardBugFare({
+      origem: 'São Paulo',
+      destino: 'Santiago',
+      preco: 'R$ 414,50',
+      dataIda: '2026-12-08'
+    });
+    assert.strictEqual(cardMoeda.preco, 414.5);
+    assert.ok(cardMoeda.titulo.includes('por R$ 415!'));
+    assert.ok(!cardMoeda.motivo.includes('NaN'));
+
+    const cardNan = montarCardBugFare({
+      origem: 'São Paulo',
+      destino: 'Santiago',
+      preco: 'invalido_sem_preco'
+    });
+    assert.strictEqual(cardNan.preco, 0);
+    assert.ok(!cardNan.motivo.includes('NaN'));
+
+    // 3. Datas fornecidas como instâncias de Date devem ser normalizadas para YYYY-MM-DD
+    const dIda = new Date(Date.UTC(2026, 11, 8)); // 2026-12-08
+    const dVolta = new Date(Date.UTC(2026, 11, 22)); // 2026-12-22
+    const cardDates = montarCardBugFare({
+      origem: 'São Paulo',
+      destino: 'Madrid',
+      codigoDestino: 'MAD',
+      dataIda: dIda,
+      dataVolta: dVolta,
+      preco: 1200
+    });
+    assert.strictEqual(cardDates.data_ida, '2026-12-08');
+    assert.strictEqual(cardDates.data_volta, '2026-12-22');
+    assert.strictEqual(cardDates.periodo_texto, 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
+    assert.ok(cardDates.link);
+    assert.ok(cardDates.link.includes('tfs='));
+  });
 });

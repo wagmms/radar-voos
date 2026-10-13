@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.19] - 2026-10-13 — Blindagem Adversarial em montarCardBugFare contra Entradas Nulas, Moeda/NaN e Datas Date (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`montarCardBugFare`):
+  - Blindada a assinatura da função com fallback defensivo para evitar `TypeError: Cannot destructure property 'origem' of 'undefined'` quando invocada sem parâmetros, com `null` ou tipos primitivos.
+  - Implementada sanitização resiliente de preço, tolerando strings monetárias brasileiras (ex: `"R$ 414,50"`, `"1.250"`), descartando `NaN` e valores negativos com fallback para 0, eliminando corrupção de strings como `"por R$ NaN!"`.
+  - Normalizadas datas `dataIda` e `dataVolta` para o formato canônico `YYYY-MM-DD` via `formatarDataParaBusca`, prevenindo propagação de instâncias de `Date` nativas no payload de persistência e garantindo geração íntegra do link Protobuf `tfs=` da aba Cheapest.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando tolerância a chamadas sem parâmetros/nulas, normalização de preços formatados e sanitização de objetos Date.
+
 ## [v2.18.18] - 2026-10-13 — Blindagem Adversarial em detectarBugFareEstatistico contra Formatos Monetários e Milhar (Domínio Bug Fares)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

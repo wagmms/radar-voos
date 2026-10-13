@@ -344,24 +344,27 @@ export function formatarPeriodoViagem(dataIdaStr, dataVoltaStr) {
  * - Datas Completas
  * - Link Canônico no Google Flights que abre direto no voo
  */
-export function montarCardBugFare({
-  origem,
-  codigoOrigem,
-  destino,
-  codigoDestino,
-  dataIda,
-  dataVolta = null,
-  preco,
-  motivo,
-  tipo = '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
-  destinoReal = null,
-  codigoDestinoReal = null,
-  linkOriginal = null
-}) {
+export function montarCardBugFare(params = {}) {
+  const dados = (params && typeof params === 'object' && !Array.isArray(params)) ? params : {};
+  const {
+    origem,
+    codigoOrigem,
+    destino,
+    codigoDestino,
+    dataIda,
+    dataVolta = null,
+    preco,
+    motivo,
+    tipo = '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
+    destinoReal = null,
+    codigoDestinoReal = null,
+    linkOriginal = null
+  } = dados;
+
   const origemInfo = obterInfoAeroporto(codigoOrigem) || obterInfoAeroporto(origem) || {
-    iata: codigoOrigem || 'SAO',
-    codigoLink: codigoOrigem || 'SAO',
-    cidade: origem || 'São Paulo',
+    iata: codigoOrigem ? String(codigoOrigem).trim().toUpperCase() : 'SAO',
+    codigoLink: codigoOrigem ? String(codigoOrigem).trim().toUpperCase() : 'SAO',
+    cidade: origem ? String(origem).trim() : 'São Paulo',
     pais: 'Brasil',
     nome: 'Aeroporto de Origem'
   };
@@ -374,7 +377,17 @@ export function montarCardBugFare({
   });
 
   const periodoTexto = formatarPeriodoViagem(dataIda, dataVolta);
-  const precoFmt = Number(preco).toFixed(0);
+
+  // Normalização defensiva de preço (suporta número, string formatada com R$, separadores brasileiros ou ausente)
+  let precoNum = 0;
+  if (typeof preco === 'number' && Number.isFinite(preco)) {
+    precoNum = preco > 0 ? preco : 0;
+  } else if (preco !== null && preco !== undefined && typeof preco !== 'symbol') {
+    const limpo = String(preco).replace(/[R$\s]/gi, '').replace(/\./g, '').replace(',', '.').trim();
+    const parsed = parseFloat(limpo);
+    precoNum = (Number.isFinite(parsed) && parsed > 0) ? parsed : 0;
+  }
+  const precoFmt = precoNum.toFixed(0);
 
   // Código concreto para o link do Google Flights (ex: EZE em vez de /m/06_1)
   const origemLink = origemInfo.codigoLink || origemInfo.iata || 'SAO';
@@ -382,14 +395,15 @@ export function montarCardBugFare({
 
   // Gerar link 100% canônico (Prioriza Protobuf tfs Cheapest, com fallback para query estruturada correta)
   const soIda = ehSoIda(dataVolta);
-  const voltaEfetiva = soIda ? null : dataVolta;
+  const dataIdaNorm = formatarDataParaBusca(dataIda) || (dataIda && typeof dataIda === 'string' ? dataIda.trim() : null);
+  const voltaEfetiva = soIda ? null : (formatarDataParaBusca(dataVolta) || (typeof dataVolta === 'string' ? dataVolta.trim() : null));
 
   let linkGoogleFlights = null;
-  if (dataIda) {
-    linkGoogleFlights = gerarLinkGoogleFlightsCheapest(origemLink, destinoLink, dataIda, voltaEfetiva);
+  if (dataIdaNorm) {
+    linkGoogleFlights = gerarLinkGoogleFlightsCheapest(origemLink, destinoLink, dataIdaNorm, voltaEfetiva);
   }
-  if (!linkGoogleFlights) {
-    linkGoogleFlights = gerarLinkGoogleFlights(origemLink, destinoLink, dataIda, voltaEfetiva);
+  if (!linkGoogleFlights && dataIdaNorm) {
+    linkGoogleFlights = gerarLinkGoogleFlights(origemLink, destinoLink, dataIdaNorm, voltaEfetiva);
   }
 
   // Se o destino cadastrado na rota foi uma macrorregião (ex: América do Sul), acrescenta o contexto
@@ -406,14 +420,14 @@ export function montarCardBugFare({
     titulo: tituloCompleto,
     link: linkGoogleFlights,
     tipo,
-    motivo: motivo || `Tarifa anômala de R$ ${precoFmt}`,
-    preco: Number(preco),
+    motivo: motivo || (precoNum > 0 ? `Tarifa anômala de R$ ${precoFmt}` : 'Tarifa anômala de Bug Fare detectada'),
+    preco: precoNum,
     origem: `${origemInfo.cidade} (${origemInfo.iata})`,
     destino: `${destinoInfo.cidade}, ${destinoInfo.pais}`,
     aeroporto_chegada: `${destinoInfo.iata} - ${destinoInfo.nome}`,
     pais_destino: destinoInfo.pais,
     cidade_destino: destinoInfo.cidade,
-    data_ida: dataIda,
+    data_ida: dataIdaNorm,
     data_volta: voltaEfetiva,
     periodo_texto: periodoTexto,
     iata_origem: origemLink,
