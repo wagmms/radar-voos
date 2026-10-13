@@ -565,6 +565,9 @@ export function gerarLinkGoogleFlightsCheapest(
   moeda = 'BRL'
 ) {
   if (!dataIda) return null;
+  const dataIdaNorm = formatarDataParaBusca(dataIda);
+  if (!dataIdaNorm) return null;
+
   const strDest = String(destinoCod || '').trim();
   const limpoLower = normalizarTexto(strDest);
   const ehMacrorregiao = strDest.startsWith('/m/') || strDest.startsWith('/g/') ||
@@ -583,7 +586,7 @@ export function gerarLinkGoogleFlightsCheapest(
     if (hubIata) {
       destinoEfetivo = hubIata;
     } else {
-      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda);
+      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIdaNorm, dataVolta, moeda);
     }
   }
 
@@ -592,12 +595,22 @@ export function gerarLinkGoogleFlightsCheapest(
   const origens = normalizarParaSerpApi(origCod).split(',').map(s => s.trim()).filter(Boolean);
   const destinos = normalizarParaSerpApi(destCod).split(',').map(s => s.trim()).filter(Boolean);
   const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
-  const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
-  const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
+
+  const soIda = ehSoIda(dataVolta);
+  let voltaEfetiva = null;
+  if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
+    const voltaResolvida = calcularDataVolta(dataIdaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaResolvida && voltaResolvida >= dataIdaNorm) {
+      voltaEfetiva = voltaResolvida;
+    }
+  }
+
+  const tfs = gerarTfs({ origens, destinos, dataIda: dataIdaNorm, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
   const tfu = construirTfu(adultos, criancas, 0, classeViagem);
-  const moedaCode = (moeda || 'BRL').trim().toUpperCase();
+  const moedaCode = (typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL';
   return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaCode}&tfs=${tfs}&tfu=${tfu}`;
 }
+
 
 /**
  * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo) com validação defensiva contra erros de tempo

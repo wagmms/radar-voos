@@ -192,4 +192,39 @@ describe('gerarLinkGoogleFlightsCheapest: retrocompatibilidade e novos parâmetr
     assert.ok(link.includes('gl=BR'), 'Deve conter região BR');
     assert.ok(link.includes('curr=BRL'), 'Deve conter moeda BRL');
   });
+
+  it('QA Adversarial: deve retornar null quando dataIda for string malformada ou tipo inválido', () => {
+    assert.strictEqual(gerarLinkGoogleFlightsCheapest('GRU', 'LIS', 'data_invalida'), null);
+    assert.strictEqual(gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026/99/99'), null);
+    assert.strictEqual(gerarLinkGoogleFlightsCheapest('GRU', 'LIS', 12345), null);
+    assert.strictEqual(gerarLinkGoogleFlightsCheapest('GRU', 'LIS', true), null);
+  });
+
+  it('QA Adversarial: deve calcular dataVolta quando fornecida como duração e descartar volta retroativa', () => {
+    // 10 dias a partir de 2026-11-10 -> 2026-11-20
+    const linkDuracao = gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026-11-10', '10 dias');
+    assert.ok(linkDuracao, 'Link com duração em dias não pode ser nulo');
+    // Trip type deve ser 0x02 (Round-Trip) e conter o buffer da data 2026-11-20 no tfs
+    const decodedTfsDuracao = Buffer.from(new URL(linkDuracao).searchParams.get('tfs'), 'base64url').toString('utf8');
+    assert.ok(decodedTfsDuracao.includes('2026-11-20'), 'Deve conter data de volta calculada no protobuf tfs');
+
+    // Volta retroativa anterior à ida (2026-11-01 < 2026-11-10) deve virar Só Ida (sem perna retroativa)
+    const linkRetroativo = gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026-11-10', '2026-11-01');
+    assert.ok(linkRetroativo, 'Link com volta retroativa não deve falhar');
+    const decodedTfsRetroativo = Buffer.from(new URL(linkRetroativo).searchParams.get('tfs'), 'base64url').toString('utf8');
+    assert.ok(!decodedTfsRetroativo.includes('2026-11-01'), 'Volta retroativa não deve constar no protobuf tfs');
+  });
+
+  it('QA Adversarial: deve blindar parâmetro moeda contra valores não-string sem lançar exceção', () => {
+    // moeda como número, booleano, nulo ou vazio não deve lançar TypeError
+    const linkNum = gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026-11-10', '2026-11-24', null, 1, 0, 'economy', 123);
+    assert.ok(linkNum.includes('curr=BRL'), 'Moeda numérica deve ter fallback para BRL');
+
+    const linkBool = gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026-11-10', '2026-11-24', null, 1, 0, 'economy', false);
+    assert.ok(linkBool.includes('curr=BRL'), 'Moeda booleana deve ter fallback para BRL');
+
+    const linkUsd = gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026-11-10', '2026-11-24', null, 1, 0, 'economy', 'usd');
+    assert.ok(linkUsd.includes('curr=USD'), 'Moeda string minúscula deve ser convertida para maiúscula');
+  });
 });
+

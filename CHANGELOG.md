@@ -4,7 +4,19 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.22] - 2026-10-13 — Blindagem Adversarial em gerarLinkGoogleFlightsCheapest contra Datas Inválidas, Duração em Volta, Retorno Retroativo e Moeda Não-String (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarLinkGoogleFlightsCheapest`):
+  - Blindada a validação de `dataIda`: strings malformadas, datas inexistentes ou tipos não-data agora retornam `null` graciosamente em vez de gerar link Protobuf corrompido com data padrão fictícia (`2027-01-01`).
+  - Implementada resolução de `dataVolta` fornecida como duração/estadia (ex: `"10 dias"`, `14`): calcula com precisão a data de retorno a partir da ida via `calcularDataVolta`, gerando a perna de volta no payload `tfs=` Protobuf (Round-Trip).
+  - Blindada a checagem contra volta retroativa (`voltaResolvida < dataIdaNorm`), degradando para Só Ida sem perna de retorno inconsistente no passado.
+  - Sanitizado o parâmetro `moeda`, prevenindo `TypeError: (moeda || "BRL").trim is not a function` quando invocada com tipos numéricos, booleanos ou nulos.
+- **`tests/construir_tfu_passageiros.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais cobrindo entradas malformadas de data de ida, cálculo de duração/descarte de volta retroativa e sanitização resiliente de parâmetro moeda.
+
 ## [v2.18.21] - 2026-10-13 — Blindagem Adversarial em ehSoIda contra Booleano False, Sentinelas e Ausência Explícita de Volta (Domínio Rotas)
+
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
 - **`src/domain/rotas.js`** (`ehSoIda`):
