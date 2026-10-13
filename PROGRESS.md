@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.7.8)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.7.9)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.8 100% operacional com 112/112 testes passando. Resolvida a persistência de voos flexíveis ao alternar de Ida e Volta para Só Ida, eliminando a reversão indevida no recarregamento de página. Sincronização Two-Way com GitHub blindada contra race conditions com priorização de Push e paridade de modalidade.
+- **Estado Geral**: 🟢 Radar v2.7.9 100% operacional com 114/114 testes passando. Blindados links do Google Flights com resolução canônica de destinos (eliminando links que caem na home), alertas de Bug Fares enriquecidos obrigatoriamente com aeroporto IATA de chegada, país e datas completas da viagem, e cálculo de economia percentual em relação ao teto no Telegram.
 - **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
-- **Última Tarefa Concluída**: Refinada a função canônica `rotaEhSoIda` em `src/domain/rotas.js` para tratar `data_volta: null` e tipos explícitos. Atualizados `src/db.js` (`rotasRepo.atualizar` e `criar`) para persistir `data_volta` e `dias_estadia` como `NULL` e resetar `melhor_opcao_flexivel` ao alternar modalidade. Atualizado Two-Way Sync em `src/services/rotas_sync.js`, `src/server/routes/rotas_routes.js` e `src/public/app.js` (botão Sync prioriza Push para a nuvem). Adicionado teste de regressão ponta a ponta em `tests/rotas_flexibilidade.test.js` (112/112 testes passando).
+- **Última Tarefa Concluída**: Blindagem de links do Google Flights via Protobuf `tfs` e `returning` canônico; criação do módulo `src/domain/aeroportos.js` com catálogo e `resolverDestinoConcreto()`; migrações SQLite na tabela `bug_fares` para aeroporto de chegada, país e datas; enriquecimento de alertas no Telegram e chips visuais no Cockpit PWA. Suíte automatizada com 114/114 testes aprovados.
 
 ---
 

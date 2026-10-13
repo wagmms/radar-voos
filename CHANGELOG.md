@@ -7,6 +7,25 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.9] - 2026-10-12
+
+### 🎯 Blindagem de Links do Google Flights, Resolução Concreta de Destinos e Alertas Detalhados de Bug Fares
+- **Resolução de Destinos Concretos e Blindagem de Links Google Flights (`src/domain/aeroportos.js` e `src/domain/rotas.js`)**:
+  - Criado módulo canônico `src/domain/aeroportos.js` com catálogo de aeroportos mundiais, metrópoles e continentes, implementando `resolverDestinoConcreto()` para mapear regiões/continentes (como América do Sul ou IDs KGMID `/m/...`) para o hub físico de chegada correspondente (ex: Buenos Aires EZE/AEP, Madrid MAD, Paris CDG).
+  - Corrigido link de consulta do Google Flights: substituída a query string inválida `through` pelo parâmetro canônico `returning` (`Flights from ORIG to DEST on IDA returning VOLTA`), garantindo que links de busca textual abram diretamente na grade de voos sem cair na página inicial.
+  - Implementada resolução automática em `gerarLinkGoogleFlightsCheapest()` e `resolverCodigoParaLink()` para codificar payload Protobuf canônico `tfs` diretamente para a aba "Cheapest" com aeroportos físicos, eliminando qualquer redirecionamento para a home descontextualizada.
+- **Enriquecimento Estruturado de Bug Fares (`src/domain/aeroportos.js`, `src/db.js`, `src/services/flight_scanner.js`, `src/services/bug_fare_hunter.js`)**:
+  - Implementada função canônica `montarCardBugFare()`: garante que nenhum alerta de tarifa anômala seja emitido com nomes genéricos, exigindo e preenchendo obrigatoriamente **aeroporto de chegada** (IATA e nome), **país de destino** e **datas da viagem** (ida e volta formatadas).
+  - Adicionadas migrações defensivas no SQLite na tabela `bug_fares` (`aeroporto_chegada`, `pais_destino`, `cidade_destino`, `data_ida`, `data_volta`, `preco`, `periodo_texto`) e aprimoramento no repositório para upsert e atualização de links legados.
+  - Atualização dos registros de rotas históricas (América do Sul -> Buenos Aires, Europa -> Madrid) e de alertas existentes com URLs canônicas `tfs`.
+- **Experiência Visual no Cockpit PWA e Notificações no Telegram (`src/public/app.js`, `src/public/styles.css`, `src/services/notifier_telegram.js`)**:
+  - Cockpit PWA: sanitização em tempo real de links antigos via `sanitizarLinkGoogleFlights` e novos badges visuais no cartão de Bug Fare (`.chip-airport` e `.chip-dates`) para aeroporto IATA e período.
+  - Bot do Telegram: `enviarAlertaBugFare` e comando `/bugs` enriquecidos para exibir de forma clara aeroporto de chegada, país e período.
+  - Bot do Telegram: `enviarAlertaOportunidade` agora destaca quando a meta é batida com cálculo de economia em reais e percentual em relação ao teto do usuário, com botão inline interativo `🎯 Alterar Teto` (`teto_help`).
+- **Suíte de Testes Automatizados (114/114 testes passando - 100% verde)**:
+  - Adicionada suíte `tests/aeroportos_bug_fares.test.js` com 6 testes cobrindo resolução de aeroportos, links Protobuf e montagem de cards de Bug Fares.
+  - Expandida suíte `tests/telegram_callbacks.test.js` com testes para economia calculada e callback de teto.
+
 ## [2.7.8] - 2026-10-12
 
 ### 🎯 Persistência Defensiva de Voos Flexíveis Só Ida e Two-Way Sync Remoto com GitHub
