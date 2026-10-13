@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.13.5] - 2026-10-13 — Blindagem Defensiva de resolverCoordenadas (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Serviço Meteorológico e Resolução Geográfica)
+- `src/services/weather_service.js`:
+  - `resolverCoordenadas`: blindada contra entradas nulas (`null`, `undefined`), não-primitivas (`{}`, `[]`), strings vazias (`""`) e strings com apenas espaços (`"   "`, `"\t\n"`). Corrigido bug crítico em que strings vazias casavam via substring (`includes("")`) com o primeiro hub catalogado (`GRU`), disparando requisições espúrias a coordenadas de Guarulhos. Adicionada rejeição de consultas curtas (< 3 caracteres como `'A'`, `'1'`) para evitar falsos positivos e implementada normalização diacrítica para suporte insensível a acentuação em nomes de cidades (ex: `'Brasilia'` -> `BSB`).
+- `tests/weather_service.test.js`:
+  - Adicionado caso de teste de borda adversarial validando entradas vazias/nulas, caracteres curtos e cidades sem acento (suíte com 325 testes aprovados com 100% de sucesso).
+
 ## [v2.13.4] - 2026-10-13 — Blindagem Defensiva de classificarDeltaPreco (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Classificação Estatística de Delta e Z-Score)

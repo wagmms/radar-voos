@@ -25,6 +25,33 @@ describe('Serviço Meteorológico (WeatherService)', () => {
     assert.equal(mia.cidade, 'Miami');
   });
 
+  it('deve lidar defensivamente com casos de borda adversariais em resolverCoordenadas (nulos, espaços, objetos e strings curtas)', () => {
+    // Entradas nulas, vazias ou somente espaços não devem retornar o primeiro aeroporto (antigo bug de falso-positivo GRU)
+    assert.equal(weatherService.resolverCoordenadas(null), null);
+    assert.equal(weatherService.resolverCoordenadas(undefined), null);
+    assert.equal(weatherService.resolverCoordenadas(''), null);
+    assert.equal(weatherService.resolverCoordenadas('   '), null);
+    assert.equal(weatherService.resolverCoordenadas('\t\n'), null);
+
+    // Tipos não primitivos / inválidos
+    assert.equal(weatherService.resolverCoordenadas({}), null);
+    assert.equal(weatherService.resolverCoordenadas([]), null);
+
+    // Caracteres únicos ou strings muito curtas não devem gerar falso positivo espúrio
+    assert.equal(weatherService.resolverCoordenadas('A'), null);
+    assert.equal(weatherService.resolverCoordenadas('S'), null);
+    assert.equal(weatherService.resolverCoordenadas('1'), null);
+
+    // Resolução resiliente insensível a acentuação
+    const bsbSemAcento = weatherService.resolverCoordenadas('Brasilia');
+    assert.ok(bsbSemAcento);
+    assert.equal(bsbSemAcento.codigo, 'BSB');
+
+    const saoSemAcento = weatherService.resolverCoordenadas('Sao Paulo');
+    assert.ok(saoSemAcento);
+    assert.equal(saoSemAcento.pais, 'Brasil');
+  });
+
   it('deve obter previsão climática formatada para destino conhecido', async () => {
     const clima = await weatherService.obterClimaDestino('LIS');
     assert.ok(clima.ok);
@@ -39,3 +66,4 @@ describe('Serviço Meteorológico (WeatherService)', () => {
     assert.equal(desconhecido.resumo, 'Clima não mapeado');
   });
 });
+

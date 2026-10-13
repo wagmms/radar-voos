@@ -103,8 +103,9 @@ export class WeatherService {
    * Identifica as coordenadas de um destino a partir do código ou nome
    */
   resolverCoordenadas(destino) {
-    if (!destino) return null;
+    if (!destino || (typeof destino !== 'string' && typeof destino !== 'number')) return null;
     const clean = String(destino).trim().toUpperCase();
+    if (!clean) return null;
 
     // Busca direta pelo código IATA
     if (COORDENADAS_AEROPORTOS[clean]) {
@@ -126,11 +127,18 @@ export class WeatherService {
       return { codigo: MACRO_PARA_HUB[clean], ...COORDENADAS_AEROPORTOS[MACRO_PARA_HUB[clean]] };
     }
 
-    // Busca por parte da cidade ou nome
+    // Se a busca tiver menos de 3 caracteres e não for IATA direto, rejeita para evitar falso-positivo espúrio (ex: 'A', 'E')
+    if (clean.length < 3) return null;
+
+    const normalizarSemAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const cleanNorm = normalizarSemAcento(clean);
+
+    // Busca por parte da cidade ou nome com suporte a insensibilidade a acentos
     for (const [iata, dados] of Object.entries(COORDENADAS_AEROPORTOS)) {
+      const cidadeNorm = normalizarSemAcento(dados.cidade);
       if (
-        dados.cidade.toUpperCase().includes(clean) ||
-        clean.includes(dados.cidade.toUpperCase()) ||
+        cidadeNorm.includes(cleanNorm) ||
+        cleanNorm.includes(cidadeNorm) ||
         clean.includes(iata)
       ) {
         return { codigo: iata, ...dados };
