@@ -51,6 +51,26 @@ describe('QA Adversarial: extrairPrecoNumerico — casos de borda', () => {
     assert.equal(extrairPrecoNumerico('1.450 Reais brasileiros'), 1450);
   });
 
+  it('deve descartar centavos mesmo antes de sufixos de texto sem inflar 100x o valor', () => {
+    assert.equal(extrairPrecoNumerico('1.450,00 Reais brasileiros'), 1450);
+    assert.equal(extrairPrecoNumerico('R$ 1.500,50 por pessoa'), 1500);
+    assert.equal(extrairPrecoNumerico('980.00 ida e volta'), 980);
+  });
+
+  it('deve rejeitar valores negativos e entradas não-finitas retornando null', () => {
+    assert.equal(extrairPrecoNumerico('-500'), null);
+    assert.equal(extrairPrecoNumerico('R$ -1.250'), null);
+    assert.equal(extrairPrecoNumerico(-500), null);
+    assert.equal(extrairPrecoNumerico(Infinity), null);
+    assert.equal(extrairPrecoNumerico(-Infinity), null);
+    assert.equal(extrairPrecoNumerico(NaN), null);
+  });
+
+  it('deve suportar entradas numéricas válidas e converter floats truncando para inteiro', () => {
+    assert.equal(extrairPrecoNumerico(1500), 1500);
+    assert.equal(extrairPrecoNumerico(1500.75), 1500);
+  });
+
   it('deve retornar null para texto sem dígitos', () => {
     assert.equal(extrairPrecoNumerico('abc'), null);
   });

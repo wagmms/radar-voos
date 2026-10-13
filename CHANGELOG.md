@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.9] - 2026-10-13 — Blindagem Adversarial em extrairPrecoNumerico (Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`extrairPrecoNumerico`):
+  - Corrigido descarte de centavos decimais seguidos de delimitadores ou texto contextual (ex: `"1.450,00 Reais brasileiros"` e `"R$ 1.500,50 por pessoa"`), evitando que a regex `/[,.]\d{2}$/` falhasse na âncora final e concatenasse os dígitos dos centavos, inflacionando o valor em 100x.
+  - Blindada a função contra valores negativos (ex: `"-500"`, `"R$ -1.250"`, `-500`) e tipos não-finitos (`Infinity`, `-Infinity`, `NaN`), retornando `null` defensivamente.
+  - Adicionado suporte defensivo para entradas numéricas diretas (`number`), convertendo valores positivos válidos e truncando decimais para número inteiro de reais.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados 3 novos testes de borda adversariais cobrindo centavos com sufixos textuais, rejeição de valores negativos e suporte defensivo a tipos numéricos.
+
 ## [v2.18.8] - 2026-10-13 — Blindagem Adversarial em resolverCodigoParaLink (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

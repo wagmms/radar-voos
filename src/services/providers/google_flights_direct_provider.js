@@ -67,9 +67,23 @@ export function converterDuracaoParaHoras(str) {
 }
 
 export function extrairPrecoNumerico(str) {
-  if (!str) return null;
+  if (str === null || str === undefined || typeof str === 'symbol') return null;
+
+  if (typeof str === 'number') {
+    if (!Number.isFinite(str) || str <= 0) return null;
+    return Math.floor(str);
+  }
+
   const limpo = String(str).trim();
-  const semCentavos = limpo.replace(/[,.]\d{2}$/, '');
+  if (!limpo) return null;
+
+  // Se for explicitamente negativo (ex: "-500", "R$ -1.250"), não é preço válido
+  if (/^[-–—]|\s[-–—]/.test(limpo)) {
+    return null;
+  }
+
+  // Remove centavos no final ou seguidos de delimitador/texto não-dígito (ex: ",00", ".50")
+  const semCentavos = limpo.replace(/[,.]\d{2}(?!\d)/, '');
   const numeros = semCentavos.replace(/[^\d]/g, '');
   if (!numeros) return null;
   const n = parseInt(numeros, 10);
