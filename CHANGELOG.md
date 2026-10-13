@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.13.4] - 2026-10-13 — Blindagem Defensiva de classificarDeltaPreco (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Classificação Estatística de Delta e Z-Score)
+- `src/domain/calculadora.js`:
+  - `classificarDeltaPreco`: blindada contra desestruturação direta de parâmetros nulos (`classificarDeltaPreco(null)`), evitando `TypeError: Cannot destructure property 'preco' of 'null' as it is null`. Implementada extração defensiva com validação estrita de tipos para `media` e `desvioPadrao`, prevenindo vazamento de strings espúrias no payload de retorno e descartando desvios padrão negativos matematicamente inconsistentes (`desvioPadrao: null`).
+- `tests/calculadora.test.js`:
+  - Adicionados casos de teste de borda adversariais validando chamadas com `null`/`undefined`, desvios em string malformada e valores de desvio padrão negativos (suíte com 324 testes aprovados com 100% de sucesso).
+
 ## [v2.13.3] - 2026-10-13 — Blindagem Defensiva de gerarTfs (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Geração de Protobuf tfs no Google Flights)

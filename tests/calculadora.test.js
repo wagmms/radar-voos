@@ -210,6 +210,20 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(stringNumerica.categoria, 'OPORTUNIDADE');
     assert.strictEqual(stringNumerica.zScore, -1.17);
     assert.strictEqual(stringNumerica.quedaPct, 35);
+
+    // Caso 4 (Adversarial): Chamada com null, undefined ou primitivos não deve lançar TypeError
+    const entradaNula = classificarDeltaPreco(null);
+    assert.strictEqual(entradaNula.categoria, 'INFO');
+    assert.strictEqual(entradaNula.zScore, null);
+    assert.strictEqual(entradaNula.media, null);
+    assert.strictEqual(entradaNula.desvioPadrao, null);
+
+    // Caso 5 (Adversarial): Sanitização estrita contra desvio padrão espúrio (string ou negativo)
+    const desvioStringSujo = classificarDeltaPreco({ preco: 500, media: 1000, desvioPadrao: 'invalido_xyz' });
+    assert.strictEqual(desvioStringSujo.desvioPadrao, null);
+
+    const desvioNegativo = classificarDeltaPreco({ preco: 500, media: 1000, desvioPadrao: -80 });
+    assert.strictEqual(desvioNegativo.desvioPadrao, null);
   });
 
   it('deve converter valores entre moedas com precisão e fallback defensivo', () => {
