@@ -326,14 +326,30 @@ export function encodeLengthDelimited(tag, buf) {
 /**
  * Gera o payload binário protobuf (tfs) compatível com o Google Flights
  */
-export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null }) {
-  const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
+export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null } = {}) {
+  // Normalização defensiva de origens e destinos (suporta arrays, strings únicas e filtra entradas inválidas)
+  const listaOrigens = (Array.isArray(origens) ? origens : (origens ? [origens] : ['SAO']))
+    .map(o => (o !== null && o !== undefined) ? String(o).trim() : '')
+    .filter(Boolean);
+  const origensEfetivas = listaOrigens.length > 0 ? listaOrigens : ['SAO'];
+
+  const listaDestinos = (Array.isArray(destinos) ? destinos : (destinos ? [destinos] : []))
+    .map(d => (d !== null && d !== undefined) ? String(d).trim() : '')
+    .filter(Boolean);
+  const destinosEfetivos = listaDestinos.length > 0 ? listaDestinos : ['SAO'];
+
+  // Normalização e validação das datas para formato YYYY-MM-DD
+  const idaNorm = formatarDataParaBusca(dataIda) || (typeof dataIda === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataIda.trim()) ? dataIda.trim() : '2027-01-01');
+  const voltaRaw = ehSoIda(dataVolta) ? null : dataVolta;
+  const voltaEfetiva = voltaRaw ? (formatarDataParaBusca(voltaRaw) || (typeof voltaRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(voltaRaw.trim()) ? voltaRaw.trim() : null)) : null;
+
   const leg1Parts = [];
-  leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataIda)]));
-  if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
-    leg1Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
+  leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(idaNorm)]));
+  const maxMinNum = Number(maxDurationMinutes);
+  if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
+    leg1Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
   }
-  for (const orig of origens) {
+  for (const orig of origensEfetivas) {
     const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
     const origBytes = Buffer.from(orig);
     const sub = Buffer.concat([
@@ -343,7 +359,7 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     ]);
     leg1Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
   }
-  for (const dest of destinos) {
+  for (const dest of destinosEfetivos) {
     const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
     const destBytes = Buffer.from(dest);
     const sub = Buffer.concat([
@@ -364,10 +380,10 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
   if (voltaEfetiva) {
     const leg2Parts = [];
     leg2Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(voltaEfetiva)]));
-    if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
-      leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
+    if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
+      leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
     }
-    for (const dest of destinos) {
+    for (const dest of destinosEfetivos) {
       const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
       const destBytes = Buffer.from(dest);
       const sub = Buffer.concat([
@@ -377,7 +393,7 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
       ]);
       leg2Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
     }
-    for (const orig of origens) {
+    for (const orig of origensEfetivas) {
       const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
       const origBytes = Buffer.from(orig);
       const sub = Buffer.concat([

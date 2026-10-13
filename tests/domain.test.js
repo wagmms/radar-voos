@@ -165,4 +165,43 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverCodigoParaLink('europa'), 'Europe');
     assert.strictEqual(resolverCodigoParaLink('eua'), 'United States');
   });
+
+  it('gerarTfs: deve lidar defensivamente com entradas adversariais, objetos Date, formatos brasileiros e strings unitárias', () => {
+    // 1. Deve aceitar instâncias de Date e converter para YYYY-MM-DD sem erro de Buffer
+    const dataIdaDate = new Date(Date.UTC(2027, 0, 17));
+    const dataVoltaDate = new Date(Date.UTC(2027, 0, 27));
+    const tfsComDates = gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: dataIdaDate,
+      dataVolta: dataVoltaDate
+    });
+    assert.ok(tfsComDates);
+    assert.strictEqual(typeof tfsComDates, 'string');
+    assert.ok(tfsComDates.length > 20);
+
+    // 2. Deve aceitar strings únicas em origens/destinos e formato de data brasileiro DD/MM/YYYY
+    const tfsStringsUnitarias = gerarTfs({
+      origens: 'GIG',
+      destinos: 'MAD',
+      dataIda: '17/01/2027',
+      dataVolta: '27/01/2027',
+      maxDurationMinutes: '480'
+    });
+    assert.ok(tfsStringsUnitarias);
+    assert.strictEqual(typeof tfsStringsUnitarias, 'string');
+    assert.ok(tfsStringsUnitarias.length > 20);
+
+    // 3. Deve degradar graciosamente com origens/destinos nulos ou arrays com buracos
+    const tfsDefensivo = gerarTfs({
+      origens: ['GRU', null, '  '],
+      destinos: null,
+      dataIda: '2027-01-17',
+      dataVolta: null,
+      maxDurationMinutes: -50
+    });
+    assert.ok(tfsDefensivo);
+    assert.strictEqual(typeof tfsDefensivo, 'string');
+    assert.ok(tfsDefensivo.length > 20);
+  });
 });

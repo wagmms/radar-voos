@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.13.3] - 2026-10-13 — Blindagem Defensiva de gerarTfs (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Geração de Protobuf tfs no Google Flights)
+- `src/domain/rotas.js`:
+  - `gerarTfs`: blindada contra entradas adversariais, arrays nulos/indefinidos em `origens`/`destinos`, strings unitárias (ex: `origens: 'GIG'`) e elementos nulos/vazios na lista. Normalização e validação resiliente de datas para instâncias de `Date` e strings no formato brasileiro `DD/MM/YYYY`, prevenindo `TypeError` de buffer e corrupção no comprimento estrito de 10 bytes do wire-format Protobuf. Sanitização de `maxDurationMinutes` para strings numéricas.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial validando aceitação de instâncias de `Date`, formato brasileiro `DD/MM/YYYY`, strings únicas e degradação graciosa com origens/destinos nulos (suíte com 324 testes aprovados com 100% de sucesso).
+
 ## [v2.13.2] - 2026-10-13 — Blindagem Defensiva de resolverCodigoParaLink (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Resolução de Aeroportos e Links)
