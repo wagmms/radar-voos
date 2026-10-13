@@ -783,6 +783,38 @@ body {
   font-family: var(--font-mono);
 }
 
+.bugfare-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 8px 0;
+}
+
+.bugfare-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.bugfare-chip.chip-airport {
+  background: rgba(6, 182, 212, 0.08);
+  border-color: rgba(6, 182, 212, 0.25);
+  color: #67e8f9;
+}
+
+.bugfare-chip.chip-dates {
+  background: rgba(168, 85, 247, 0.08);
+  border-color: rgba(168, 85, 247, 0.25);
+  color: #d8b4fe;
+}
+
 /* POOL CHAVES CARDS */
 .pool-cards-grid {
   display: grid;

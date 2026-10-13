@@ -9,7 +9,8 @@ import {
   somarDiasData,
   gerarDataPadraoInicial,
   extrairDiasEstadia,
-  ehSoIda
+  ehSoIda,
+  rotaEhSoIda
 } from './domain/rotas.js';
 
 let dbInstance = null;
@@ -121,6 +122,15 @@ function initSchema(db) {
   try { db.exec('ALTER TABLE rotas ADD COLUMN sem_data INTEGER DEFAULT 0;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN dias_estadia INTEGER DEFAULT 10;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN destino_real TEXT;'); } catch (_) {}
+
+  // Migrações dinâmicas para tabela bug_fares
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN aeroporto_chegada TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN pais_destino TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN cidade_destino TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN data_ida TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN data_volta TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN preco REAL;'); } catch (_) {}
+  try { db.exec('ALTER TABLE bug_fares ADD COLUMN periodo_texto TEXT;'); } catch (_) {}
 }
 
 /**
@@ -154,9 +164,11 @@ export const rotasRepo = {
 
     const semData = dados.sem_data ? 1 : 0;
     const diasEstadia = extrairDiasEstadia(dados.dias_estadia || dados.data_volta, 10);
-    const soIda = semData
-      ? (typeof dados.data_volta === 'string' && !/\d/.test(dados.data_volta) && ehSoIda(dados.data_volta))
-      : ehSoIda(dados.data_volta);
+    const soIda = rotaEhSoIda({
+      ...dados,
+      sem_data: semData,
+      dias_estadia: diasEstadia
+    });
     let dataIda = dados.data_ida;
     if (semData && !dataIda) {
       dataIda = gerarDataPadraoInicial(25);
@@ -192,7 +204,7 @@ export const rotasRepo = {
       dados.cabine || 'economy',
       flexibilidadeDias,
       semData,
-      diasEstadia
+      soIda ? null : diasEstadia
     );
 
     return rotasRepo.buscarPorId(res.lastInsertRowid);
@@ -214,19 +226,29 @@ export const rotasRepo = {
     const dataIda = dados.data_ida || rota.data_ida;
 
     let dataVolta;
+    let diasEstadiaFinal = diasEstadia;
     if (dados.data_volta !== undefined) {
-      const soIda = semData
-        ? (typeof dados.data_volta === 'string' && !/\d/.test(dados.data_volta) && ehSoIda(dados.data_volta))
-        : ehSoIda(dados.data_volta);
+      const soIda = rotaEhSoIda({
+        ...rota,
+        ...dados,
+        sem_data: semData,
+        dias_estadia: dados.dias_estadia !== undefined ? dados.dias_estadia : (dados.tipo === 'one_way' || ehSoIda(dados.data_volta) ? null : diasEstadia)
+      });
       if (semData) {
         dataVolta = soIda ? null : somarDiasData(dataIda, diasEstadia);
+        if (soIda) diasEstadiaFinal = null;
       } else {
         dataVolta = soIda ? null : calcularDataVolta(dataIda, dados.data_volta);
+        if (soIda) diasEstadiaFinal = null;
       }
+    } else if (dados.tipo === 'one_way' || dados.tipo_viagem === 'one_way') {
+      dataVolta = null;
+      diasEstadiaFinal = null;
     } else if (dados.dias_estadia !== undefined && semData && rota.data_volta) {
       dataVolta = somarDiasData(dataIda, diasEstadia);
     } else {
       dataVolta = rota.data_volta;
+      if (rotaEhSoIda(rota)) diasEstadiaFinal = null;
     }
 
     const precoAlvo = dados.preco_alvo !== undefined ? (parseFloat(dados.preco_alvo) || null) : rota.preco_alvo;
@@ -235,6 +257,10 @@ export const rotasRepo = {
     const flexibilidadeDias = dados.flexibilidade_dias !== undefined ? (parseInt(dados.flexibilidade_dias, 10) || 0) : (rota.flexibilidade_dias || 0);
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
     const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
+
+    // Se a modalidade mudou de Ida e Volta para Só Ida (ou vice-versa), limpa cache de melhor_opcao_flexivel
+    const modalidadeMudou = Boolean(rota.data_volta) !== Boolean(dataVolta);
+    const melhorOpcaoFlexivel = modalidadeMudou ? null : rota.melhor_opcao_flexivel;
 
     const stmt = db.prepare(`
       UPDATE rotas SET
@@ -251,11 +277,12 @@ export const rotasRepo = {
         sem_data = ?,
         dias_estadia = ?,
         link_google_flights = ?,
-        ativa = ?
+        ativa = ?,
+        melhor_opcao_flexivel = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadia, link, ativa, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -270,9 +297,12 @@ export const rotasRepo = {
       ? Math.min(rota.menor_preco_historico, preco)
       : preco;
 
-    const melhorFlexivelStr = resultado.melhor_opcao_flexivel !== undefined && resultado.melhor_opcao_flexivel !== null
-      ? (typeof resultado.melhor_opcao_flexivel === 'object' ? JSON.stringify(resultado.melhor_opcao_flexivel) : String(resultado.melhor_opcao_flexivel))
-      : null;
+    const updateFlexivel = resultado.melhor_opcao_flexivel !== undefined;
+    const melhorFlexivelStr = updateFlexivel
+      ? (resultado.melhor_opcao_flexivel !== null
+          ? (typeof resultado.melhor_opcao_flexivel === 'object' ? JSON.stringify(resultado.melhor_opcao_flexivel) : String(resultado.melhor_opcao_flexivel))
+          : null)
+      : rota.melhor_opcao_flexivel;
 
     const dataIdaNova = resultado.data_ida || rota.data_ida;
     const dataVoltaNova = resultado.data_volta !== undefined ? resultado.data_volta : rota.data_volta;
@@ -293,7 +323,7 @@ export const rotasRepo = {
         destino_real = COALESCE(?, destino_real),
         clima_destino_resumo = COALESCE(?, clima_destino_resumo),
         clima_temp_media = COALESCE(?, clima_temp_media),
-        melhor_opcao_flexivel = COALESCE(?, melhor_opcao_flexivel),
+        melhor_opcao_flexivel = ?,
         ultima_checagem = ?
       WHERE id = ?
     `);
@@ -438,17 +468,61 @@ export const rotasRepo = {
  * Operações de Bug Fares
  */
 export const bugFaresRepo = {
-  inserir: (titulo, link, tipo) => {
+  inserir: (tituloOuDados, link = null, tipo = 'BUG FARE', dadosExtras = {}) => {
     const db = getDb();
+    let titulo = tituloOuDados;
+    let urlLink = link;
+    let tipoBug = tipo;
+    let aeroporto = dadosExtras.aeroporto_chegada || null;
+    let pais = dadosExtras.pais_destino || null;
+    let cidade = dadosExtras.cidade_destino || null;
+    let dataIda = dadosExtras.data_ida || null;
+    let dataVolta = dadosExtras.data_volta || null;
+    let preco = dadosExtras.preco !== undefined ? dadosExtras.preco : null;
+    let periodoTexto = dadosExtras.periodo_texto || null;
+
+    if (typeof tituloOuDados === 'object' && tituloOuDados !== null) {
+      titulo = tituloOuDados.titulo;
+      urlLink = tituloOuDados.link;
+      tipoBug = tituloOuDados.tipo || 'BUG FARE';
+      aeroporto = tituloOuDados.aeroporto_chegada || null;
+      pais = tituloOuDados.pais_destino || null;
+      cidade = tituloOuDados.cidade_destino || null;
+      dataIda = tituloOuDados.data_ida || null;
+      dataVolta = tituloOuDados.data_volta || null;
+      preco = tituloOuDados.preco !== undefined ? tituloOuDados.preco : null;
+      periodoTexto = tituloOuDados.periodo_texto || null;
+    }
+
     try {
       const stmt = db.prepare(`
-        INSERT INTO bug_fares (titulo, link, tipo)
-        VALUES (?, ?, ?)
+        INSERT INTO bug_fares (
+          titulo, link, tipo,
+          aeroporto_chegada, pais_destino, cidade_destino,
+          data_ida, data_volta, preco, periodo_texto
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
-      return stmt.run(titulo, link, tipo);
+      return stmt.run(titulo, urlLink, tipoBug, aeroporto, pais, cidade, dataIda, dataVolta, preco, periodoTexto);
     } catch (e) {
-      // Ignora erro de link duplicado
-      return null;
+      // Se link já existir, atualiza os campos enriquecidos se estiverem disponíveis
+      try {
+        const updateStmt = db.prepare(`
+          UPDATE bug_fares
+          SET titulo = ?, tipo = ?,
+              aeroporto_chegada = COALESCE(?, aeroporto_chegada),
+              pais_destino = COALESCE(?, pais_destino),
+              cidade_destino = COALESCE(?, cidade_destino),
+              data_ida = COALESCE(?, data_ida),
+              data_volta = COALESCE(?, data_volta),
+              preco = COALESCE(?, preco),
+              periodo_texto = COALESCE(?, periodo_texto)
+          WHERE link = ?
+        `);
+        return updateStmt.run(titulo, tipoBug, aeroporto, pais, cidade, dataIda, dataVolta, preco, periodoTexto, urlLink);
+      } catch (_) {
+        return null;
+      }
     }
   },
 

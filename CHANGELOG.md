@@ -7,6 +7,24 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.6] - 2026-10-12
+
+### 🎯 Resolução Canônica de Destinos (Anti-Genérico) e Blindagem de Links do Google Flights
+- **Eliminação de Destinos Genéricos em Bug Fares (`src/domain/aeroportos.js`)**:
+  - Criado módulo canônico de aeroportos e metrópoles com dados institucionais e geográficos (código IATA, nome do aeroporto, cidade, país e região).
+  - Implementada função `resolverDestinoConcreto` que converte consultas genéricas (ex: "América do Sul", "/m/06_1", "Europa") no destino físico e hub operacional real (ex: Buenos Aires, Argentina - EZE/AEP ou Madrid, Espanha - MAD).
+  - Função `montarCardBugFare`: padroniza todos os alertas com dados completos obrigatórios: Aeroporto de Chegada (código IATA e nome), País de Destino, Datas da Viagem (ida e volta formatadas) e tarifa anômala.
+- **Blindagem de Links no Google Flights (`src/domain/rotas.js` e `src/public/app.js`)**:
+  - Corrigida sintaxe de round-trip em `gerarLinkGoogleFlights`: substituída a palavra inválida `through` pelo parâmetro oficial `returning`, eliminando o redirecionamento indevido para a página inicial do Google Flights.
+  - Implementada resolução prévia de KGMIDs e continentes para códigos IATA reais em `gerarLinkGoogleFlightsCheapest` e `resolverCodigoParaLink`, garantindo que os links Protobuf `tfs` abram diretamente na aba "Cheapest" com a grade de voos carregada.
+  - Adicionada sanitização defensiva no frontend (`sanitizarLinkGoogleFlights` em `app.js`) para higienizar links legados em tempo de renderização.
+- **Aprimoramento do Cockpit PWA e Notificações Telegram**:
+  - `src/public/app.js` e `src/public/styles.css`: novos chips visuais refinados (`.bugfare-chip.chip-airport` e `.bugfare-chip.chip-dates`) exibindo aeroporto, país e período da viagem em cada card de Bug Fare.
+  - `src/services/notifier_telegram.js`: mensagens de alerta e comando `/bugs` enriquecidos com aeroporto de chegada, país e datas completas.
+  - `src/db.js`: migrações dinâmicas na tabela `bug_fares` para persistência dos campos estruturados e ajuste em `rotasRepo.criar` para cálculo correto de `data_volta` no modo flexível sem data (`sem_data: 1`).
+- **Suíte de Testes Expandida (`tests/aeroportos_bug_fares.test.js`)**:
+  - Criados 6 testes unitários cobrindo resolução concreta de aeroportos, montagem de cards de Bug Fare, links canônicos do Google Flights e persistência estruturada no SQLite. Suíte completa aprovada com 108/108 testes passando (100%).
+
 ## [2.7.5] - 2026-10-12
 
 ### 🏛️ Governança Canônica com AGENTS.md e Blindagem Total do Autoloop contra Travamentos

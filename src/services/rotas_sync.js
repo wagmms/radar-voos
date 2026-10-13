@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
 import { rotasRepo, getDb } from '../db.js';
+import { rotaEhSoIda, ehSoIda } from '../domain/rotas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,21 +39,25 @@ export class RotasSyncService {
   salvarArquivoRotas(rotas = null) {
     try {
       const lista = rotas || rotasRepo.listarTodas(false);
-      const sanitizadas = lista.map(r => ({
-        origem: r.origem,
-        destino: r.destino,
-        codigo_origem: r.codigo_origem,
-        codigo_destino: r.codigo_destino,
-        data_ida: r.data_ida,
-        data_volta: r.data_volta,
-        duracao_max_horas: r.duracao_max_horas || 999,
-        preco_alvo: r.preco_alvo || null,
-        cabine: r.cabine || 'economy',
-        flexibilidade_dias: r.flexibilidade_dias || 0,
-        sem_data: r.sem_data ? 1 : 0,
-        dias_estadia: r.dias_estadia || 10,
-        ativa: r.ativa !== undefined ? r.ativa : 1
-      }));
+      const sanitizadas = lista.map(r => {
+        const soIda = rotaEhSoIda(r);
+        return {
+          origem: r.origem,
+          destino: r.destino,
+          codigo_origem: r.codigo_origem,
+          codigo_destino: r.codigo_destino,
+          data_ida: r.data_ida,
+          data_volta: soIda ? null : r.data_volta,
+          duracao_max_horas: r.duracao_max_horas || 999,
+          preco_alvo: r.preco_alvo || null,
+          cabine: r.cabine || 'economy',
+          flexibilidade_dias: r.flexibilidade_dias || 0,
+          sem_data: r.sem_data ? 1 : 0,
+          dias_estadia: soIda ? null : (r.dias_estadia || 10),
+          tipo_viagem: soIda ? 'one_way' : 'round_trip',
+          ativa: r.ativa !== undefined ? r.ativa : 1
+        };
+      });
 
       // Em ambiente de teste, não grava no disco para proteger arquivo canônico
       if (process.env.NODE_ENV === 'test') {
@@ -96,11 +101,25 @@ export class RotasSyncService {
       });
 
       if (match) {
-        rotasRepo.atualizar(match.id, r);
+        const soIdaRemota = rotaEhSoIda(r);
+        rotasRepo.atualizar(match.id, {
+          ...r,
+          tipo: soIdaRemota ? 'one_way' : 'round_trip',
+          tipo_viagem: soIdaRemota ? 'one_way' : 'round_trip',
+          data_volta: soIdaRemota ? null : r.data_volta,
+          dias_estadia: soIdaRemota ? null : r.dias_estadia
+        });
         processadosIds.add(match.id);
         atualizadas++;
       } else {
-        const nova = rotasRepo.criar(r);
+        const soIdaNova = rotaEhSoIda(r);
+        const nova = rotasRepo.criar({
+          ...r,
+          tipo: soIdaNova ? 'one_way' : 'round_trip',
+          tipo_viagem: soIdaNova ? 'one_way' : 'round_trip',
+          data_volta: soIdaNova ? null : r.data_volta,
+          dias_estadia: soIdaNova ? null : r.dias_estadia
+        });
         if (nova && nova.id) {
           processadosIds.add(nova.id);
           inseridas++;
@@ -323,6 +342,15 @@ export class RotasSyncService {
     } finally {
       this.sincronizandoGithub = false;
     }
+  }
+
+  /**
+   * Notifica que uma rota foi alterada (criação, edição ou exclusão) de forma assíncrona
+   * Salva no arquivo local e dispara sincronização remota retornando a Promise
+   */
+  async notificarAlteracaoRotasAsync(motivo = 'alteracao') {
+    this.salvarArquivoRotas();
+    return this.sincronizarComGitHub(`chore(sync): ${motivo} de rotas via Cockpit Web [skip ci]`);
   }
 
   /**

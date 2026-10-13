@@ -181,12 +181,41 @@ class NotifierTelegram {
     return this.enviarMensagem(msg, null, '', false, inlineKeyboard);
   }
 
-  async enviarAlertaBugFare(titulo, link, tipo = '🚨 BUG FARE (ERRO DE TARIFA!)') {
-    let msg = `<b>${escapeHtml(tipo)}</b>\n\n`;
-    msg += `📢 <b>${escapeHtml(titulo)}</b>\n\n`;
-    msg += `⚡ <i>ATENÇÃO: Erros de tarifa esgotam em questão de minutos! Verifique a disponibilidade imediatamente.</i>`;
+  async enviarAlertaBugFare(tituloOuObjeto, link = null, tipo = '🚨 BUG FARE (ERRO DE TARIFA!)') {
+    let titulo = tituloOuObjeto;
+    let urlLink = link;
+    let tipoBug = tipo;
+    let aeroporto = null;
+    let pais = null;
+    let periodo = null;
+    let preco = null;
+    let motivo = null;
 
-    return this.enviarMensagem(msg, link, '⚡ Ver Oferta Imediatamente');
+    if (typeof tituloOuObjeto === 'object' && tituloOuObjeto !== null) {
+      titulo = tituloOuObjeto.titulo;
+      urlLink = tituloOuObjeto.link;
+      tipoBug = tituloOuObjeto.tipo || tipo;
+      aeroporto = tituloOuObjeto.aeroporto_chegada;
+      pais = tituloOuObjeto.pais_destino;
+      periodo = tituloOuObjeto.periodo_texto;
+      preco = tituloOuObjeto.preco;
+      motivo = tituloOuObjeto.motivo;
+    }
+
+    let msg = `<b>${escapeHtml(tipoBug)}</b>\n\n`;
+    msg += `📢 <b>${escapeHtml(titulo)}</b>\n\n`;
+
+    if (aeroporto || pais || periodo) {
+      if (aeroporto) msg += `🛬 <b>Aeroporto de Chegada:</b> ${escapeHtml(aeroporto)}\n`;
+      if (pais) msg += `🌍 <b>País de Destino:</b> ${escapeHtml(pais)}\n`;
+      if (periodo) msg += `📅 <b>Datas da Viagem:</b> ${escapeHtml(periodo)}\n`;
+      if (preco) msg += `💰 <b>Tarifa Anômala:</b> R$ ${Number(preco).toFixed(0)}\n`;
+      if (motivo) msg += `🔍 <i>${escapeHtml(motivo)}</i>\n\n`;
+    }
+
+    msg += `⚡ <i>ATENÇÃO: Erros de tarifa esgotam em questão de minutos! Verifique a disponibilidade imediatamente no Google Flights.</i>`;
+
+    return this.enviarMensagem(msg, urlLink, '⚡ Ver no Google Flights');
   }
 
   /**
@@ -258,12 +287,16 @@ class NotifierTelegram {
     } else if (acao === 'weather') {
       const clima = await weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
       await this.responderCallbackQuery(cb.id, `🌤️ ${clima.resumo || 'Clima obtido'}`);
+      const soIdaRota = ehSoIda(rota.data_volta);
+      const periodoTexto = (soIdaRota || !rota.data_volta)
+        ? `${rota.data_ida} (Só Ida)`
+        : `${rota.data_ida} até ${rota.data_volta}`;
       const textoClima =
         `🌤️ <b>BOLETIM METEOROLÓGICO • ${escapeHtml(clima.cidade || rota.destino)}</b>\n\n` +
         `• Condição: <b>${escapeHtml(clima.condicao || 'Estável')} ${clima.emoji || '🌤️'}</b>\n` +
         `• Temperatura Média: <b>${clima.tempMedia || '--'}°C</b>\n` +
         `• Mínima: ${clima.tempMin || '--'}°C | Máxima: ${clima.tempMax || '--'}°C\n` +
-        `• Período Viagem: ${rota.data_ida}${rota.data_volta ? ' até ' + rota.data_volta : ''}\n\n` +
+        `• Período Viagem: ${periodoTexto}\n\n` +
         `<i>Dados fornecidos por Open-Meteo & wttr.in.</i>`;
       await this.enviarMensagem(textoClima, null, '', false);
     }
@@ -279,16 +312,113 @@ class NotifierTelegram {
 
     if (texto === '/start' || texto === '/ajuda') {
       const resposta =
-        `✈️ <b>RADAR DE VOOS - TRAVEL HACKING ENGINE (v2.1)</b>\n\n` +
+        `✈️ <b>RADAR DE VOOS - TRAVEL HACKING ENGINE (v2.7.5)</b>\n\n` +
         `Comandos disponíveis:\n` +
-        `• /rotas - Lista todas as rotas monitoradas, clima e preços\n` +
+        `• /rotas - Lista todas as rotas monitoradas, IDs, metas e preços\n` +
+        `• /teto [id] [valor] - Atualiza o preço teto/meta de uma rota (ex: <code>/teto 1 2500</code>)\n` +
+        `• /verificar [id] - Força varredura imediata de uma rota (ex: <code>/verificar 1</code>)\n` +
+        `• /paridade [milhas] [programa] - Calcula paridade de milhas em R$ (ex: <code>/paridade 50000 smiles</code>)\n` +
         `• /status - Relatório do pool de busca e sentinela autônomo\n` +
-        `• /clima [cidade] - Previsão do tempo para um destino (ex: /clima Paris)\n` +
+        `• /clima [cidade] - Previsão do tempo para um destino (ex: <code>/clima Paris</code>)\n` +
         `• /bugs - Últimos Bug Fares e Erros de Tarifa detectados\n` +
         `• /varrerbugs - Dispara varredura proativa global nos corredores mundiais\n` +
         `• /ping - Verifica se o robô está ativo e operacional\n\n` +
         `<i>Acesse o Cockpit PWA completo em http://localhost:${config.port}</i>`;
       await this.enviarMensagem(resposta, null, '', false);
+    } else if (texto.startsWith('/teto') || texto.startsWith('/meta')) {
+      const partes = texto.split(/\s+/).filter(Boolean);
+      if (partes.length < 3) {
+        await this.enviarMensagem('Formato: <code>/teto [id_da_rota] [valor]</code>\nExemplo: <code>/teto 1 2500</code> para definir teto de R$ 2.500 na rota #1.', null, '', false);
+        return;
+      }
+      const rotaId = parseInt(partes[1], 10);
+      const novoTeto = parseFloat(partes[2].replace(',', '.'));
+      if (!rotaId || isNaN(novoTeto) || novoTeto <= 0) {
+        await this.enviarMensagem('Informe um ID de rota válido e um valor de preço numérico.', null, '', false);
+        return;
+      }
+      const rota = rotasRepo.buscarPorId(rotaId);
+      if (!rota) {
+        await this.enviarMensagem(`Rota #${rotaId} não encontrada no banco de dados. Envie <code>/rotas</code> para listar os IDs.`, null, '', false);
+        return;
+      }
+      rotasRepo.atualizar(rotaId, { preco_alvo: novoTeto });
+      const ehSoIdaRota = ehSoIda(rota.data_volta);
+      const escopo = ehSoIdaRota ? 'Apenas Ida' : 'Ida e Volta';
+      await this.enviarMensagem(
+        `🎯 <b>TETO ATUALIZADO COM SUCESSO!</b>\n\n` +
+        `• Rota #${rota.id}: <b>${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}</b>\n` +
+        `• Novo Teto: <b>R$ ${novoTeto.toFixed(2).replace('.', ',')}</b> (<i>${escopo}</i>)\n` +
+        `• Preço Atual: ${rota.preco_atual ? `R$ ${rota.preco_atual.toFixed(2).replace('.', ',')}` : 'Aguardando varredura'}\n\n` +
+        `<i>O Radar alertará assim que encontrar tarifas abaixo desta meta.</i>`,
+        null,
+        '',
+        false
+      );
+    } else if (texto.startsWith('/verificar') || texto.startsWith('/checar')) {
+      const partes = texto.split(/\s+/).filter(Boolean);
+      const rotaId = partes[1] ? parseInt(partes[1], 10) : null;
+      if (!rotaId) {
+        await this.enviarMensagem('Informe o ID da rota. Exemplo: <code>/verificar 1</code>\nEnvie <code>/rotas</code> para ver os IDs disponíveis.', null, '', false);
+        return;
+      }
+      const rota = rotasRepo.buscarPorId(rotaId);
+      if (!rota) {
+        await this.enviarMensagem(`Rota #${rotaId} não encontrada. Envie <code>/rotas</code> para listar os IDs.`, null, '', false);
+        return;
+      }
+      await this.enviarMensagem(`🔍 <i>Iniciando varredura imediata para #${rota.id} (${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)})...</i>`, null, '', false);
+      try {
+        const { FlightScanner } = await import('./flight_scanner.js');
+        const res = await FlightScanner.escanearRota(rota);
+        if (res.sucesso && res.encontrou) {
+          const ehSoIdaRota = ehSoIda(rota.data_volta);
+          const escopo = ehSoIdaRota ? 'Apenas Ida' : 'Ida e Volta';
+          const metaAtingida = rota.preco_alvo && res.oferta.preco <= rota.preco_alvo;
+          let msgRet =
+            `✅ <b>VARREDURA CONCLUÍDA • ROTA #${rota.id}</b>\n\n` +
+            `• Rota: <b>${escapeHtml(rota.origem)} ➔ ${escapeHtml(res.oferta.destinoReal || rota.destino)}</b> (${escopo})\n` +
+            `• Menor Preço: <b>R$ ${res.oferta.preco.toFixed(2).replace('.', ',')}</b>\n` +
+            `• Teto Definido: ${rota.preco_alvo ? `R$ ${rota.preco_alvo.toFixed(2).replace('.', ',')} ${metaAtingida ? '🎯 <b>(META BATIDA!)</b>' : ''}` : 'Sem teto'}\n` +
+            `• Voo: ${escapeHtml(res.oferta.detalhes || '-')}\n\n` +
+            `🔗 <a href="${escapeHtml(res.oferta.link)}">Abrir Oferta no Google Flights</a>`;
+          await this.enviarMensagem(msgRet, null, '', false);
+        } else {
+          await this.enviarMensagem(`ℹ️ Varredura concluída: ${res.mensagem || 'Nenhum voo encontrado nos filtros atuais.'}`, null, '', false);
+        }
+      } catch (err) {
+        await this.enviarMensagem(`⚠️ Erro ao checar rota: ${escapeHtml(err.message)}`, null, '', false);
+      }
+    } else if (texto.startsWith('/paridade')) {
+      const partes = texto.split(/\s+/).filter(Boolean);
+      partes.shift();
+      const qtdMilhasStr = partes[0] ? partes[0].replace(/\./g, '') : null;
+      const programa = partes[1] ? partes[1].toLowerCase() : 'smiles';
+      const qtdMilhas = qtdMilhasStr ? parseInt(qtdMilhasStr, 10) : 50000;
+
+      const cotacoesMilheiro = {
+        smiles: 17.50,
+        latam: 24.00,
+        latampass: 24.00,
+        livelo: 35.00,
+        azul: 20.00,
+        tudoazul: 20.00,
+        iberia: 65.00,
+        tap: 32.00
+      };
+
+      const precoMilheiro = cotacoesMilheiro[programa] || 17.50;
+      const valorReais = (qtdMilhas / 1000) * precoMilheiro;
+      const nomePrograma = programa.toUpperCase();
+
+      const repParidade =
+        `✈️ <b>CALCULADORA DE PARIDADE DE MILHAS</b>\n\n` +
+        `• Quantidade: <b>${qtdMilhas.toLocaleString('pt-BR')} milhas/pontos</b>\n` +
+        `• Programa: <b>${nomePrograma}</b>\n` +
+        `• Cotação Referência: <b>R$ ${precoMilheiro.toFixed(2).replace('.', ',')}/milheiro</b>\n` +
+        `• Equivalente em Reais: <b>R$ ${valorReais.toFixed(2).replace('.', ',')}</b>\n\n` +
+        `💡 <i>Dica: Se o preço da passagem em reais for menor que R$ ${valorReais.toFixed(0)}, vale mais pagar em dinheiro e acumular milhas!</i>`;
+      await this.enviarMensagem(repParidade, null, '', false);
     } else if (texto.startsWith('/clima')) {
       const partes = texto.split(' ');
       partes.shift();
@@ -328,21 +458,27 @@ class NotifierTelegram {
 
       let resposta = `✈️ <b>ROTAS MONITORADAS (${rotas.length})</b>\n\n`;
       for (const r of rotas.slice(0, 10)) {
-        const precoStr = r.preco_atual ? `R$ ${r.preco_atual.toFixed(2)}` : 'Aguardando checagem';
+        const precoStr = r.preco_atual ? `R$ ${r.preco_atual.toFixed(2).replace('.', ',')}` : 'Aguardando checagem';
         const silenciada = rotasRepo.estaSilenciada(r) ? ' 🔕 [Silenciada]' : '';
         const climaStr = r.clima_destino_resumo ? ` | 🌤️ ${r.clima_destino_resumo}` : '';
         const ehSoIdaRota = ehSoIda(r.data_volta);
         const escopoTeto = ehSoIdaRota ? 'Apenas Ida' : 'Ida e Volta';
         const tagFlex = r.sem_data ? ` 🗓️ [Flexível • ${escopoTeto}]` : (r.flexibilidade_dias > 0 ? ` [±${r.flexibilidade_dias}d FLEX]` : '');
+        const metaBatida = r.preco_atual && r.preco_alvo && r.preco_atual <= r.preco_alvo;
 
-        resposta += `• <b>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</b>${tagFlex}${silenciada}\n`;
+        resposta += `• [ID #${r.id}] <b>${escapeHtml(r.origem)} ➔ ${escapeHtml(r.destino)}</b>${tagFlex}${silenciada}\n`;
         resposta += r.sem_data
           ? `  📅 Melhor período: ${r.data_ida}${r.data_volta && !ehSoIdaRota ? ' até ' + r.data_volta : ''} (${escopoTeto})\n`
           : `  📅 ${r.data_ida}${r.data_volta && !ehSoIdaRota ? ' até ' + r.data_volta : ''} (${escopoTeto})\n`;
-        resposta += `  💰 Preço Atual: <b>${precoStr}</b> | Meta/Teto: ${r.preco_alvo ? `R$ ${r.preco_alvo.toFixed(2)} (${escopoTeto})` : '-'}\n`;
+        resposta += `  💰 Preço Atual: <b>${precoStr}</b> | Meta/Teto: ${r.preco_alvo ? `R$ ${r.preco_alvo.toFixed(2).replace('.', ',')} (${escopoTeto})` : '-'}\n`;
+        if (metaBatida) {
+          const economia = (r.preco_alvo - r.preco_atual).toFixed(2).replace('.', ',');
+          resposta += `  🎯 <b>DENTRO DO TETO!</b> (Economia de R$ ${economia})\n`;
+        }
         resposta += `  🌡️ ${escapeHtml(r.termometro || 'Sem dados')}${climaStr}\n\n`;
       }
 
+      resposta += `💡 <i>Use /teto [id] [valor] para alterar o limite ou /verificar [id] para checar agora.</i>`;
       await this.enviarMensagem(resposta, null, '', false);
     } else if (texto === '/bugs') {
       const bugs = bugFaresRepo.listarRecentes(8);
@@ -353,7 +489,14 @@ class NotifierTelegram {
 
       let resposta = `🚨 <b>ÚLTIMOS BUG FARES DETECTADOS</b>\n\n`;
       for (const b of bugs) {
-        resposta += `• <b>${escapeHtml(b.titulo)}</b>\n  🏷️ <i>${escapeHtml(b.tipo)}</i>\n  🔗 <a href="${escapeHtml(b.link)}">Ver no Google Flights</a>\n\n`;
+        resposta += `• <b>${escapeHtml(b.titulo)}</b>\n`;
+        if (b.aeroporto_chegada || b.pais_destino) {
+          resposta += `  🛬 Chegada: <b>${escapeHtml(b.aeroporto_chegada || '-')}</b> • 🌍 <b>${escapeHtml(b.pais_destino || '-')}</b>\n`;
+        }
+        if (b.periodo_texto) {
+          resposta += `  📅 Datas: ${escapeHtml(b.periodo_texto)}\n`;
+        }
+        resposta += `  🏷️ <i>${escapeHtml(b.tipo)}</i>\n  🔗 <a href="${escapeHtml(b.link)}">Ver no Google Flights</a>\n\n`;
       }
       await this.enviarMensagem(resposta, null, '', false);
     } else if (texto === '/varrerbugs' || texto === '/radar') {
@@ -380,7 +523,7 @@ class NotifierTelegram {
         await this.enviarMensagem(`⚠️ Falha ao executar varredura: ${escapeHtml(err.message)}`, null, '', false);
       }
     } else if (texto === '/ping') {
-      await this.enviarMensagem('🏓 Pong! O Radar de Voos v2.5.2 está 100% online e operante.', null, '', false);
+      await this.enviarMensagem('🏓 Pong! O Radar de Voos v2.7.5 está 100% online e operante.', null, '', false);
     }
   }
 }

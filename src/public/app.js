@@ -514,11 +514,41 @@ function renderizarRotas() {
   }).join('');
 }
 
+function sanitizarLinkGoogleFlights(link, bug = {}) {
+  if (!link) return 'https://www.google.com/travel/flights';
+  let url = String(link);
+
+  // 1. Corrige palavra inválida 'through' que faz o Google Flights cair na página inicial
+  url = url.replace(/\bthrough\b/gi, 'returning');
+
+  // 2. Corrige continentes ou KGMIDs que quebram o Google Flights
+  if (url.includes('/m/06_1') || url.includes('South%20America') || url.includes('Am%C3%A9rica%20do%20Sul')) {
+    url = url.replace(/\/m\/06_1|South%20America|Am%C3%A9rica%20do%20Sul/g, 'EZE');
+  }
+  if (url.includes('/m/02j9z') || url.includes('Europe') || url.includes('Europa')) {
+    url = url.replace(/\/m\/02j9z|Europe|Europa/g, 'MAD');
+  }
+  if (url.includes('/m/09c7w0') || url.includes('United%20States') || url.includes('Estados%20Unidos')) {
+    url = url.replace(/\/m\/09c7w0|United%20States|Estados%20Unidos/g, 'MIA');
+  }
+
+  // 3. Se o bug possui aeroporto concreto e datas, assegura query canônica direta
+  if (bug.aeroporto_chegada && bug.data_ida && url.includes('?q=')) {
+    const iataChegada = bug.aeroporto_chegada.split('-')[0].trim();
+    if (iataChegada && iataChegada.length === 3) {
+      const voltaParam = bug.data_volta ? `+returning+${bug.data_volta}` : '+one-way';
+      url = `https://www.google.com/travel/flights?q=Flights+from+SAO+to+${iataChegada}+on+${bug.data_ida}${voltaParam}&hl=pt-BR&gl=BR&curr=BRL`;
+    }
+  }
+
+  return url;
+}
+
 // Renderização Bug Fares
 function renderizarBugFares() {
   if (!bugfaresContainer) return;
 
-  if (state.bugFares.length === 0) {
+  if (!state.bugFares || state.bugFares.length === 0) {
     bugfaresContainer.innerHTML = `
       <div style="text-align: center; padding: 48px 20px; background: var(--bg-surface); border: 1px dashed var(--border-subtle); border-radius: var(--radius-lg);">
         <div style="font-size: 2.2rem; margin-bottom: 12px;">🧭</div>
@@ -541,17 +571,50 @@ function renderizarBugFares() {
     const badgeCor = ehCritico ? 'border-color: rgba(244, 63, 94, 0.4);' : (ehZscore ? 'border-color: rgba(245, 158, 11, 0.4);' : '');
     const badgeIcon = ehCritico ? '🚨' : (ehZscore ? '⚡' : '✈️');
 
+    // Parse defensivo de títulos antigos ou campos estruturados ricos
+    let aeroporto = bug.aeroporto_chegada;
+    let pais = bug.pais_destino;
+    let datas = bug.periodo_texto;
+
+    if (!aeroporto && bug.titulo) {
+      if (bug.titulo.includes('América do Sul') || bug.titulo.includes('AMERICA_SUL')) {
+        aeroporto = 'EZE - Aeroporto Internacional Ministro Pistarini (Ezeiza)';
+        pais = 'Argentina';
+      } else if (bug.titulo.includes('Europa') || bug.titulo.includes('EUROPA')) {
+        aeroporto = 'MAD - Aeroporto Adolfo Suárez Madrid-Barajas';
+        pais = 'Espanha';
+      }
+    }
+
+    if (!datas && bug.data_ida) {
+      datas = bug.data_volta ? `Ida: ${bug.data_ida} ➔ Volta: ${bug.data_volta}` : `Ida: ${bug.data_ida} (Só Ida)`;
+    }
+
+    const linkSeguro = sanitizarLinkGoogleFlights(bug.link, bug);
+
+    // Título sem termos genéricos
+    let tituloExibicao = bug.titulo || 'Bug Fare';
+    if (tituloExibicao.includes('América do Sul')) {
+      tituloExibicao = tituloExibicao.replace('América do Sul', 'Buenos Aires, Argentina (EZE)');
+    } else if (tituloExibicao.includes('Europa (Geral)') || tituloExibicao.includes('➔ Europa')) {
+      tituloExibicao = tituloExibicao.replace('Europa (Geral)', 'Madrid, Espanha (MAD)').replace('➔ Europa', '➔ Madrid, Espanha (MAD)');
+    }
+
     return `
       <div class="bugfare-card" style="${badgeCor}">
         <div class="bugfare-info">
-          <h4>${escapeHtml(bug.titulo)}</h4>
+          <h4>${escapeHtml(tituloExibicao)}</h4>
+          <div class="bugfare-badges">
+            ${aeroporto ? `<span class="bugfare-chip chip-airport" title="Aeroporto de Chegada e País">🛬 <b>${escapeHtml(aeroporto)}</b> • 🌍 ${escapeHtml(pais || '')}</span>` : ''}
+            ${datas ? `<span class="bugfare-chip chip-dates" title="Datas da Viagem">📅 <b>${escapeHtml(datas)}</b></span>` : ''}
+          </div>
           <div class="bugfare-meta">
             <span style="font-weight: 600; color: ${ehCritico ? 'var(--rose)' : (ehZscore ? 'var(--amber)' : 'var(--cyan)')};">
               ${badgeIcon} ${escapeHtml(bug.tipo || 'Bug Fare')}
             </span> • Registrado em: ${bug.detectado_em || 'Hoje'}
           </div>
         </div>
-        <a href="${bug.link}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="white-space: nowrap;">
+        <a href="${escapeHtml(linkSeguro)}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="white-space: nowrap;">
           <span>Ver no Google Flights ↗</span>
         </a>
       </div>

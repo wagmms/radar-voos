@@ -1,5 +1,5 @@
 import { rotasRepo } from '../../db.js';
-import { resolverDestino, validarPeriodo, calcularDataVolta, extrairDiasEstadia, ehSoIda } from '../../domain/rotas.js';
+import { resolverDestino, validarPeriodo, calcularDataVolta, extrairDiasEstadia, ehSoIda, rotaEhSoIda } from '../../domain/rotas.js';
 import { FlightScanner } from '../../services/flight_scanner.js';
 import { weatherService } from '../../services/weather_service.js';
 import { telemetryEvents } from '../../services/telemetry_events.js';
@@ -119,9 +119,13 @@ export async function rotasRoutes(fastify) {
     }
 
     const diasEstadiaEfetivo = extrairDiasEstadia(dias_estadia || data_volta, 10);
-    const soIda = ehSemData
-      ? (typeof data_volta === 'string' && !/\d/.test(data_volta) && ehSoIda(data_volta))
-      : ehSoIda(data_volta);
+    const soIda = rotaEhSoIda({
+      tipo: body.tipo,
+      tipo_viagem: body.tipo_viagem,
+      data_volta,
+      sem_data: ehSemData,
+      dias_estadia: dias_estadia !== undefined ? dias_estadia : (data_volta && /\d/.test(data_volta) ? diasEstadiaEfetivo : null)
+    });
 
     let voltaCalculada = null;
     if (data_ida && !ehSemData) {
@@ -146,12 +150,20 @@ export async function rotasRoutes(fastify) {
       cabine: cabine || 'economy',
       flexibilidade_dias: parseInt(flexibilidade_dias, 10) || 0,
       sem_data: ehSemData ? 1 : 0,
-      dias_estadia: diasEstadiaEfetivo,
+      dias_estadia: soIda ? null : diasEstadiaEfetivo,
+      tipo: soIda ? 'one_way' : 'round_trip',
+      tipo_viagem: soIda ? 'one_way' : 'round_trip',
       clima_destino_resumo: climaPreliminar?.ok ? climaPreliminar.resumo : null,
       clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
     });
 
-    rotasSync.notificarAlteracaoRotas('criacao');
+    try {
+      await Promise.race([
+        rotasSync.notificarAlteracaoRotasAsync('criacao'),
+        new Promise(res => setTimeout(res, 3500))
+      ]);
+    } catch (_) {}
+
     telemetryEvents.emitirAtualizacao('nova_rota', { rota: novaRota });
     return reply.code(201).send({ ok: true, rota: novaRota });
   });
@@ -177,12 +189,30 @@ export async function rotasRoutes(fastify) {
       }
     }
 
+    const soIda = rotaEhSoIda({
+      ...rota,
+      ...body,
+      sem_data: ehSemData,
+      data_volta: body.data_volta,
+      dias_estadia: body.dias_estadia !== undefined ? body.dias_estadia : (body.tipo === 'one_way' || ehSoIda(body.data_volta) ? null : rota.dias_estadia)
+    });
+
     const rotaAtualizada = rotasRepo.atualizar(id, {
       ...body,
+      tipo: soIda ? 'one_way' : 'round_trip',
+      tipo_viagem: soIda ? 'one_way' : 'round_trip',
+      data_volta: soIda ? null : body.data_volta,
+      dias_estadia: soIda ? null : (body.dias_estadia !== undefined ? extrairDiasEstadia(body.dias_estadia, 10) : rota.dias_estadia),
       sem_data: body.sem_data !== undefined ? (ehSemData ? 1 : 0) : undefined
     });
 
-    rotasSync.notificarAlteracaoRotas('atualizacao');
+    try {
+      await Promise.race([
+        rotasSync.notificarAlteracaoRotasAsync('atualizacao'),
+        new Promise(res => setTimeout(res, 3500))
+      ]);
+    } catch (_) {}
+
     telemetryEvents.emitirAtualizacao('rota_atualizada', { rota: rotaAtualizada });
     return { ok: true, rota: rotaAtualizada };
   });
@@ -195,7 +225,12 @@ export async function rotasRoutes(fastify) {
       return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
     }
 
-    rotasSync.notificarAlteracaoRotas('remocao');
+    try {
+      await Promise.race([
+        rotasSync.notificarAlteracaoRotasAsync('remocao'),
+        new Promise(res => setTimeout(res, 3500))
+      ]);
+    } catch (_) {}
     telemetryEvents.emitirAtualizacao('rota_removida', { id });
     return { ok: true, mensagem: 'Rota removida com sucesso' };
   });
@@ -249,8 +284,10 @@ export async function rotasRoutes(fastify) {
 
   // Forçar sincronização imediata com o GitHub (Two-Way Sync - Push)
   fastify.post('/api/rotas/sincronizar-github', async (request, reply) => {
+    rotasSync.salvarArquivoRotas();
     const resSync = await rotasSync.sincronizarComGitHub('chore(sync): sincronização manual de rotas via Cockpit');
-    return resSync;
+    const rotas = rotasRepo.listarTodas(false);
+    return { ...resSync, rotas, totalRotas: rotas.length };
   });
 
   // Forçar verificação imediata de uma rota específica

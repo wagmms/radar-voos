@@ -100,8 +100,8 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
   it('deve gerar links canônicos estruturados do Google Flights', () => {
     const linkRoundTrip = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', '2026-11-24');
     assert.match(linkRoundTrip, /google\.com\/travel\/flights/);
-    assert.match(linkRoundTrip, /Flights%20to%20LIS%20from%20GRU/);
-    assert.match(linkRoundTrip, /through%202026-11-24/);
+    assert.match(linkRoundTrip, /Flights%20from%20GRU%20to%20LIS/);
+    assert.match(linkRoundTrip, /returning%202026-11-24/);
 
     const linkOneWay = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', null);
     assert.match(linkOneWay, /one-way/);

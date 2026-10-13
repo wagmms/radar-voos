@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.7.5)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.7.6)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.5 operacional (102/102 testes JS + 8/8 testes Python passando). Diretrizes de engenharia consolidadas no `AGENTS.md` e integradas ao autoloop. Autoloop blindado contra travamentos (timeout estrito de 15m / 900s, limpeza automática de travas residuais do Git, auto-kill com `stop_process_group` e auto-rollback defensivo). Notificações no Telegram calibradas para alertar exclusivamente novas funcionalidades (`feat:`), silenciando commits secundários com cooldown de 5 min.
+- **Estado Geral**: 🟢 Radar v2.7.6 operacional com 108/108 testes passando (100%). Destinos genéricos eliminados dos Bug Fares (exibindo obrigatoriamente aeroporto de chegada IATA/nome, país de destino e datas). Links para o Google Flights blindados com sintaxe canônica `returning` e Protobuf `tfs` (aba Cheapest), eliminando redirecionamentos indevidos para a página inicial.
 - **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
-- **Última Tarefa Concluída**: Criado `AGENTS.md` canônico na raiz do repositório definindo padrões de arquitetura (Fastify 4, SQLite WAL, Scrapling, PWA anti-slop); blindado o autoloop (`scripts/autoloop_radarvoos.py`, `autoloop-radarvoos` e `tests/test_autoloop_radarvoos_throttling.py`) contra travamentos com timeout rígido de 15 minutos (900s), limpeza automática de travas residuais (`.git/index.lock`), injeção dinâmica do `AGENTS.md` no prompt e filtro cirúrgico que envia relatórios no Telegram apenas para commits com prefixo `feat:` (8 testes unitários aprovados).
+- **Última Tarefa Concluída**: Criado módulo `src/domain/aeroportos.js` com catálogo de aeroportos e resolução de destinos concretos (`resolverDestinoConcreto`, `montarCardBugFare`). Corrigida a geração de links em `src/domain/rotas.js` (eliminando a palavra `through` e KGMIDs soltos). Atualizado o Cockpit PWA (`src/public/app.js` e `src/public/styles.css`) e o bot do Telegram (`src/services/notifier_telegram.js`) com badges de aeroporto, país e datas. Criados 6 testes em `tests/aeroportos_bug_fares.test.js`.
 
 ---
 

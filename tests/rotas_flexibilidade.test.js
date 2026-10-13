@@ -4,7 +4,8 @@ import {
   somarDiasData,
   gerarCombinacoesFlexibilidade,
   gerarJanelasExploracaoSemData,
-  ehSoIda
+  ehSoIda,
+  rotaEhSoIda
 } from '../src/domain/rotas.js';
 import { rotasRepo } from '../src/db.js';
 
@@ -210,5 +211,23 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
 
     rotasRepo.excluir(rotaRound.id);
     rotasRepo.excluir(rotaOneWay.id);
+  });
+
+  it('rotaEhSoIda deve discernir com precisão entre Só Ida e Ida e Volta em qualquer cenário', () => {
+    // 1. Rota de data fixa com ida e volta
+    assert.strictEqual(rotaEhSoIda({ data_ida: '2026-11-10', data_volta: '2026-11-20' }), false);
+
+    // 2. Rota de data fixa só ida
+    assert.strictEqual(rotaEhSoIda({ data_ida: '2026-11-10', data_volta: null }), true);
+    assert.strictEqual(rotaEhSoIda({ data_ida: '2026-11-10', data_volta: 'Só Ida' }), true);
+
+    // 3. Rota sem data com dias de estadia configurados (DEVE ser Ida e Volta)
+    assert.strictEqual(rotaEhSoIda({ sem_data: 1, dias_estadia: 15, data_volta: null }), false);
+    assert.strictEqual(rotaEhSoIda({ sem_data: 1, dias_estadia: 10, data_volta: '10 dias' }), false);
+
+    // 4. Rota sem data explicitamente só ida
+    assert.strictEqual(rotaEhSoIda({ sem_data: 1, data_volta: 'Só Ida' }), true);
+    assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo: 'one_way' }), true);
+    assert.strictEqual(rotaEhSoIda({ sem_data: 1, dias_estadia: 0, data_volta: null }), true);
   });
 });

@@ -201,6 +201,18 @@ export function validarPeriodo(dataIdaStr, dataVoltaStr, tipo, semData = false) 
   return { ok: true };
 }
 
+export const KGMID_PARA_HUB_IATA = {
+  "/m/02j9z": "MAD",
+  "/m/09c7w0": "MIA",
+  "/m/05r4w": "LIS",
+  "/m/06mkj": "MAD",
+  "/m/0f8l9c": "CDG",
+  "/m/03rjj": "FCO",
+  "/m/01n7q": "SCL",
+  "/m/06_1": "EZE",
+  "/m/02j1x": "TYO"
+};
+
 export const KGMID_PARA_NOME = {
   "/m/02j9z": "Europe",
   "/m/09c7w0": "United States",
@@ -214,16 +226,50 @@ export const KGMID_PARA_NOME = {
 };
 
 /**
- * Converte códigos IATA, KGMIDs ou nomes com parênteses em termos aceitos pelo Google Flights
+ * Converte códigos IATA, KGMIDs, regiões ou nomes com parênteses em termos aceitos e funcionais no Google Flights
  */
 export function resolverCodigoParaLink(cod) {
   if (!cod) return 'SAO';
   const str = String(cod).trim();
   const matchIata = str.match(/\(([A-Z]{3})\)/);
   if (matchIata) return matchIata[1];
-  if (KGMID_PARA_NOME[str]) return KGMID_PARA_NOME[str];
-  if (str.startsWith('/m/') || str.startsWith('/g/')) return str.replace(/^\/[mg]\//, '');
+  if (KGMID_PARA_HUB_IATA[str]) return KGMID_PARA_HUB_IATA[str];
+  const limpoLower = normalizarTexto(str);
+  if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'EZE';
+  if (limpoLower === 'europa' || limpoLower === 'europe') return 'MAD';
+  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'MIA';
+  if (limpoLower === 'asia') return 'TYO';
+  if (str.startsWith('/m/') || str.startsWith('/g/')) return 'EZE';
   return str;
+}
+
+/**
+ * Determina se uma rota ou dados de rota configuram um voo de Só Ida
+ */
+export function rotaEhSoIda(rotaOuDados) {
+  if (!rotaOuDados) return false;
+  if (typeof rotaOuDados === 'string') return ehSoIda(rotaOuDados);
+
+  if (rotaOuDados.tipo === 'one_way' || rotaOuDados.tipo === 'so_ida' || rotaOuDados.tipo_viagem === 'one_way') return true;
+  if (rotaOuDados.tipo === 'round_trip' || rotaOuDados.tipo === 'ida_e_volta' || rotaOuDados.tipo_viagem === 'round_trip') return false;
+
+  const campoVolta = rotaOuDados.data_volta !== undefined ? rotaOuDados.data_volta : rotaOuDados.dataVolta;
+  const semData = rotaOuDados.sem_data === 1 || Boolean(rotaOuDados.sem_data);
+
+  if (semData) {
+    if (typeof campoVolta === 'string') {
+      if (ehSoIda(campoVolta)) return true;
+      if (/\d/.test(campoVolta)) return false;
+    }
+    if (campoVolta === null) return true;
+    if (campoVolta === undefined) {
+      if (rotaOuDados.dias_estadia && Number(rotaOuDados.dias_estadia) > 0) return false;
+      return true;
+    }
+    return ehSoIda(campoVolta);
+  }
+
+  return ehSoIda(campoVolta);
 }
 
 /**
@@ -237,13 +283,14 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
   const destinoParam = encodeURIComponent(destinoRes);
 
   if (!dataIda) {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}&hl=pt-BR&gl=BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=BRL`;
   }
 
-  if (dataVolta) {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20through%20${dataVolta}&hl=pt-BR&gl=BR&curr=BRL`;
+  const soIda = ehSoIda(dataVolta);
+  if (!soIda && dataVolta) {
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20returning%20${dataVolta}&hl=pt-BR&gl=BR&curr=BRL`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20to%20${destinoParam}%20from%20${origemParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=BRL`;
   }
 }
 
@@ -273,6 +320,7 @@ export function encodeLengthDelimited(tag, buf) {
  * Gera o payload binário protobuf (tfs) compatível com o Google Flights
  */
 export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null }) {
+  const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
   const leg1Parts = [];
   leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataIda)]));
   if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
@@ -299,14 +347,16 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     leg1Parts.push(Buffer.concat([Buffer.from([0x72]), encodeVarint(sub.length), sub]));
   }
 
+  // Trip type: 0x01 para Só Ida (One-Way), 0x02 para Ida e Volta (Round-Trip)
+  const tripType = voltaEfetiva ? 0x02 : 0x01;
   const rootParts = [
-    Buffer.from([0x08, 0x1c, 0x10, 0x02]),
+    Buffer.from([0x08, 0x1c, 0x10, tripType]),
     encodeLengthDelimited(3, Buffer.concat(leg1Parts))
   ];
 
-  if (dataVolta) {
+  if (voltaEfetiva) {
     const leg2Parts = [];
-    leg2Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataVolta)]));
+    leg2Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(voltaEfetiva)]));
     if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
       leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
     }
@@ -342,10 +392,13 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
  */
 export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
   if (!dataIda) return null;
-  const origens = normalizarParaSerpApi(origemCod).split(',').map(s => s.trim()).filter(Boolean);
-  const destinos = normalizarParaSerpApi(destinoCod).split(',').map(s => s.trim()).filter(Boolean);
+  const origCod = resolverCodigoParaLink(origemCod);
+  const destCod = resolverCodigoParaLink(destinoCod);
+  const origens = normalizarParaSerpApi(origCod).split(',').map(s => s.trim()).filter(Boolean);
+  const destinos = normalizarParaSerpApi(destCod).split(',').map(s => s.trim()).filter(Boolean);
   const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
-  const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta, maxDurationMinutes: maxMin });
+  const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
+  const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
   return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfs}&tfu=EgoIABAAGAAgAigD`;
 }
 
@@ -378,7 +431,9 @@ export function gerarDataPadraoInicial(diasOffset = 30) {
  * Gera janelas de exploração para voo flexível sem data fixa (movido pelo menor preço nos próximos meses)
  */
 export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 10, qtdAmostras = 4, soIda = false } = {}) {
-  const base = dataBase || gerarDataPadraoInicial(25);
+  const agoraStr = gerarDataPadraoInicial(25);
+  // Se dataBase for nula ou anterior à data inicial padrão (ex: drift ou data passada), usa a base atual de hoje
+  const base = (!dataBase || dataBase < agoraStr) ? agoraStr : dataBase;
   const [ano, mes, dia] = base.split('-').map(Number);
   const dataReferencia = new Date(Date.UTC(ano, mes - 1, dia));
 

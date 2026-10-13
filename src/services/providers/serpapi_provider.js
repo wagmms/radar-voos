@@ -1,6 +1,6 @@
 import { FlightProviderInterface } from './flight_provider_interface.js';
 import { serpApiPool } from '../serpapi_pool.js';
-import { normalizarParaSerpApi, gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest } from '../../domain/rotas.js';
+import { normalizarParaSerpApi, gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest, ehSoIda } from '../../domain/rotas.js';
 import { avaliarTermometro, analisarLayoversEStopover } from '../../domain/calculadora.js';
 
 export class SerpApiProvider extends FlightProviderInterface {
@@ -27,6 +27,8 @@ export class SerpApiProvider extends FlightProviderInterface {
     const origemSerp = normalizarParaSerpApi(origemCod);
     const destinoSerp = normalizarParaSerpApi(destinoCod);
     const duracaoMaxMinutos = duracaoMaxHoras && duracaoMaxHoras > 0 ? Math.round(duracaoMaxHoras * 60) : Infinity;
+    const soIda = ehSoIda(dataVolta);
+    const dataVoltaEfetiva = soIda ? null : dataVolta;
 
     const params = new URLSearchParams({
       engine: 'google_flights',
@@ -36,7 +38,7 @@ export class SerpApiProvider extends FlightProviderInterface {
       currency: 'BRL',
       hl: 'pt',
       gl: 'br',
-      type: dataVolta ? '1' : '2',
+      type: dataVoltaEfetiva ? '1' : '2',
       sort_by: '2',
       api_key: chaveInfo.chave,
       adults: String(adultos || 1)
@@ -46,8 +48,8 @@ export class SerpApiProvider extends FlightProviderInterface {
       params.append('max_duration', String(duracaoMaxMinutos));
     }
 
-    if (dataVolta) {
-      params.append('return_date', dataVolta);
+    if (dataVoltaEfetiva) {
+      params.append('return_date', dataVoltaEfetiva);
     }
 
     if (cabine === 'business') {
@@ -197,7 +199,7 @@ export class SerpApiProvider extends FlightProviderInterface {
             currency: 'BRL',
             hl: 'pt',
             gl: 'br',
-            type: dataVolta ? '1' : '2',
+            type: dataVoltaEfetiva ? '1' : '2',
             api_key: chaveInfo.chave
           });
 

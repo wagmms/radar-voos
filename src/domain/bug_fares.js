@@ -1,4 +1,5 @@
 import { TERMOS_BUG_FARE, TERMOS_MARKETING_BANIDOS } from './dicionarios.js';
+import { ehSoIda } from './rotas.js';
 
 /**
  * Classifica um item do feed RSS como Bug Fare autêntico, promoção comercial ou lixo de marketing
@@ -159,7 +160,7 @@ export function detectarBugFareEstatistico({
   // Filtro de ruído: valores inferiores a R$ 40 geralmente são taxas isoladas ou erros de parsing de centavos
   if (!preco || preco < 40) return { ehBugFare: false };
 
-  const ehIdaEVolta = Boolean(dataVolta);
+  const ehIdaEVolta = Boolean(dataVolta) && !ehSoIda(dataVolta);
   const regiao = identificarRegiaoDestino(destinoCod);
   const pisoBase = PISOS_ESTRUTURAIS_BUG_FARE[regiao];
   const multCabine = MULTIPLICADORES_CABINE_BUG_FARE[cabine] || 1.0;

@@ -1,5 +1,5 @@
 import { DICIONARIO_CUSTO_DESTINO } from './dicionarios.js';
-import { normalizarTexto } from './rotas.js';
+import { normalizarTexto, ehSoIda } from './rotas.js';
 
 /**
  * Parser resiliente de preços em formato numérico ou monetário
@@ -97,7 +97,7 @@ export function avaliarCustoDestinoComTotal(destinoReal, destinoOriginal, precoV
     custoTerrestre = diasViagem * valorDiario;
     custoTotalEstimado = precoVoo + custoTerrestre;
     resumoTexto = `${textoBase} | Total ${diasViagem}d: ~R$ ${custoTotalEstimado.toFixed(0)}`;
-  } else if (!dataVoltaStr) {
+  } else if (!dataVoltaStr || ehSoIda(dataVoltaStr)) {
     resumoTexto = `${textoBase} (Só Ida)`;
   }
 

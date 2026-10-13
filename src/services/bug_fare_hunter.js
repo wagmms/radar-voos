@@ -1,5 +1,6 @@
 import { GoogleFlightsDirectProvider } from './providers/google_flights_direct_provider.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
+import { montarCardBugFare } from '../domain/aeroportos.js';
 import { bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
 import { telemetryEvents } from './telemetry_events.js';
@@ -125,40 +126,36 @@ export class BugFareHunter {
           });
 
           if (analise.ehBugFare) {
-            const tituloBug = `🚨 BUG FARE PROATIVO: ${corredor.origem} ➔ ${destinoReal} por R$ ${preco.toFixed(0)}! (${analise.motivo})`;
-            
+            const bugCard = montarCardBugFare({
+              origem: corredor.origem,
+              codigoOrigem: corredor.origem,
+              destino: corredor.labelDestino,
+              codigoDestino: corredor.destino,
+              dataIda,
+              dataVolta,
+              preco,
+              motivo: analise.motivo,
+              tipo: analise.tipo,
+              destinoReal: resultado.oferta.destinoReal || corredor.labelDestino,
+              linkOriginal: resultado.oferta.link
+            });
+
             // Persistência defensiva com deduplicação por link
-            const jaCadastrado = bugFaresRepo.linkJaExiste(resultado.oferta.link);
+            const jaCadastrado = bugFaresRepo.linkJaExiste(bugCard.link);
             if (!jaCadastrado) {
-              bugFaresRepo.inserir(tituloBug, resultado.oferta.link, analise.tipo);
+              bugFaresRepo.inserir(bugCard);
 
               telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
-                titulo: tituloBug,
-                link: resultado.oferta.link,
-                preco,
-                origem: corredor.origem,
-                destino: destinoReal,
+                ...bugCard,
                 severidade: analise.severidade || 'CRITICA'
               });
 
               if (notificar) {
-                await notifierTelegram.enviarAlertaBugFare(
-                  tituloBug,
-                  resultado.oferta.link,
-                  `🚨 ${analise.tipo}`
-                );
+                await notifierTelegram.enviarAlertaBugFare(bugCard);
               }
 
-              bugsEncontrados.push({
-                origem: corredor.origem,
-                destino: destinoReal,
-                preco,
-                link: resultado.oferta.link,
-                motivo: analise.motivo,
-                tipo: analise.tipo,
-                severidade: analise.severidade
-              });
-              console.log(`💥 [BUG FARE ENCONTRADO!] ${tituloBug}`);
+              bugsEncontrados.push(bugCard);
+              console.log(`💥 [BUG FARE ENCONTRADO!] ${bugCard.titulo}`);
             }
           } else {
             console.log(`ℹ️ Corredor ${corredor.origem} ➔ ${corredor.labelDestino}: R$ ${preco.toFixed(0)} (Normal / Sem erro)`);

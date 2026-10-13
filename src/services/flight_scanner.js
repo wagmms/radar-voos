@@ -8,7 +8,8 @@ import {
 import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
-import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData, ehSoIda } from '../domain/rotas.js';
+import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData, ehSoIda, gerarLinkGoogleFlightsCheapest, gerarLinkGoogleFlights } from '../domain/rotas.js';
+import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
 
 export class FlightScanner {
@@ -207,28 +208,41 @@ export class FlightScanner {
     });
 
     if (analiseBug.ehBugFare) {
-      const destinoExibicao = (oferta.destinoReal && oferta.destinoReal !== rota.codigo_destino && oferta.destinoReal !== rota.destino)
-        ? `${oferta.destinoReal} (${rota.destino})`
-        : (rota.destino);
-      const tituloBug = `🚨 BUG FARE: ${rota.origem} ➔ ${destinoExibicao} por R$ ${oferta.preco.toFixed(0)}! (${analiseBug.motivo})`;
-      bugFaresRepo.inserir(tituloBug, oferta.link, analiseBug.tipo);
-
-      telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
-        titulo: tituloBug,
-        link: oferta.link,
-        preco: oferta.preco,
-        rotaId: rota.id,
+      const bugCard = montarCardBugFare({
         origem: rota.origem,
-        destino: destinoExibicao
+        codigoOrigem: rota.codigo_origem,
+        destino: rota.destino,
+        codigoDestino: rota.codigo_destino,
+        dataIda: dataIdaEfetiva,
+        dataVolta: dataVoltaEfetiva,
+        preco: oferta.preco,
+        motivo: analiseBug.motivo,
+        tipo: analiseBug.tipo,
+        destinoReal: oferta.destinoReal || rota.destino_real || null,
+        linkOriginal: oferta.link
       });
 
-      // Alerta de urgência máxima no Telegram (quebra modo noturno)
-      await notifierTelegram.enviarAlertaBugFare(
-        tituloBug,
-        oferta.link,
-        `🚨 ${analiseBug.tipo}`
-      );
+      bugFaresRepo.inserir(bugCard);
+
+      telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
+        ...bugCard,
+        rotaId: rota.id
+      });
+
+      // Alerta de urgência máxima no Telegram com cartão completo (quebra modo noturno)
+      await notifierTelegram.enviarAlertaBugFare(bugCard);
     }
+
+    const destinoInfoRota = resolverDestinoConcreto({
+      destino: rota.destino,
+      codigoDestino: rota.codigo_destino,
+      destinoReal: oferta.destinoReal || rota.destino_real
+    });
+
+    const linkCanonicoRota = (dataIdaEfetiva && destinoInfoRota.iata)
+      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva)
+         || gerarLinkGoogleFlights(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva))
+      : oferta.link;
 
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
       data_ida: rota.sem_data === 1 ? dataIdaEfetiva : undefined,
@@ -239,8 +253,8 @@ export class FlightScanner {
       custo_destino_texto: custoInfo.textoResumo,
       detalhes_voo: `${oferta.duracaoHoras.toFixed(1)}h | ${oferta.detalhes}`,
       dica_stopover: oferta.dicaStopover,
-      link_google_flights: oferta.link,
-      destino_real: oferta.destinoReal || undefined,
+      link_google_flights: linkCanonicoRota || oferta.link,
+      destino_real: `${destinoInfoRota.cidade}, ${destinoInfoRota.pais} (${destinoInfoRota.iata})`,
       clima_destino_resumo: clima.ok ? clima.resumo : null,
       clima_temp_media: clima.ok ? clima.tempMedia : null,
       melhor_opcao_flexivel: melhorOpcaoFlexivel
