@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.38] - 2026-10-13 — Blindagem Adversarial em ehPeriodoNoturno com Injeção Determinística de Horário e Fallback Gracioso (Notificador Telegram)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/notifier_telegram.js`** (`ehPeriodoNoturno`):
+  - Habilitada injeção determinística de parâmetro `dataRef` (suportando instâncias de `Date`, números de timestamp unix e strings de data) para permitir testes determinísticos e validação precisa de limiares noturnos (22h00 a 07h59) sem depender de `new Date()` mutável no relógio do sistema.
+  - Degradação defensiva e graciosa em caso de entradas inválidas, nulas, indefinidas ou datas corrompidas (`NaN`), garantindo fallback para data atual sem nunca lançar `TypeError`.
+- **`tests/telegram_callbacks.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) limiares exatos noturnos (22h00, 23h45, 00h30, 07h59), (2) limiares exatos diurnos (08h00, 14h30, 21h59), (3) timestamps e strings alternativas, e (4) resiliência a `null`, `undefined`, `{}` e datas inválidas.
+
 ## [v2.18.37] - 2026-10-13 — Blindagem Adversarial em extrairDiasEstadia contra Datas de Calendário e Prefixos Textuais (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

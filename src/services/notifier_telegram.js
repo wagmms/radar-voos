@@ -13,9 +13,17 @@ export function escapeHtml(texto) {
     .replace(/"/g, '&quot;');
 }
 
-export function ehPeriodoNoturno() {
-  const agora = new Date();
-  const hora = agora.getHours();
+export function ehPeriodoNoturno(dataRef = new Date()) {
+  let data = dataRef;
+  if (!(data instanceof Date) || isNaN(data.getTime())) {
+    if (typeof dataRef === 'string' || typeof dataRef === 'number') {
+      const d = new Date(dataRef);
+      data = !isNaN(d.getTime()) ? d : new Date();
+    } else {
+      data = new Date();
+    }
+  }
+  const hora = data.getHours();
   // Silencioso entre 22h e 07h59
   return hora >= 22 || hora < 8;
 }

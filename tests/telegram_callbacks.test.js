@@ -396,4 +396,40 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
       notifierTelegram.enviarMensagem = backupEnviar;
     }
   });
+
+  it('ehPeriodoNoturno: deve avaliar com precisão períodos de silêncio (22h às 07h59) e degradar graciosamente para entradas adversariais', () => {
+    // 1. Limiares noturnos (silenciosos): >= 22h ou < 8h
+    const d22h00 = new Date(2026, 9, 13, 22, 0, 0);
+    assert.equal(ehPeriodoNoturno(d22h00), true, '22h00 deve ser considerado noturno');
+
+    const d23h45 = new Date(2026, 9, 13, 23, 45, 0);
+    assert.equal(ehPeriodoNoturno(d23h45), true, '23h45 deve ser considerado noturno');
+
+    const d00h30 = new Date(2026, 9, 13, 0, 30, 0);
+    assert.equal(ehPeriodoNoturno(d00h30), true, '00h30 deve ser considerado noturno');
+
+    const d07h59 = new Date(2026, 9, 13, 7, 59, 59);
+    assert.equal(ehPeriodoNoturno(d07h59), true, '07h59 deve ser considerado noturno');
+
+    // 2. Limiares diurnos (ativos): entre 08h00 e 21h59
+    const d08h00 = new Date(2026, 9, 13, 8, 0, 0);
+    assert.equal(ehPeriodoNoturno(d08h00), false, '08h00 deve ser considerado diurno');
+
+    const d14h30 = new Date(2026, 9, 13, 14, 30, 0);
+    assert.equal(ehPeriodoNoturno(d14h30), false, '14h30 deve ser considerado diurno');
+
+    const d21h59 = new Date(2026, 9, 13, 21, 59, 59);
+    assert.equal(ehPeriodoNoturno(d21h59), false, '21h59 deve ser considerado diurno');
+
+    // 3. Suporte a timestamp numérico e string de data
+    assert.equal(ehPeriodoNoturno(d22h00.getTime()), true, 'Timestamp numérico de 22h deve ser noturno');
+    assert.equal(ehPeriodoNoturno(d14h30.getTime()), false, 'Timestamp numérico de 14h30 deve ser diurno');
+
+    // 4. Casos adversariais: nulo, indefinido, objeto vazio e Date corrompido degradam sem exceção
+    assert.equal(typeof ehPeriodoNoturno(null), 'boolean', 'null não deve lançar erro e retorna booleano');
+    assert.equal(typeof ehPeriodoNoturno(undefined), 'boolean', 'undefined não deve lançar erro e retorna booleano');
+    assert.equal(typeof ehPeriodoNoturno({}), 'boolean', 'Objeto vazio não deve lançar erro');
+    assert.equal(typeof ehPeriodoNoturno(new Date('invalida')), 'boolean', 'Date inválido degrada para booleano seguro');
+    assert.equal(typeof ehPeriodoNoturno('texto_aleatorio_sem_data'), 'boolean', 'String inválida degrada para booleano seguro');
+  });
 });
