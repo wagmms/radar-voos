@@ -1,9 +1,16 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { GoogleFlightsDirectProvider } from './providers/google_flights_direct_provider.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
 import { montarCardBugFare } from '../domain/aeroportos.js';
 import { bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
 import { telemetryEvents } from './telemetry_events.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+export const ARQUIVO_WORKING_BUFFER_PADRAO = path.resolve(__dirname, '../../data/working_buffer.json');
 
 /**
  * Matriz de Corredores Globais de Alta Sensibilidade a Bug Fares
@@ -77,15 +84,148 @@ const ZSCORE_LIMIAR_BUG_FARE = -2.5;
 const QUEDA_PCT_OPORTUNIDADE = 0.30;
 
 export class BugFareHunter {
-  constructor() {
-    this.provedorDirect = new GoogleFlightsDirectProvider();
+  constructor(opcoes = {}) {
+    const config = typeof opcoes === 'string' ? { arquivoBuffer: opcoes } : (opcoes || {});
+    this.provedorDirect = config.provedorDirect || new GoogleFlightsDirectProvider();
     this.indiceRotacao = 0;
+    this.arquivoBuffer = config.arquivoBuffer !== undefined ? config.arquivoBuffer : ARQUIVO_WORKING_BUFFER_PADRAO;
 
     /**
      * Working Buffer em memória: estado leve de leituras recentes por chave de corredor.
      * Estrutura: Map<chaveCorreder, { leituras: number[], ultimoAlerta: { preco, ts, tipo } | null }>
      */
     this._workingBuffer = new Map();
+
+    const carregarAuto = config.carregarNoBoot !== undefined
+      ? Boolean(config.carregarNoBoot)
+      : (process.env.NODE_ENV !== 'test' || config.arquivoBuffer !== undefined);
+
+    if (this.arquivoBuffer && carregarAuto) {
+      this.carregarWorkingBufferDisco();
+    }
+  }
+
+  /**
+   * Limpa todo o Working Buffer em memória (útil para testes e resets)
+   */
+  limparWorkingBuffer() {
+    this._workingBuffer.clear();
+  }
+
+  /**
+   * Persiste o estado atual do Working Buffer em disco de forma atômica.
+   * Utiliza arquivo temporário no mesmo diretório antes do renameSync para evitar corrupção em falhas.
+   * 
+   * @param {string} [caminhoDestino] - Caminho do arquivo JSON de destino
+   * @param {Object} [opcoes]
+   * @param {boolean} [opcoes.forcar=false] - Se true, grava mesmo em ambiente de teste com caminho canônico
+   * @returns {boolean} true se persistido com sucesso, false caso contrário
+   */
+  salvarWorkingBufferDisco(caminhoDestino = this.arquivoBuffer, { forcar = false } = {}) {
+    const caminho = caminhoDestino || this.arquivoBuffer;
+    if (!caminho) return false;
+
+    // Em ambiente de teste com o arquivo canônico padrão, simula sucesso para não poluir o repo
+    if (process.env.NODE_ENV === 'test' && caminho === ARQUIVO_WORKING_BUFFER_PADRAO && !forcar) {
+      return true;
+    }
+
+    let tempFile = null;
+    try {
+      const payload = {
+        versao: 1,
+        atualizadoEm: new Date().toISOString(),
+        totalCorredores: this._workingBuffer.size,
+        corredores: {}
+      };
+
+      for (const [chave, dados] of this._workingBuffer.entries()) {
+        payload.corredores[chave] = {
+          leituras: Array.isArray(dados.leituras) ? dados.leituras.slice(-BUFFER_MAX_LEITURAS) : [],
+          ultimoAlerta: dados.ultimoAlerta ? { ...dados.ultimoAlerta } : null
+        };
+      }
+
+      const dir = path.dirname(caminho);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      tempFile = path.join(dir, `.tmp_wb_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.tmp`);
+      fs.writeFileSync(tempFile, JSON.stringify(payload, null, 2), 'utf-8');
+      fs.renameSync(tempFile, caminho);
+      return true;
+    } catch (err) {
+      console.warn(`⚠️ [BugFareHunter] Falha ao persistir Working Buffer em ${caminho}: ${err.message}`);
+      if (tempFile && fs.existsSync(tempFile)) {
+        try { fs.unlinkSync(tempFile); } catch (_) {}
+      }
+      return false;
+    }
+  }
+
+  /**
+   * Recarrega o Working Buffer a partir do disco.
+   * Suporta tanto formato com envelope ({ versao, corredores }) quanto plano ({ [chave]: dados }).
+   * Sanitiza entradas e limita o tamanho máximo de leituras por corredor.
+   * 
+   * @param {string} [caminhoOrigem] - Caminho do arquivo JSON de origem
+   * @returns {boolean} true se carregado com sucesso, false caso contrário
+   */
+  carregarWorkingBufferDisco(caminhoOrigem = this.arquivoBuffer) {
+    const caminho = caminhoOrigem || this.arquivoBuffer;
+    if (!caminho) return false;
+
+    try {
+      if (!fs.existsSync(caminho)) {
+        return false;
+      }
+
+      const conteudo = fs.readFileSync(caminho, 'utf-8');
+      if (!conteudo || !conteudo.trim()) {
+        return false;
+      }
+
+      const parsed = JSON.parse(conteudo);
+      if (!parsed || typeof parsed !== 'object') {
+        return false;
+      }
+
+      const mapaCorredores = parsed.corredores && typeof parsed.corredores === 'object'
+        ? parsed.corredores
+        : parsed;
+
+      let carregados = 0;
+      for (const [chave, dados] of Object.entries(mapaCorredores)) {
+        if (!dados || typeof dados !== 'object') continue;
+
+        const leituras = Array.isArray(dados.leituras)
+          ? dados.leituras
+              .filter(p => typeof p === 'number' && !isNaN(p) && p > 0)
+              .slice(-BUFFER_MAX_LEITURAS)
+          : [];
+
+        let ultimoAlerta = null;
+        if (dados.ultimoAlerta && typeof dados.ultimoAlerta === 'object') {
+          const { tipo, preco, ts } = dados.ultimoAlerta;
+          if (typeof tipo === 'string' && typeof ts === 'number') {
+            ultimoAlerta = {
+              tipo,
+              preco: typeof preco === 'number' ? preco : null,
+              ts
+            };
+          }
+        }
+
+        this._workingBuffer.set(chave, { leituras, ultimoAlerta });
+        carregados++;
+      }
+
+      return true;
+    } catch (err) {
+      console.warn(`⚠️ [BugFareHunter] Falha ao carregar Working Buffer de ${caminho}: ${err.message}`);
+      return false;
+    }
   }
 
   /**
@@ -410,6 +550,9 @@ export class BugFareHunter {
       bugs: bugsEncontrados,
       oportunidades: oportunidadesDetectadas
     };
+
+    // Persistir Working Buffer no disco de forma atômica após cada ciclo de varredura
+    this.salvarWorkingBufferDisco();
 
     console.log(`✅ [BugFareHunter] Varredura concluída: ${totalChecados} corredores | ${bugsEncontrados.length} Bug Fares | ${oportunidadesDetectadas.length} Oportunidades`);
     return resumo;

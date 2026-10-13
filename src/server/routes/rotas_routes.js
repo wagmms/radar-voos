@@ -1,6 +1,6 @@
 import { rotasRepo } from '../../db.js';
 import { resolverDestino, validarPeriodo, calcularDataVolta, extrairDiasEstadia, ehSoIda, rotaEhSoIda } from '../../domain/rotas.js';
-import { FlightScanner } from '../../services/flight_scanner.js';
+import { FlightScanner, calcularMilhasRota } from '../../services/flight_scanner.js';
 import { weatherService } from '../../services/weather_service.js';
 import { telemetryEvents } from '../../services/telemetry_events.js';
 import { rotasSync } from '../../services/rotas_sync.js';
@@ -14,11 +14,21 @@ export async function rotasRoutes(fastify) {
       } catch (_) {}
     }
     const rotas = rotasRepo.listarTodas(false);
-    const rotasCompletas = rotas.map(r => ({
-      ...r,
-      esta_silenciada: rotasRepo.estaSilenciada(r),
-      historico_recente: rotasRepo.obterHistoricoRecente(r.id, 10)
-    }));
+    const rotasCompletas = rotas.map(r => {
+      const paridadeMilhas = r.paridade_milhas ?? null;
+      const programaMilhas = r.programa_milhas || 'smiles';
+      const milhasEstimadas = r.preco_atual
+        ? calcularMilhasRota(r.preco_atual, paridadeMilhas, programaMilhas)
+        : null;
+      return {
+        ...r,
+        paridade_milhas: paridadeMilhas,
+        programa_milhas: programaMilhas,
+        milhas_estimadas: milhasEstimadas,
+        esta_silenciada: rotasRepo.estaSilenciada(r),
+        historico_recente: rotasRepo.obterHistoricoRecente(r.id, 10)
+      };
+    });
     return { ok: true, total: rotasCompletas.length, rotas: rotasCompletas };
   });
 
@@ -67,6 +77,48 @@ export async function rotasRoutes(fastify) {
     const rotaAtualizada = rotasRepo.silenciarRota(id, Number(horas));
     telemetryEvents.emitirAtualizacao('rota_silenciada', { rotaId: id, silenciadaAte: rotaAtualizada.silenciada_ate });
     return { ok: true, mensagem: `Rota silenciada por ${horas} horas`, rota: rotaAtualizada };
+  });
+
+  // Atualizar paridade_milhas e programa_milhas de uma rota (edição inline no Cockpit)
+  fastify.patch('/api/rotas/:id/milhas', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+      body: {
+        type: 'object',
+        properties: {
+          paridade_milhas: { type: ['number', 'null'], minimum: 0 },
+          programa_milhas: { type: 'string', minLength: 1, maxLength: 32 }
+        },
+        additionalProperties: false
+      }
+    }
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body || {};
+    const rota = rotasRepo.buscarPorId(id);
+    if (!rota) {
+      return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
+    }
+
+    // Validação da paridade: deve ser > 0 se fornecida como número
+    if (body.paridade_milhas !== undefined && body.paridade_milhas !== null) {
+      const val = Number(body.paridade_milhas);
+      if (!Number.isFinite(val) || val <= 0) {
+        return reply.code(400).send({ ok: false, erro: 'paridade_milhas deve ser um número positivo (ex: 17.50)' });
+      }
+    }
+
+    const rotaAtualizada = rotasRepo.atualizar(id, {
+      paridade_milhas: body.paridade_milhas !== undefined ? body.paridade_milhas : undefined,
+      programa_milhas: body.programa_milhas ? String(body.programa_milhas).toLowerCase().trim() : undefined
+    });
+
+    telemetryEvents.emitirAtualizacao('rota_milhas_atualizada', {
+      rotaId: id,
+      paridade_milhas: rotaAtualizada.paridade_milhas,
+      programa_milhas: rotaAtualizada.programa_milhas
+    });
+    return { ok: true, rota: rotaAtualizada };
   });
 
   // Criar nova rota monitorada
@@ -153,6 +205,7 @@ export async function rotasRoutes(fastify) {
       dias_estadia: soIda ? null : diasEstadiaEfetivo,
       tipo: soIda ? 'one_way' : 'round_trip',
       tipo_viagem: soIda ? 'one_way' : 'round_trip',
+      moeda: body.moeda || body.curr || 'BRL',
       clima_destino_resumo: climaPreliminar?.ok ? climaPreliminar.resumo : null,
       clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
     });
@@ -293,12 +346,13 @@ export async function rotasRoutes(fastify) {
   // Forçar verificação imediata de uma rota específica
   fastify.post('/api/rotas/:id/verificar', async (request, reply) => {
     const { id } = request.params;
+    const { moeda, curr } = { ...(request.query || {}), ...(request.body || {}) };
     const rota = rotasRepo.buscarPorId(id);
     if (!rota) {
       return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
     }
 
-    const res = await FlightScanner.escanearRota(rota);
+    const res = await FlightScanner.escanearRota(rota, { moeda: moeda || curr });
     telemetryEvents.emitirAtualizacao('rota_verificada', { rotaId: id, resultado: res });
     return { ok: true, resultado: res };
   });

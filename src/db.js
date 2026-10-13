@@ -68,6 +68,7 @@ function initSchema(db) {
       clima_temp_media REAL,
       silenciada_ate TEXT,
       cabine TEXT DEFAULT 'economy',
+      moeda TEXT DEFAULT 'BRL',
       ativa INTEGER DEFAULT 1,
       criada_em TEXT DEFAULT (datetime('now', 'localtime'))
     );
@@ -122,6 +123,9 @@ function initSchema(db) {
   try { db.exec('ALTER TABLE rotas ADD COLUMN sem_data INTEGER DEFAULT 0;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN dias_estadia INTEGER DEFAULT 10;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN destino_real TEXT;'); } catch (_) {}
+  try { db.exec("ALTER TABLE rotas ADD COLUMN moeda TEXT DEFAULT 'BRL';"); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN paridade_milhas REAL;'); } catch (_) {}
+  try { db.exec("ALTER TABLE rotas ADD COLUMN programa_milhas TEXT DEFAULT 'smiles';"); } catch (_) {}
 
   // Migrações dinâmicas para tabela bug_fares
   try { db.exec('ALTER TABLE bug_fares ADD COLUMN aeroporto_chegada TEXT;'); } catch (_) {}
@@ -181,14 +185,15 @@ export const rotasRepo = {
     const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
     const flexibilidadeDias = parseInt(dados.flexibilidade_dias, 10) || 0;
+    const moeda = (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
 
     const stmt = db.prepare(`
       INSERT INTO rotas (
         origem, destino, codigo_origem, codigo_destino,
         data_ida, data_volta, duracao_max_horas, preco_alvo,
         link_google_flights, cabine, flexibilidade_dias,
-        sem_data, dias_estadia, ativa
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        sem_data, dias_estadia, moeda, ativa
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `);
 
     const res = stmt.run(
@@ -204,7 +209,8 @@ export const rotasRepo = {
       dados.cabine || 'economy',
       flexibilidadeDias,
       semData,
-      soIda ? null : diasEstadia
+      soIda ? null : diasEstadia,
+      moeda
     );
 
     return rotasRepo.buscarPorId(res.lastInsertRowid);
@@ -256,7 +262,16 @@ export const rotasRepo = {
     const cabine = dados.cabine || rota.cabine || 'economy';
     const flexibilidadeDias = dados.flexibilidade_dias !== undefined ? (parseInt(dados.flexibilidade_dias, 10) || 0) : (rota.flexibilidade_dias || 0);
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
-    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
+    const moeda = dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL'));
+    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
+
+    // Paridade de milhas: valor numérico positivo ou null; programa: string normalizada ou fallback
+    const paridadeMilhas = dados.paridade_milhas !== undefined
+      ? (Number.isFinite(parseFloat(dados.paridade_milhas)) && parseFloat(dados.paridade_milhas) > 0 ? parseFloat(dados.paridade_milhas) : null)
+      : (rota.paridade_milhas ?? null);
+    const programaMilhas = dados.programa_milhas !== undefined
+      ? (dados.programa_milhas ? String(dados.programa_milhas).toLowerCase().trim() : 'smiles')
+      : (rota.programa_milhas || 'smiles');
 
     // Se a modalidade mudou de Ida e Volta para Só Ida (ou vice-versa), limpa cache de melhor_opcao_flexivel
     const modalidadeMudou = Boolean(rota.data_volta) !== Boolean(dataVolta);
@@ -278,11 +293,14 @@ export const rotasRepo = {
         dias_estadia = ?,
         link_google_flights = ?,
         ativa = ?,
-        melhor_opcao_flexivel = ?
+        melhor_opcao_flexivel = ?,
+        moeda = ?,
+        paridade_milhas = ?,
+        programa_milhas = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -307,6 +325,7 @@ export const rotasRepo = {
     const dataIdaNova = resultado.data_ida || rota.data_ida;
     const dataVoltaNova = resultado.data_volta !== undefined ? resultado.data_volta : rota.data_volta;
     const linkNovo = resultado.link_google_flights || rota.link_google_flights;
+    const moedaNova = resultado.moeda ? String(resultado.moeda).trim().toUpperCase() : null;
 
     const stmt = db.prepare(`
       UPDATE rotas SET
@@ -324,6 +343,7 @@ export const rotasRepo = {
         clima_destino_resumo = COALESCE(?, clima_destino_resumo),
         clima_temp_media = COALESCE(?, clima_temp_media),
         melhor_opcao_flexivel = ?,
+        moeda = COALESCE(?, moeda),
         ultima_checagem = ?
       WHERE id = ?
     `);
@@ -343,6 +363,7 @@ export const rotasRepo = {
       resultado.clima_destino_resumo ?? null,
       resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
       melhorFlexivelStr,
+      moedaNova,
       agora,
       id
     );
@@ -546,7 +567,7 @@ export const bugFaresRepo = {
  * Operações de Alertas (Deduplicação Inteligente)
  */
 export const alertasRepo = {
-  deveDisparar: (chaveAlerta, precoAtual, precoAnterior, precoAlvo, ehRecordeMinimo, nivelPreco, pctVariacao) => {
+  deveDisparar: (chaveAlerta, precoAtual, precoAnterior, precoAlvo, ehRecordeMinimo, nivelPreco, pctVariacao, options = {}) => {
     // 1. REGRA ABSOLUTA DE DEPLOY / INICIALIZAÇÃO:
     // Nunca disparar alerta na primeira checagem de uma rota. A primeira checagem serve estritamente para registrar baseline.
     if (!precoAnterior || precoAnterior <= 0) {
@@ -563,10 +584,24 @@ export const alertasRepo = {
       return { deve: false, motivo: 'acima_preco_alvo' };
     }
 
+    // 2b. SUPRESSÃO DE RUÍDO & DETECÇÃO DE DELTA (proactive-agent):
+    const cruzouMetaAbaixo = temPrecoAlvo && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
+    const ehOportunidadeDelta = options.classificacaoDelta === 'OPORTUNIDADE' ||
+      (typeof options.zScore === 'number' && options.zScore <= -1.5) ||
+      (typeof options.deltaMediaPct === 'number' && options.deltaMediaPct >= 30);
+
     // Se NÃO tem preço alvo definido pelo usuário:
-    // Só pode alertar se for uma oportunidade comprovada (nível LOW do Google Flights E queda expressiva).
-    if (!temPrecoAlvo && (nivelPreco !== 'LOW' || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
-      return { deve: false, motivo: 'sem_meta_e_fora_dos_criterios_estritos' };
+    // Só pode alertar se for uma oportunidade comprovada:
+    // - Oportunidade estatística (Z-Score <= -1.5 ou queda >= 30% da média móvel)
+    // - OU nível LOW do Google Flights E queda expressiva
+    if (!temPrecoAlvo) {
+      if (options.classificacaoDelta === 'INFO' && !ehOportunidadeDelta) {
+        return { deve: false, motivo: 'oscilacao_normal_mercado_info' };
+      }
+
+      if (!ehOportunidadeDelta && (nivelPreco !== 'LOW' || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
+        return { deve: false, motivo: 'sem_meta_e_fora_dos_criterios_estritos' };
+      }
     }
 
     const db = getDb();
@@ -602,7 +637,6 @@ export const alertasRepo = {
     }
 
     // 4. IDENTIFICAÇÃO DO GATILHO VÁLIDO DENTRO DOS CRITÉRIOS DO USUÁRIO:
-    const cruzouMetaAbaixo = temPrecoAlvo && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
     const ehQuedaExpressiva = pctVariacao <= -config.radar.gatilhoQuedaRelampagoPct;
     const ehNovoRecordeReal = ehRecordeMinimo && (!ultimo || precoAtual < ultimo.preco);
 
@@ -612,6 +646,9 @@ export const alertasRepo = {
     if (cruzouMetaAbaixo) {
       deveAlertar = true;
       tipoAlerta = 'ATINGIU_META';
+    } else if (ehOportunidadeDelta) {
+      deveAlertar = true;
+      tipoAlerta = 'OPORTUNIDADE_ESTATISTICA';
     } else if (ehQuedaExpressiva) {
       deveAlertar = true;
       tipoAlerta = 'QUEDA_RELAMPAGO';

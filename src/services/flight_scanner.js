@@ -3,7 +3,8 @@ import { weatherService } from './weather_service.js';
 import {
   parsePreco,
   calcularVariacao,
-  avaliarCustoDestinoComTotal
+  avaliarCustoDestinoComTotal,
+  classificarDeltaPreco
 } from '../domain/calculadora.js';
 import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
@@ -12,11 +13,55 @@ import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData, ehSoIda, 
 import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
 
+/**
+ * Cotações de referência R$/milheiro por programa de fidelidade (espelho do frontend card_rota.js).
+ * Fonte: valores médios de mercado brasileiro (atualizar conforme variação de mercado).
+ */
+const COTACOES_MILHA_MILHEIRO_BACKEND = {
+  smiles:    17.50,
+  latam:     24.00,
+  latampass: 24.00,
+  livelo:    35.00,
+  azul:      20.00,
+  tudoazul:  20.00,
+  iberia:    65.00,
+  tap:       32.00
+};
+
+/**
+ * Calcula a estimativa de milhas necessárias para emitir o voo pelo preço atual.
+ * Espelha `calcularMilhasEstimadas` de `src/public/js/card_rota.js` para uso no backend
+ * (Telegram, API, escanearRota), eliminando recalculo no cliente.
+ *
+ * @param {number|null} precoAtual   Preço atual em BRL (ou na moeda da rota)
+ * @param {number|null} paridadeMilheiro  Cotação R$ por milheiro customizada (ex: 17.50)
+ * @param {string}      [programa='smiles'] Chave do programa de fidelidade
+ * @returns {{ milhas: number, programa: string, cotacaoMilheiro: number } | null}
+ *   Retorna null quando preço ou paridade são inválidos.
+ */
+export function calcularMilhasRota(precoAtual, paridadeMilheiro, programa = 'smiles') {
+  const preco = typeof precoAtual === 'number' ? precoAtual : parseFloat(precoAtual);
+  if (!Number.isFinite(preco) || preco <= 0) return null;
+
+  const progKey = String(programa || 'smiles').toLowerCase().trim();
+  const cotacaoPadrao = COTACOES_MILHA_MILHEIRO_BACKEND[progKey] || COTACOES_MILHA_MILHEIRO_BACKEND.smiles;
+  const cotacao = typeof paridadeMilheiro === 'number' && Number.isFinite(paridadeMilheiro) && paridadeMilheiro > 0
+    ? paridadeMilheiro
+    : cotacaoPadrao;
+
+  // milhas = (preço / R$-por-milheiro) × 1.000
+  const milhas = Math.ceil((preco / cotacao) * 1000);
+  return { milhas, programa: progKey, cotacaoMilheiro: cotacao };
+}
+
 export class FlightScanner {
   /**
    * Consulta os provedores de voo através do gerenciador de estratégias
    */
-  static async buscarOfertas(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1) {
+  static async buscarOfertas(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL') {
+    if (typeof origemCod === 'object' && origemCod !== null) {
+      return flightProviderManager.buscarOfertas(origemCod);
+    }
     return flightProviderManager.buscarOfertas({
       origemCod,
       destinoCod,
@@ -24,15 +69,22 @@ export class FlightScanner {
       dataVolta,
       duracaoMaxHoras,
       cabine,
-      adultos
+      adultos,
+      moeda: (moeda || 'BRL').trim().toUpperCase()
     });
   }
 
   /**
    * Executa varredura de uma rota cadastrada no banco de dados com flexibilidade de datas e detecção de Bug Fares
+   * @param {Object} rota Rota a escanear
+   * @param {Object} [opcoes]
+   * @param {string} [opcoes.moeda] Moeda opcional de cotação (ex: 'BRL', 'USD', 'EUR')
+   * @param {string} [opcoes.curr] Alias para moeda
    */
-  static async escanearRota(rota) {
+  static async escanearRota(rota, opcoes = {}) {
     try {
+      const moedaEfetiva = (opcoes?.moeda || opcoes?.curr || rota?.moeda || rota?.curr || 'BRL').trim().toUpperCase();
+
       // 1. Consulta meteorológica do destino em paralelo
       const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
 
@@ -62,7 +114,8 @@ export class FlightScanner {
               j.dataVolta,
               rota.duracao_max_horas,
               rota.cabine || 'economy',
-              1
+              1,
+              moedaEfetiva
             );
             if (res.ok && res.encontrouVoos && res.oferta && res.oferta.preco > 0) {
               resultadosAmostras.push({
@@ -117,7 +170,8 @@ export class FlightScanner {
           rota.data_volta,
           rota.duracao_max_horas,
           rota.cabine || 'economy',
-          1
+          1,
+          moedaEfetiva
         );
 
         if (!resultadoBase.ok) {
@@ -158,7 +212,8 @@ export class FlightScanner {
                 comb.dataVolta,
                 rota.duracao_max_horas,
                 rota.cabine || 'economy',
-                1
+                1,
+                moedaEfetiva
               );
 
               if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta.preco < oferta.preco) {
@@ -251,14 +306,15 @@ export class FlightScanner {
     });
 
     const linkCanonicoRota = (dataIdaEfetiva && destinoInfoRota.iata)
-      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva)
-         || gerarLinkGoogleFlights(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva))
+      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva)
+         || gerarLinkGoogleFlights(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
       : oferta.link;
 
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
       data_ida: rota.sem_data === 1 ? dataIdaEfetiva : undefined,
       data_volta: rota.sem_data === 1 ? dataVoltaEfetiva : undefined,
       preco: oferta.preco,
+      moeda: moedaEfetiva,
       variacao_texto: variacao.texto,
       termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : (rota.sem_data === 1 ? `🔥 Menor Preço Flexível (${melhorOpcaoFlexivel?.label || ''})` : oferta.termometro),
       custo_destino_texto: custoInfo.textoResumo,
@@ -269,6 +325,13 @@ export class FlightScanner {
       clima_destino_resumo: clima.ok ? clima.resumo : null,
       clima_temp_media: clima.ok ? clima.tempMedia : null,
       melhor_opcao_flexivel: melhorOpcaoFlexivel
+    });
+
+    // 4b. Análise de Delta e Z-Score da Rota Monitorada (padrão proactive-agent)
+    const analiseDelta = classificarDeltaPreco({
+      preco: oferta.preco,
+      media: statsPreco.media,
+      desvioPadrao: statsPreco.desvioPadrao
     });
 
     // 5. Inteligência de Alertas Regulares
@@ -284,8 +347,18 @@ export class FlightScanner {
       rota.preco_alvo,
       ehRecorde,
       oferta.nivelPreco,
-      variacao.pct
+      variacao.pct,
+      {
+        zScore: analiseDelta.zScore,
+        deltaMediaPct: analiseDelta.quedaPct,
+        classificacaoDelta: analiseBug.ehBugFare ? 'BUG_FARE' : analiseDelta.categoria,
+        statsPreco
+      }
     );
+
+    if (!decisaoAlerta.deve && decisaoAlerta.motivo === 'oscilacao_normal_mercado_info') {
+      console.log(`🔇 [Zero Ruído / proactive-agent] ${rota.origem} ➔ ${rota.destino}: R$ ${oferta.preco.toFixed(2)} classificado como INFO (oscilação normal). Alerta suprimido.`);
+    }
 
     const rotaSilenciada = rotasRepo.estaSilenciada(rotaAtualizada);
 
@@ -311,6 +384,13 @@ export class FlightScanner {
       });
     }
 
+    // 6. Cálculo automático de milhas estimadas usando paridade e programa da rota
+    const milhasEstimadas = calcularMilhasRota(
+      oferta.preco,
+      rota.paridade_milhas ?? null,
+      rota.programa_milhas || 'smiles'
+    );
+
     return {
       sucesso: true,
       encontrou: true,
@@ -318,7 +398,10 @@ export class FlightScanner {
       rotaAtualizada,
       clima,
       melhorOpcaoFlexivel,
-      ehBugFare: analiseBug.ehBugFare
+      ehBugFare: analiseBug.ehBugFare,
+      deltaEstatistico: analiseDelta,
+      moeda: moedaEfetiva,
+      milhas_estimadas: milhasEstimadas
     };
   } catch (err) {
     rotasRepo.marcarFalhaChecagem(rota.id, `Erro inesperado: ${err.message}`);
@@ -328,4 +411,61 @@ export class FlightScanner {
     };
   }
 }
+
+  /**
+   * Executa ciclo de varredura orquestrado nas rotas monitoradas
+   * Fila justa anti-inanição (LRU) por padrão ou todas as rotas ativas.
+   *
+   * @param {Object} [params]
+   * @param {boolean} [params.forcarTodas=false] Varre todas as rotas ativas ou apenas o próximo lote
+   * @param {number} [params.limite=1] Quantidade de rotas da fila LRU a escanear
+   * @param {boolean} [params.aplicarJitter=false] Se deve aplicar jitter defensivo entre requisições
+   * @param {string|null} [params.moeda=null] Moeda desejada ('BRL', 'USD', 'EUR') ou herdada da rota
+   * @param {string|null} [params.curr=null] Alias para moeda
+   * @returns {Promise<{ ok: boolean, processadas: number, moeda?: string, resultados: Array<{ rotaId: number, rota: string, moeda?: string, res?: Object, erro?: string }> }>}
+   */
+  static async executarCicloVarredura({ forcarTodas = false, limite = 1, aplicarJitter = false, moeda = null, curr = null } = {}) {
+    const moedaGlob = (moeda || curr || null);
+    const rotas = forcarTodas
+      ? rotasRepo.listarTodas(true)
+      : rotasRepo.obterFilaLru(limite);
+
+    if (!rotas || rotas.length === 0) {
+      return { ok: true, processadas: 0, resultados: [] };
+    }
+
+    const resultados = [];
+    for (let i = 0; i < rotas.length; i++) {
+      const rota = rotas[i];
+      const moedaRota = (moedaGlob || rota.moeda || rota.curr || 'BRL').trim().toUpperCase();
+      try {
+        const res = await FlightScanner.escanearRota(rota, { moeda: moedaRota });
+        resultados.push({
+          rotaId: rota.id,
+          rota: `${rota.origem} ➔ ${rota.destino}`,
+          moeda: moedaRota,
+          res
+        });
+      } catch (err) {
+        resultados.push({
+          rotaId: rota.id,
+          rota: `${rota.origem} ➔ ${rota.destino}`,
+          moeda: moedaRota,
+          erro: err.message
+        });
+      }
+
+      if (aplicarJitter && rotas.length > 1 && i < rotas.length - 1) {
+        const jitterMs = 2500 + Math.floor(Math.random() * 2000);
+        await new Promise(r => setTimeout(r, jitterMs));
+      }
+    }
+
+    return {
+      ok: true,
+      processadas: resultados.length,
+      ...(moedaGlob ? { moeda: moedaGlob.trim().toUpperCase() } : {}),
+      resultados
+    };
+  }
 }

@@ -3,7 +3,7 @@
  * Elimina destinos genéricos em Bug Fares e assegura links 100% navegáveis no Google Flights.
  */
 
-import { gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest, ehSoIda } from './rotas.js';
+import { gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest, ehSoIda, formatarDataParaBusca, calcularDataVolta } from './rotas.js';
 
 // Catálogo exaustivo de Aeroportos e Metrópoles com dados geográficos e institucionais
 export const CATALOGO_AEROPORTOS = {
@@ -161,32 +161,69 @@ function normalizar(texto) {
  */
 export function obterInfoAeroporto(codigoOuNome) {
   if (!codigoOuNome) return null;
-  const limpo = normalizar(codigoOuNome);
+
+  let entrada = codigoOuNome;
+  if (typeof entrada === 'object' && entrada !== null) {
+    entrada = entrada.iata || entrada.codigo || entrada.code || entrada.airport || entrada.cidade || entrada.city || entrada.nome || entrada.name || '';
+    if (!entrada || typeof entrada !== 'string') return null;
+  }
+
+  const limpo = normalizar(entrada);
+  if (!limpo) return null;
 
   // 1. Match direto no catálogo por IATA
   if (CATALOGO_AEROPORTOS[limpo]) {
     return { ...CATALOGO_AEROPORTOS[limpo] };
   }
 
-  // 2. Extrair código de 3 letras entre parênteses (ex: "Buenos Aires (EZE)")
-  const matchParenteses = limpo.match(/\(([A-Z]{3})\)/);
-  if (matchParenteses && CATALOGO_AEROPORTOS[matchParenteses[1]]) {
-    return { ...CATALOGO_AEROPORTOS[matchParenteses[1]] };
+  // 2. Extrair código de 3 letras entre parênteses (ex: "Buenos Aires (EZE)", "Santiago ( SCL )", "Reykjavik (KEF)")
+  const matchParenteses = limpo.match(/\(\s*([A-Z]{3})\s*\)/);
+  if (matchParenteses) {
+    const cod = matchParenteses[1];
+    if (CATALOGO_AEROPORTOS[cod]) {
+      return { ...CATALOGO_AEROPORTOS[cod] };
+    }
+    const nomeCidade = String(entrada).replace(/\s*\(\s*[A-Za-z]{3}\s*\).*/, '').trim();
+    return {
+      iata: cod,
+      codigoLink: cod,
+      nome: nomeCidade ? `Aeroporto de ${nomeCidade} (${cod})` : `Aeroporto ${cod}`,
+      cidade: nomeCidade || cod,
+      pais: 'Destino Internacional',
+      regiao: 'OUTRO'
+    };
   }
 
-  // 3. Match por nome da cidade no catálogo
+  // 3. Match por separadores traço, barra, pipe ou dois pontos com IATA de 3 letras (ex: "AKL - Auckland", "Hamad / DOH", "GRU | São Paulo")
+  const matchSeparador = limpo.match(/^([A-Z]{3})\s*[-/|:]/) || limpo.match(/[-/|:]\s*([A-Z]{3})$/);
+  if (matchSeparador) {
+    const cod = matchSeparador[1];
+    if (CATALOGO_AEROPORTOS[cod]) {
+      return { ...CATALOGO_AEROPORTOS[cod] };
+    }
+    return {
+      iata: cod,
+      codigoLink: cod,
+      nome: `Aeroporto ${cod}`,
+      cidade: cod,
+      pais: 'Destino Internacional',
+      regiao: 'OUTRO'
+    };
+  }
+
+  // 4. Match por nome da cidade no catálogo
   for (const info of Object.values(CATALOGO_AEROPORTOS)) {
     if (normalizar(info.cidade) === limpo) {
       return { ...info };
     }
   }
 
-  // 4. Match por hub regional / continente canônico
+  // 5. Match por hub regional / continente canônico
   if (HUBS_REGIOES_CANONICOS[limpo]) {
     return { ...HUBS_REGIOES_CANONICOS[limpo] };
   }
 
-  // 5. Se for código de 3 letras desconhecido, devolve estrutura padrão defensiva
+  // 6. Se for código de 3 letras desconhecido, devolve estrutura padrão defensiva
   if (/^[A-Z]{3}$/.test(limpo)) {
     return {
       iata: limpo,
@@ -205,7 +242,13 @@ export function obterInfoAeroporto(codigoOuNome) {
  * Resolve com precisão o Destino Concreto do voo (NUNCA genérico)
  * Mescla o destino cadastrado na rota, a oferta e o código IATA real retornado
  */
-export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = null, codigoDestinoReal = null }) {
+export function resolverDestinoConcreto(opcoes = {}) {
+  const opts = (typeof opcoes === 'string')
+    ? { destino: opcoes, codigoDestino: opcoes }
+    : (opcoes && typeof opcoes === 'object' && !Array.isArray(opcoes) ? opcoes : {});
+
+  const { destino, codigoDestino, destinoReal = null, codigoDestinoReal = null } = opts;
+
   // 1. Se veio codigoDestinoReal concreto (ex: retornado pela SerpApi: "SCL", "EZE"), prioridade máxima
   if (codigoDestinoReal) {
     const infoCodigo = obterInfoAeroporto(codigoDestinoReal);
@@ -218,25 +261,42 @@ export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = 
     if (infoReal) return infoReal;
   }
 
-  // 3. Se o codigoDestino for um aeroporto ou metrópole concreta (ex: BUE, SCL, MAD, LIS, BEL)
-  if (codigoDestino && CATALOGO_AEROPORTOS[normalizar(codigoDestino)]) {
-    return { ...CATALOGO_AEROPORTOS[normalizar(codigoDestino)] };
+  // 3. Se codigoDestino for aeroporto mapeado, metrópole, objeto estruturado ou string com separador
+  if (codigoDestino) {
+    const infoCodigoDestino = obterInfoAeroporto(codigoDestino);
+    if (infoCodigoDestino && infoCodigoDestino.regiao !== 'OUTRO') {
+      return infoCodigoDestino;
+    }
   }
 
-  // 4. Se destino for nome de cidade concreta (ex: "Buenos Aires", "Madrid")
+  // 4. Se destino for nome de cidade concreta (ex: "Buenos Aires", "Madrid") ou objeto estruturado
   const infoNome = obterInfoAeroporto(destino);
   if (infoNome) return infoNome;
 
   // 5. Se for continente ou região genérica (ex: "América do Sul", "/m/06_1", "Europa")
-  const infoHub = HUBS_REGIOES_CANONICOS[normalizar(codigoDestino)] || HUBS_REGIOES_CANONICOS[normalizar(destino)];
+  const codRaw = (codigoDestino && typeof codigoDestino === 'object')
+    ? (codigoDestino.iata || codigoDestino.codigo || codigoDestino.code || codigoDestino.airport || '')
+    : codigoDestino;
+  const destRaw = (destino && typeof destino === 'object')
+    ? (destino.cidade || destino.city || destino.nome || destino.name || '')
+    : destino;
+
+  const normCod = normalizar(codRaw);
+  const normDest = normalizar(destRaw);
+  const infoHub = HUBS_REGIOES_CANONICOS[normCod] || HUBS_REGIOES_CANONICOS[normDest];
   if (infoHub) return infoHub;
 
-  // Fallback seguro
+  // Fallback seguro com sanitização defensiva de strings (evita [object Object])
+  const codFallback = (codRaw && typeof codRaw !== 'object') ? String(codRaw).trim().toUpperCase() : '';
+  const nomeFallback = (destRaw && typeof destRaw !== 'object' && String(destRaw).trim())
+    ? String(destRaw).trim()
+    : (codFallback || 'Destino');
+
   return {
-    iata: codigoDestino || 'DEST',
-    codigoLink: codigoDestino || 'DEST',
-    nome: destino || codigoDestino || 'Destino',
-    cidade: destino || codigoDestino || 'Destino',
+    iata: codFallback || 'DEST',
+    codigoLink: codFallback || 'DEST',
+    nome: nomeFallback,
+    cidade: nomeFallback,
     pais: 'Internacional',
     regiao: 'OUTRO'
   };
@@ -247,28 +307,43 @@ export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = 
  */
 export function formatarPeriodoViagem(dataIdaStr, dataVoltaStr) {
   if (!dataIdaStr) return 'Data a Definir';
+  const idaNorm = formatarDataParaBusca(dataIdaStr);
+  if (!idaNorm) return 'Data a Definir';
 
-  function fmtData(str) {
-    if (!str || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return str || '';
-    const [ano, mes, dia] = str.split('-');
-    return `${dia}/${mes}/${ano}`;
+  function fmtData(normStr) {
+    if (normStr && /^\d{4}-\d{2}-\d{2}$/.test(normStr)) {
+      const [ano, mes, dia] = normStr.split('-');
+      return `${dia}/${mes}/${ano}`;
+    }
+    return '';
   }
 
-  const idaFmt = fmtData(dataIdaStr);
-  const soIda = ehSoIda(dataVoltaStr);
+  const idaFmt = fmtData(idaNorm);
+  const voltaTrim = typeof dataVoltaStr === 'string' ? dataVoltaStr.trim() : (dataVoltaStr !== null && dataVoltaStr !== undefined ? String(dataVoltaStr).trim() : '');
+  const soIda = ehSoIda(voltaTrim);
 
-  if (soIda || !dataVoltaStr) {
+  if (soIda || !voltaTrim) {
     return `Ida: ${idaFmt} (Só Ida)`;
   }
 
-  const voltaFmt = fmtData(dataVoltaStr);
+  // Resolve volta (pode ser número de dias como "14 dias", ou data YYYY-MM-DD / DD/MM/AAAA)
+  const voltaCalculada = calcularDataVolta(idaNorm, dataVoltaStr);
+  const voltaNorm = voltaCalculada || formatarDataParaBusca(dataVoltaStr);
 
-  // Calcular duração em dias
+  if (!voltaNorm || voltaNorm < idaNorm) {
+    return `Ida: ${idaFmt} (Só Ida)`;
+  }
+
+  const voltaFmt = fmtData(voltaNorm);
+
+  // Calcular duração em dias de forma consistente via UTC
   try {
-    const d1 = new Date(dataIdaStr);
-    const d2 = new Date(dataVoltaStr);
+    const [ano1, mes1, dia1] = idaNorm.split('-').map(Number);
+    const [ano2, mes2, dia2] = voltaNorm.split('-').map(Number);
+    const d1 = new Date(Date.UTC(ano1, mes1 - 1, dia1));
+    const d2 = new Date(Date.UTC(ano2, mes2 - 1, dia2));
     const diffDias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-    const labelDias = diffDias > 0 ? ` (${diffDias} dias)` : '';
+    const labelDias = diffDias > 0 ? (diffDias === 1 ? ' (1 dia)' : ` (${diffDias} dias)`) : '';
     return `Ida: ${idaFmt} ➔ Volta: ${voltaFmt}${labelDias}`;
   } catch (_) {
     return `Ida: ${idaFmt} ➔ Volta: ${voltaFmt}`;
@@ -283,24 +358,27 @@ export function formatarPeriodoViagem(dataIdaStr, dataVoltaStr) {
  * - Datas Completas
  * - Link Canônico no Google Flights que abre direto no voo
  */
-export function montarCardBugFare({
-  origem,
-  codigoOrigem,
-  destino,
-  codigoDestino,
-  dataIda,
-  dataVolta = null,
-  preco,
-  motivo,
-  tipo = '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
-  destinoReal = null,
-  codigoDestinoReal = null,
-  linkOriginal = null
-}) {
+export function montarCardBugFare(params = {}) {
+  const dados = (params && typeof params === 'object' && !Array.isArray(params)) ? params : {};
+  const {
+    origem,
+    codigoOrigem,
+    destino,
+    codigoDestino,
+    dataIda,
+    dataVolta = null,
+    preco,
+    motivo,
+    tipo = '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
+    destinoReal = null,
+    codigoDestinoReal = null,
+    linkOriginal = null
+  } = dados;
+
   const origemInfo = obterInfoAeroporto(codigoOrigem) || obterInfoAeroporto(origem) || {
-    iata: codigoOrigem || 'SAO',
-    codigoLink: codigoOrigem || 'SAO',
-    cidade: origem || 'São Paulo',
+    iata: codigoOrigem ? String(codigoOrigem).trim().toUpperCase() : 'SAO',
+    codigoLink: codigoOrigem ? String(codigoOrigem).trim().toUpperCase() : 'SAO',
+    cidade: origem ? String(origem).trim() : 'São Paulo',
     pais: 'Brasil',
     nome: 'Aeroporto de Origem'
   };
@@ -313,7 +391,17 @@ export function montarCardBugFare({
   });
 
   const periodoTexto = formatarPeriodoViagem(dataIda, dataVolta);
-  const precoFmt = Number(preco).toFixed(0);
+
+  // Normalização defensiva de preço (suporta número, string formatada com R$, separadores brasileiros ou ausente)
+  let precoNum = 0;
+  if (typeof preco === 'number' && Number.isFinite(preco)) {
+    precoNum = preco > 0 ? preco : 0;
+  } else if (preco !== null && preco !== undefined && typeof preco !== 'symbol') {
+    const limpo = String(preco).replace(/[R$\s]/gi, '').replace(/\./g, '').replace(',', '.').trim();
+    const parsed = parseFloat(limpo);
+    precoNum = (Number.isFinite(parsed) && parsed > 0) ? parsed : 0;
+  }
+  const precoFmt = precoNum.toFixed(0);
 
   // Código concreto para o link do Google Flights (ex: EZE em vez de /m/06_1)
   const origemLink = origemInfo.codigoLink || origemInfo.iata || 'SAO';
@@ -321,14 +409,23 @@ export function montarCardBugFare({
 
   // Gerar link 100% canônico (Prioriza Protobuf tfs Cheapest, com fallback para query estruturada correta)
   const soIda = ehSoIda(dataVolta);
-  const voltaEfetiva = soIda ? null : dataVolta;
+  const dataIdaNorm = formatarDataParaBusca(dataIda) || (dataIda && typeof dataIda === 'string' ? dataIda.trim() : null);
+  let voltaEfetiva = null;
+  if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
+    const voltaCalculada = (dataIdaNorm ? calcularDataVolta(dataIdaNorm, dataVolta) : null) || formatarDataParaBusca(dataVolta);
+    if (voltaCalculada) {
+      if (!dataIdaNorm || voltaCalculada >= dataIdaNorm) {
+        voltaEfetiva = voltaCalculada;
+      }
+    }
+  }
 
   let linkGoogleFlights = null;
-  if (dataIda) {
-    linkGoogleFlights = gerarLinkGoogleFlightsCheapest(origemLink, destinoLink, dataIda, voltaEfetiva);
+  if (dataIdaNorm) {
+    linkGoogleFlights = gerarLinkGoogleFlightsCheapest(origemLink, destinoLink, dataIdaNorm, voltaEfetiva);
   }
-  if (!linkGoogleFlights) {
-    linkGoogleFlights = gerarLinkGoogleFlights(origemLink, destinoLink, dataIda, voltaEfetiva);
+  if (!linkGoogleFlights && dataIdaNorm) {
+    linkGoogleFlights = gerarLinkGoogleFlights(origemLink, destinoLink, dataIdaNorm, voltaEfetiva);
   }
 
   // Se o destino cadastrado na rota foi uma macrorregião (ex: América do Sul), acrescenta o contexto
@@ -345,15 +442,17 @@ export function montarCardBugFare({
     titulo: tituloCompleto,
     link: linkGoogleFlights,
     tipo,
-    motivo: motivo || `Tarifa anômala de R$ ${precoFmt}`,
-    preco: Number(preco),
+    motivo: motivo || (precoNum > 0 ? `Tarifa anômala de R$ ${precoFmt}` : 'Tarifa anômala de Bug Fare detectada'),
+    preco: precoNum,
     origem: `${origemInfo.cidade} (${origemInfo.iata})`,
     destino: `${destinoInfo.cidade}, ${destinoInfo.pais}`,
     aeroporto_chegada: `${destinoInfo.iata} - ${destinoInfo.nome}`,
     pais_destino: destinoInfo.pais,
     cidade_destino: destinoInfo.cidade,
-    data_ida: dataIda,
+    data_ida: dataIdaNorm,
     data_volta: voltaEfetiva,
-    periodo_texto: periodoTexto
+    periodo_texto: periodoTexto,
+    iata_origem: origemLink,
+    iata_destino: destinoLink
   };
 }

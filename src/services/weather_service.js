@@ -94,17 +94,49 @@ export function interpretarCodigoWMO(codigo) {
   return { condicao: 'Tempo Estável', emoji: '🌤️' };
 }
 
+// Constante oficial do TTL do cache meteorológico (6 horas)
+export const TTL_CACHE_CLIMA_MS = 6 * 60 * 60 * 1000;
+
 export class WeatherService {
-  constructor() {
-    this.cache = new Map(); // cache em memória de 1 hora
+  constructor(ttlMs = TTL_CACHE_CLIMA_MS) {
+    this.ttlMs = ttlMs;
+    this.cache = new Map(); // cache em memória com TTL defensivo de 6h
+  }
+
+  /**
+   * Limpa integralmente o cache em memória
+   */
+  limparCache() {
+    this.cache.clear();
+  }
+
+  /**
+   * Remove entradas expiradas do cache (> 6h ou TTL configurado)
+   */
+  expurgarExpirados() {
+    const agora = Date.now();
+    for (const [chave, entrada] of this.cache.entries()) {
+      if (!entrada || typeof entrada.timestamp !== 'number' || (agora - entrada.timestamp >= this.ttlMs)) {
+        this.cache.delete(chave);
+      }
+    }
+  }
+
+  /**
+   * Retorna a quantidade de entradas válidas no cache
+   */
+  obterTamanhoCache() {
+    this.expurgarExpirados();
+    return this.cache.size;
   }
 
   /**
    * Identifica as coordenadas de um destino a partir do código ou nome
    */
   resolverCoordenadas(destino) {
-    if (!destino) return null;
+    if (!destino || (typeof destino !== 'string' && typeof destino !== 'number')) return null;
     const clean = String(destino).trim().toUpperCase();
+    if (!clean) return null;
 
     // Busca direta pelo código IATA
     if (COORDENADAS_AEROPORTOS[clean]) {
@@ -126,11 +158,18 @@ export class WeatherService {
       return { codigo: MACRO_PARA_HUB[clean], ...COORDENADAS_AEROPORTOS[MACRO_PARA_HUB[clean]] };
     }
 
-    // Busca por parte da cidade ou nome
+    // Se a busca tiver menos de 3 caracteres e não for IATA direto, rejeita para evitar falso-positivo espúrio (ex: 'A', 'E')
+    if (clean.length < 3) return null;
+
+    const normalizarSemAcento = (s) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const cleanNorm = normalizarSemAcento(clean);
+
+    // Busca por parte da cidade ou nome com suporte a insensibilidade a acentos
     for (const [iata, dados] of Object.entries(COORDENADAS_AEROPORTOS)) {
+      const cidadeNorm = normalizarSemAcento(dados.cidade);
       if (
-        dados.cidade.toUpperCase().includes(clean) ||
-        clean.includes(dados.cidade.toUpperCase()) ||
+        cidadeNorm.includes(cleanNorm) ||
+        cleanNorm.includes(cidadeNorm) ||
         clean.includes(iata)
       ) {
         return { codigo: iata, ...dados };
@@ -156,8 +195,13 @@ export class WeatherService {
 
     const cacheKey = `${geo.codigo}_${dataViagem || 'hoje'}`;
     const cached = this.cache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp < 3600000)) { // 1h
-      return cached.data;
+    const agora = Date.now();
+    if (cached && typeof cached.timestamp === 'number') {
+      if (agora - cached.timestamp < this.ttlMs) {
+        return cached.data;
+      }
+      // Se expirou (ultrapassou o TTL de 6h), invalida e descarta imediatamente da memória
+      this.cache.delete(cacheKey);
     }
 
     try {

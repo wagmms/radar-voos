@@ -4,6 +4,7 @@ import {
   somarDiasData,
   gerarCombinacoesFlexibilidade,
   gerarJanelasExploracaoSemData,
+  gerarDataPadraoInicial,
   ehSoIda,
   rotaEhSoIda
 } from '../src/domain/rotas.js';
@@ -16,6 +17,26 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     assert.strictEqual(somarDiasData('2026-11-10', -3), '2026-11-07');
     assert.strictEqual(somarDiasData('2026-11-30', 2), '2026-12-02');
     assert.strictEqual(somarDiasData('2026-03-01', -1), '2026-02-28');
+  });
+
+  it('deve lidar defensivamente com entradas nulas, malformadas ou não finitas em somarDiasData', () => {
+    // 1. Entradas nulas, vazias, inválidas no calendário ou tipos incompatíveis
+    assert.strictEqual(somarDiasData(null, 5), null);
+    assert.strictEqual(somarDiasData(undefined, 5), null);
+    assert.strictEqual(somarDiasData('', 5), null);
+    assert.strictEqual(somarDiasData('data-invalida', 5), null);
+    assert.strictEqual(somarDiasData('2026-02-31', 5), null);
+    assert.strictEqual(somarDiasData(12345, 5), null);
+
+    // 2. Dias não finitos ou malformados não devem lançar RangeError/TypeError
+    assert.strictEqual(somarDiasData('2026-11-10', NaN), '2026-11-10');
+    assert.strictEqual(somarDiasData('2026-11-10', Infinity), '2026-11-10');
+    assert.strictEqual(somarDiasData('2026-11-10', -Infinity), '2026-11-10');
+    assert.strictEqual(somarDiasData('2026-11-10', 'invalido'), '2026-11-10');
+
+    // 3. Suporte resiliente a string numérica de dias e formato DD/MM/YYYY
+    assert.strictEqual(somarDiasData('2026-11-10', '5'), '2026-11-15');
+    assert.strictEqual(somarDiasData('10/11/2026', 2), '2026-11-12');
   });
 
   it('deve retornar apenas 1 combinação quando a flexibilidade for 0 (data fixa)', () => {
@@ -45,6 +66,88 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     combs.forEach(c => {
       assert.strictEqual(c.dataVolta, null);
     });
+  });
+
+  it('gerarCombinacoesFlexibilidade: deve normalizar defensivamente "Só Ida", formato brasileiro e entradas nulas/não-finitas', () => {
+    // 1. String "Só Ida" deve ser uniformemente null em todas as combinações, incluindo Data Base
+    const combsSoIda = gerarCombinacoesFlexibilidade('2026-11-10', 'Só Ida', 2);
+    assert.strictEqual(combsSoIda.length, 5);
+    combsSoIda.forEach(c => {
+      assert.strictEqual(c.dataVolta, null);
+    });
+    assert.strictEqual(combsSoIda[0].dataVolta, null);
+
+    // 2. Formato brasileiro DD/MM/YYYY deve ser normalizado para ISO em todas as combinações
+    const combsBr = gerarCombinacoesFlexibilidade('10/11/2026', '20/11/2026', 1);
+    assert.strictEqual(combsBr[0].dataIda, '2026-11-10');
+    assert.strictEqual(combsBr[0].dataVolta, '2026-11-20');
+    assert.strictEqual(combsBr[1].dataIda, '2026-11-09');
+    assert.strictEqual(combsBr[1].dataVolta, '2026-11-19');
+    assert.strictEqual(combsBr[2].dataIda, '2026-11-11');
+    assert.strictEqual(combsBr[2].dataVolta, '2026-11-21');
+
+    // 3. Entradas nulas e flexibilidade inválida ou negativa devem degradar graciosamente sem lançar erro
+    const combsNulo = gerarCombinacoesFlexibilidade(null, null, -5);
+    assert.strictEqual(combsNulo.length, 1);
+    assert.strictEqual(combsNulo[0].dataIda, null);
+    assert.strictEqual(combsNulo[0].dataVolta, null);
+    assert.strictEqual(combsNulo[0].deltaDias, 0);
+
+    const combsNan = gerarCombinacoesFlexibilidade('2026-11-10', null, NaN);
+    assert.strictEqual(combsNan.length, 1);
+    assert.strictEqual(combsNan[0].dataIda, '2026-11-10');
+  });
+
+  it('gerarCombinacoesFlexibilidade: deve suportar duracao relativa de estadia, degradar volta no passado e sanitizar strings corrompidas', () => {
+    // 1. Duração relativa ("10 dias", 14 ou "7 noites") deve manter a duração constante em todas as combinações flexíveis
+    const combsDuracao = gerarCombinacoesFlexibilidade('2026-11-10', '10 dias', 2);
+    assert.strictEqual(combsDuracao.length, 5);
+    assert.strictEqual(combsDuracao[0].dataIda, '2026-11-10');
+    assert.strictEqual(combsDuracao[0].dataVolta, '2026-11-20');
+    assert.strictEqual(combsDuracao[1].dataIda, '2026-11-09');
+    assert.strictEqual(combsDuracao[1].dataVolta, '2026-11-19'); // -1d preserva 10 dias
+    assert.strictEqual(combsDuracao[2].dataIda, '2026-11-11');
+    assert.strictEqual(combsDuracao[2].dataVolta, '2026-11-21'); // +1d preserva 10 dias
+
+    // Suporte a número direto de dias como número puro
+    const combsNum = gerarCombinacoesFlexibilidade('2026-11-10', 7, 1);
+    assert.strictEqual(combsNum[0].dataVolta, '2026-11-17');
+    assert.strictEqual(combsNum[1].dataVolta, '2026-11-16');
+    assert.strictEqual(combsNum[2].dataVolta, '2026-11-18');
+
+    // 2. Data de volta cronologicamente anterior à ida deve degradar defensivamente para Só Ida (null)
+    const combsPassado = gerarCombinacoesFlexibilidade('2026-11-10', '2026-11-05', 2);
+    assert.strictEqual(combsPassado.length, 5);
+    combsPassado.forEach(c => {
+      assert.strictEqual(c.dataVolta, null);
+    });
+
+    // 3. String corrompida / não-data no campo volta deve resultar uniformemente em null
+    const combsCorrompida = gerarCombinacoesFlexibilidade('2026-11-10', 'texto_aleatorio_invalido', 1);
+    assert.strictEqual(combsCorrompida.length, 3);
+    combsCorrompida.forEach(c => {
+      assert.strictEqual(c.dataVolta, null);
+    });
+  });
+
+  it('gerarCombinacoesFlexibilidade: deve tratar defensivamente entradas adversariais em dataIda (nula, texto inválido, objeto) sem vazar deltas fantasmas', () => {
+    // 1. dataIda nula ou indefinida com flexibilidade positiva (> 0) deve degradar graciosamente sem deltas fantasmas
+    const combsNulaComFlex = gerarCombinacoesFlexibilidade(null, null, 3);
+    assert.strictEqual(combsNulaComFlex.length, 1);
+    assert.strictEqual(combsNulaComFlex[0].dataIda, null);
+    assert.strictEqual(combsNulaComFlex[0].deltaDias, 0);
+
+    // 2. dataIda malformatada / texto aleatório não deve vazar strings espúrias
+    const combsInvalida = gerarCombinacoesFlexibilidade('data-invalida', null, 2);
+    assert.strictEqual(combsInvalida.length, 1);
+    assert.strictEqual(combsInvalida[0].dataIda, null);
+    assert.strictEqual(combsInvalida[0].deltaDias, 0);
+
+    // 3. dataIda passada como objeto ou tipo inesperado não deve vazar [object Object]
+    const combsObjeto = gerarCombinacoesFlexibilidade({ dia: 15 }, null, 2);
+    assert.strictEqual(combsObjeto.length, 1);
+    assert.strictEqual(combsObjeto[0].dataIda, null);
+    assert.strictEqual(combsObjeto[0].deltaDias, 0);
   });
 
   it('deve persistir e recuperar rota com flexibilidade_dias e melhor_opcao_flexivel no SQLite', () => {
@@ -230,6 +333,19 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo: 'one_way' }), true);
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo_viagem: 'one_way' }), true);
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, dias_estadia: 0, data_volta: null }), true);
+
+    // 5. Casos de borda adversariais: case-insensitivity, hífens, espaços e tipos não-objeto
+    assert.strictEqual(rotaEhSoIda({ tipo: 'ONE_WAY', data_volta: '2026-11-20' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo: 'one-way' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo: '  so_ida  ' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo_viagem: 'ONE-WAY' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo: 'ROUND_TRIP', data_volta: null }), false);
+    assert.strictEqual(rotaEhSoIda({ tipo: 'round-trip' }), false);
+    assert.strictEqual(rotaEhSoIda({ tipo_viagem: 'ROUND_TRIP' }), false);
+    assert.strictEqual(rotaEhSoIda(12345), false);
+    assert.strictEqual(rotaEhSoIda(true), false);
+    assert.strictEqual(rotaEhSoIda([]), false);
+    assert.strictEqual(rotaEhSoIda(['voo']), false);
   });
 
   it('deve alterar rota flexível de Ida e Volta para Só Ida e manter como Só Ida após sincronização Two-Way', async () => {
@@ -277,4 +393,62 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
 
     rotasRepo.excluir(rota.id);
   });
+
+  it('QA Adversarial: deve blindar gerarJanelasExploracaoSemData contra entradas mal formatadas, tipos espúrios e dias negativos', () => {
+    // 1. Strings não-ISO, texto livre ou formato brasileiro em dataBase não devem lançar RangeError/TypeError
+    const entradasInvalidas = ['sem data', 'flexivel', 'qualquer data', '31/12/2026', 20261115, {}, []];
+    for (const entrada of entradasInvalidas) {
+      assert.doesNotThrow(() => {
+        const janelas = gerarJanelasExploracaoSemData({ dataBase: entrada, qtdAmostras: 2 });
+        assert.ok(Array.isArray(janelas));
+        assert.strictEqual(janelas.length, 2);
+        assert.match(janelas[0].dataIda, /^\d{4}-\d{2}-\d{2}$/);
+      }, `Falha ao processar dataBase adversarial: ${String(entrada)}`);
+    }
+
+    // 2. diasEstadia negativo ou string com formato descritivo não corrompe as datas
+    const janelasTextoEstadia = gerarJanelasExploracaoSemData({ diasEstadia: '15 dias', qtdAmostras: 2 });
+    assert.strictEqual(janelasTextoEstadia.length, 2);
+    assert.strictEqual(somarDiasData(janelasTextoEstadia[0].dataIda, 15), janelasTextoEstadia[0].dataVolta);
+
+    const janelasNegativo = gerarJanelasExploracaoSemData({ diasEstadia: -5, qtdAmostras: 2 });
+    assert.strictEqual(janelasNegativo.length, 2);
+    // Deve recorrer ao padrão de 10 dias de estadia
+    assert.strictEqual(somarDiasData(janelasNegativo[0].dataIda, 10), janelasNegativo[0].dataVolta);
+
+    // 3. soIda via string "Só Ida" e qtdAmostras limites (0 ou negativa)
+    const janelasSoIdaStr = gerarJanelasExploracaoSemData({ soIda: 'Só Ida', qtdAmostras: 2 });
+    assert.strictEqual(janelasSoIdaStr[0].dataVolta, null);
+
+    const janelasVazias = gerarJanelasExploracaoSemData({ qtdAmostras: 0 });
+    assert.deepStrictEqual(janelasVazias, []);
+
+    const janelasNegativas = gerarJanelasExploracaoSemData({ qtdAmostras: -3 });
+    assert.deepStrictEqual(janelasNegativas, []);
+  });
+
+  it('QA Adversarial: deve blindar gerarDataPadraoInicial contra coerção de strings, nulos e extremos', () => {
+    // 1. Strings numéricas ("30", "45") não devem sofrer concatenação espúria de texto (ex: 13 + "30" = "1330")
+    const dataNumero = gerarDataPadraoInicial(30);
+    const dataString = gerarDataPadraoInicial('30');
+    assert.strictEqual(dataString, dataNumero, 'String numérica deve produzir o mesmo resultado que número');
+    assert.match(dataString, /^\d{4}-\d{2}-\d{2}$/);
+
+    // 2. Entradas nulas, NaN, tipos espúrios e strings inválidas devem acionar fallback seguro de 30 dias sem lançar RangeError
+    const casosFallback = [null, NaN, 'invalido', '   ', {}, []];
+    for (const valor of casosFallback) {
+      assert.doesNotThrow(() => {
+        const res = gerarDataPadraoInicial(valor);
+        assert.strictEqual(res, dataNumero, `Valor adversarial ${String(valor)} deve recorrer ao fallback padrão de 30 dias`);
+      });
+    }
+
+    // 3. Offsets negativos e números extremos não quebram ou extrapolam o calendário
+    const resNegativo = gerarDataPadraoInicial(-20);
+    assert.strictEqual(resNegativo, dataNumero, 'Offset negativo deve recorrer ao fallback seguro');
+
+    const resExtremo = gerarDataPadraoInicial(99999999);
+    assert.match(resExtremo, /^\d{4}-\d{2}-\d{2}$/, 'Offset extremo deve ser limitado defensivamente a ISO válida');
+  });
 });
+

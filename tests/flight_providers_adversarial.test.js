@@ -13,7 +13,9 @@ import assert from 'node:assert/strict';
 import {
   extrairPrecoNumerico,
   converterDuracaoParaHoras,
-  limparNomeCompanhia
+  limparNomeCompanhia,
+  extrairInfoConexoes,
+  extrairInfoBagagem
 } from '../src/services/providers/google_flights_direct_provider.js';
 
 import {
@@ -49,6 +51,26 @@ describe('QA Adversarial: extrairPrecoNumerico — casos de borda', () => {
 
   it('deve extrair preço de valor com texto contextual: "1.450 Reais brasileiros" → 1450', () => {
     assert.equal(extrairPrecoNumerico('1.450 Reais brasileiros'), 1450);
+  });
+
+  it('deve descartar centavos mesmo antes de sufixos de texto sem inflar 100x o valor', () => {
+    assert.equal(extrairPrecoNumerico('1.450,00 Reais brasileiros'), 1450);
+    assert.equal(extrairPrecoNumerico('R$ 1.500,50 por pessoa'), 1500);
+    assert.equal(extrairPrecoNumerico('980.00 ida e volta'), 980);
+  });
+
+  it('deve rejeitar valores negativos e entradas não-finitas retornando null', () => {
+    assert.equal(extrairPrecoNumerico('-500'), null);
+    assert.equal(extrairPrecoNumerico('R$ -1.250'), null);
+    assert.equal(extrairPrecoNumerico(-500), null);
+    assert.equal(extrairPrecoNumerico(Infinity), null);
+    assert.equal(extrairPrecoNumerico(-Infinity), null);
+    assert.equal(extrairPrecoNumerico(NaN), null);
+  });
+
+  it('deve suportar entradas numéricas válidas e converter floats truncando para inteiro', () => {
+    assert.equal(extrairPrecoNumerico(1500), 1500);
+    assert.equal(extrairPrecoNumerico(1500.75), 1500);
   });
 
   it('deve retornar null para texto sem dígitos', () => {
@@ -94,6 +116,50 @@ describe('QA Adversarial: converterDuracaoParaHoras — precisão decimal', () =
     // Correção: 40min → 0.667h (abaixo de 0.7 → não filtrado → correto)
     const duracao = converterDuracaoParaHoras('40 min');
     assert.ok(duracao < 0.7, `40min deveria ser < 0.7h mas foi ${duracao}`);
+  });
+
+  it('deve converter formato compacto somente com minutos "45m" e "50 m" evitando fallback de 12h', () => {
+    const dur45 = converterDuracaoParaHoras('45m');
+    const dur50 = converterDuracaoParaHoras('50 m');
+    assert.ok(Math.abs(dur45 - 0.75) < 0.001, `esperado 0.75, recebeu ${dur45}`);
+    assert.ok(Math.abs(dur50 - 0.833) < 0.001, `esperado ≈0.833, recebeu ${dur50}`);
+  });
+
+  it('deve suportar entradas numéricas e lidar defensivamente com extremos (negativo, Infinity, NaN)', () => {
+    assert.equal(converterDuracaoParaHoras(2.5), 2.5);
+    assert.equal(converterDuracaoParaHoras(-10), 12.0);
+    assert.equal(converterDuracaoParaHoras(Infinity), 12.0);
+    assert.equal(converterDuracaoParaHoras(NaN), 12.0);
+  });
+
+  it('deve converter formato de relógio digital "HH:MM" (ex: "02:30" → 2.5, "1:45" → 1.75)', () => {
+    const dur230 = converterDuracaoParaHoras('02:30');
+    const dur145 = converterDuracaoParaHoras('1:45');
+    assert.equal(dur230, 2.5);
+    assert.equal(dur145, 1.75);
+  });
+
+  it('deve converter formatos decimais com ponto ou vírgula: "2.5h" → 2.5 e "1,5 h" → 1.5', () => {
+    const durPonto = converterDuracaoParaHoras('2.5h');
+    const durVirgula = converterDuracaoParaHoras('1,5 h');
+    assert.equal(durPonto, 2.5);
+    assert.equal(durVirgula, 1.5);
+  });
+
+  it('deve retornar fallback de 12.0 para tempo zerado em relógio digital ("00:00" ou "0:00")', () => {
+    assert.equal(converterDuracaoParaHoras('00:00'), 12.0);
+    assert.equal(converterDuracaoParaHoras('0:00'), 12.0);
+  });
+
+  it('deve retornar fallback de 12.0 para tempo zerado em formato compacto ("0h 0m" ou "0h0m")', () => {
+    assert.equal(converterDuracaoParaHoras('0h 0m'), 12.0);
+    assert.equal(converterDuracaoParaHoras('0h0m'), 12.0);
+  });
+
+  it('deve retornar fallback de 12.0 para durações negativas em formato string ("-2h 30m", "-1h", "-45min")', () => {
+    assert.equal(converterDuracaoParaHoras('-2h 30m'), 12.0);
+    assert.equal(converterDuracaoParaHoras('-1h'), 12.0);
+    assert.equal(converterDuracaoParaHoras('-45min'), 12.0);
   });
 });
 
@@ -191,3 +257,60 @@ describe('QA Adversarial: extrairPrecoCheapestTab — variantes de formato real'
     assert.equal(extrairPrecoCheapestTab(html), null);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('QA Adversarial: extrairInfoConexoes — casos de borda e negação de voo direto', () => {
+  it('não deve classificar voo indireto como direto por substring match ("indireto")', () => {
+    const res = extrairInfoConexoes('Voo indireto com 1 parada em Lisboa (LIS)');
+    assert.equal(res.escalas, 1);
+    assert.equal(res.aeroportoConexao, 'Lisboa (LIS)');
+    assert.equal(res.detalhesEscalas, '1 parada em Lisboa (LIS)');
+  });
+
+  it('não deve classificar como direto texto com negação ("não direto")', () => {
+    const res = extrairInfoConexoes('Voo com 1 parada (não direto)');
+    assert.equal(res.escalas, 1);
+    assert.equal(res.detalhesEscalas, '1 parada');
+  });
+
+  it('deve inferir 1 parada padrão para termo "indireto" mesmo sem quantidade explícita', () => {
+    const res = extrairInfoConexoes('Voo indireto pela KLM');
+    assert.equal(res.escalas, 1);
+    assert.equal(res.detalhesEscalas, '1 parada');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('QA Adversarial: extrairInfoBagagem — casos de borda e acentuação', () => {
+  it('deve extrair regras sem acento (strip accents / fontes normalizadas)', () => {
+    const resMao = extrairInfoBagagem('sem bagagem de mao');
+    assert.equal(resMao.mao, 'nao_incluida');
+    assert.equal(resMao.texto, 'Apenas item pessoal (sem mala de mão)');
+
+    const resAmbos = extrairInfoBagagem('2 malas despachadas incluidas. Sem bagagem de mao.');
+    assert.equal(resAmbos.mao, 'nao_incluida');
+    assert.equal(resAmbos.despachada, 'incluida');
+    assert.equal(resAmbos.texto, 'Inclui bagagem despachada');
+  });
+
+  it('deve suportar plurais e múltiplos quantificadores numéricos ("2 malas despachadas", "malas de mão")', () => {
+    const res2Desp = extrairInfoBagagem('Inclui 2 malas despachadas');
+    assert.equal(res2Desp.despachada, 'incluida');
+    assert.equal(res2Desp.texto, 'Inclui bagagem despachada');
+
+    const res2Mao = extrairInfoBagagem('Inclui 2 malas de mao');
+    assert.equal(res2Mao.mao, 'incluida');
+    assert.equal(res2Mao.texto, 'Mala de mão incluída');
+
+    const resDespPagas = extrairInfoBagagem('Bagagens despachadas pagas');
+    assert.equal(resDespPagas.despachada, 'paga');
+  });
+
+  it('deve degradar graciosamente para entradas nulas, vazias, numéricas ou sem menção', () => {
+    assert.deepEqual(extrairInfoBagagem(null), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+    assert.deepEqual(extrairInfoBagagem(undefined), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+    assert.deepEqual(extrairInfoBagagem(''), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+    assert.deepEqual(extrairInfoBagagem(12345), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+  });
+});
+

@@ -21,21 +21,34 @@ export function normalizarTexto(texto) {
  * Resolve nome de cidade ou região para código Metropolitano, IATA ou KGMID
  */
 export function resolverDestino(texto) {
-  if (!texto) return null;
-  const limpo = normalizarTexto(texto);
+  if (!texto || (typeof texto !== 'string' && typeof texto !== 'number')) return null;
+  const strOriginal = String(texto).trim();
+  if (!strOriginal) return null;
 
-  if (DICIONARIO_REGIOES[limpo]) return DICIONARIO_REGIOES[limpo];
-  if (DICIONARIO_CIDADES[limpo]) return DICIONARIO_CIDADES[limpo];
+  // 1. Extração prioritária se contiver código IATA entre parênteses (ex: "São Paulo (GRU)", "Miami (MIA)")
+  const matchIata = strOriginal.match(/\(\s*([A-Za-z]{3})\s*\)/i);
+  if (matchIata) {
+    return matchIata[1].toUpperCase();
+  }
 
-  const trimOriginal = String(texto).trim();
-  if (trimOriginal.length === 3 && /^[A-Za-z]{3}$/.test(trimOriginal)) {
-    return trimOriginal.toUpperCase();
+  // 2. Resolução por dicionários canônicos (regiões e metrópoles)
+  const limpo = normalizarTexto(strOriginal);
+  if (Object.hasOwn(DICIONARIO_REGIOES, limpo) && typeof DICIONARIO_REGIOES[limpo] === 'string') return DICIONARIO_REGIOES[limpo];
+  if (Object.hasOwn(DICIONARIO_CIDADES, limpo) && typeof DICIONARIO_CIDADES[limpo] === 'string') return DICIONARIO_CIDADES[limpo];
+
+  // 3. Código IATA único de 3 letras
+  if (strOriginal.length === 3 && /^[A-Za-z]{3}$/.test(strOriginal)) {
+    return strOriginal.toUpperCase();
   }
-  if (/^[A-Za-z]{3}(,[A-Za-z]{3})+$/.test(trimOriginal)) {
-    return trimOriginal.toUpperCase();
+
+  // 4. Múltiplos aeroportos IATA separados por vírgula (com ou sem espaços, ex: "GRU, GIG", "GRU , CGH")
+  if (/^[A-Za-z]{3}(\s*,\s*[A-Za-z]{3})+$/.test(strOriginal)) {
+    return strOriginal.toUpperCase().replace(/\s*,\s*/g, ',');
   }
-  if (trimOriginal.startsWith('/m/') || trimOriginal.startsWith('/g/')) {
-    return trimOriginal;
+
+  // 5. Identificadores KGMID/Freebase (/m/ ou /g/)
+  if (/^\/[mg]\//i.test(strOriginal)) {
+    return strOriginal.toLowerCase();
   }
 
   return null;
@@ -54,11 +67,14 @@ export function normalizarParaSerpApi(codigo) {
  * Identifica se o campo de volta representa 'Só Ida'
  */
 export function ehSoIda(campoVolta) {
-  if (campoVolta === null || campoVolta === undefined) return true;
+  if (campoVolta === null || campoVolta === undefined || campoVolta === false) return true;
+  if (typeof campoVolta === 'number') {
+    return !Number.isFinite(campoVolta) || campoVolta <= 0;
+  }
   const str = String(campoVolta).trim();
   if (str === '') return true;
 
-  const limpo = normalizarTexto(str);
+  const limpo = normalizarTexto(str).replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
   return (
     limpo === 'so ida' ||
     limpo === 'soida' ||
@@ -66,10 +82,27 @@ export function ehSoIda(campoVolta) {
     limpo === 'ida' ||
     limpo === 'one way' ||
     limpo === 'oneway' ||
+    limpo === 'single' ||
+    limpo === 'single trip' ||
+    limpo === 'sem volta' ||
+    limpo === 'sem-volta' ||
+    limpo === 'sem retorno' ||
+    limpo === 'sem data' ||
+    limpo === 'sem data de volta' ||
+    limpo === 'null' ||
+    limpo === 'undefined' ||
+    limpo === 'none' ||
+    limpo === 'n/a' ||
+    limpo === 'na' ||
+    limpo === 'false' ||
+    limpo === '0' ||
     limpo.includes('so ida') ||
     limpo.includes('somente ida') ||
     limpo.includes('apenas ida') ||
-    limpo.includes('one-way')
+    limpo.includes('one-way') ||
+    limpo.includes('sem volta') ||
+    limpo.includes('sem retorno') ||
+    limpo.includes('no return')
   );
 }
 
@@ -85,9 +118,12 @@ export function formatarDataParaBusca(valor) {
   const str = String(valor).trim();
   if (!str) return null;
 
-  // Formato YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    const [ano, mes, dia] = str.split('-').map(Number);
+  // Formato YYYY-MM-DD (com ou sem timestamp ISO/SQLite: T00:00:00Z ou 00:00:00)
+  const matchIso = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (matchIso) {
+    const ano = parseInt(matchIso[1], 10);
+    const mes = parseInt(matchIso[2], 10);
+    const dia = parseInt(matchIso[3], 10);
     const data = new Date(Date.UTC(ano, mes - 1, dia));
     if (
       isNaN(data.getTime()) ||
@@ -96,11 +132,13 @@ export function formatarDataParaBusca(valor) {
     ) {
       return null;
     }
-    return str;
+    const dStr = String(dia).padStart(2, '0');
+    const mStr = String(mes).padStart(2, '0');
+    return `${ano}-${mStr}-${dStr}`;
   }
 
-  // Formato DD/MM/YYYY ou DD-MM-YYYY
-  const matchBr = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  // Formato DD/MM/YYYY ou DD-MM-YYYY (com ou sem horário)
+  const matchBr = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(?:[T\s].*)?$/);
   if (matchBr) {
     const dia = parseInt(matchBr[1], 10);
     const mes = parseInt(matchBr[2], 10);
@@ -126,15 +164,37 @@ export function formatarDataParaBusca(valor) {
  * Extrai o número de dias de estadia de campos de texto ou números (ex: "10 dias", "10", "14d")
  */
 export function extrairDiasEstadia(valor, padrao = 10) {
-  if (valor === undefined || valor === null || valor === '') return padrao;
-  if (typeof valor === 'number' && !isNaN(valor) && valor > 0) return Math.round(valor);
+  const padraoValido = (typeof padrao === 'number' && Number.isFinite(padrao) && padrao > 0)
+    ? Math.min(Math.round(padrao), 3650)
+    : 10;
+
+  if (valor === undefined || valor === null || valor === '') return padraoValido;
+
+  if (typeof valor === 'number') {
+    if (!Number.isFinite(valor) || valor <= 0) return padraoValido;
+    return Math.min(Math.round(valor), 3650);
+  }
+
   const str = String(valor).trim();
-  const match = str.match(/^(\d+)/);
+  if (!str) return padraoValido;
+
+  // Rejeita valores negativos em formato textual (ex: "-10", "-5 dias")
+  if (/^\s*-/.test(str)) return padraoValido;
+
+  // Se for uma data absoluta de calendário (YYYY-MM-DD ou DD/MM/YYYY), não representa quantidade de dias
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/.test(str) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}/.test(str)) {
+    return padraoValido;
+  }
+
+  // Extrai o número de dias (suporta início direto como "14 dias" ou prefixos como "~14 dias", "aprox. 14 dias", "estadia de 14 dias")
+  const match = str.match(/^(?:[~≈\s]|aprox\.?|cerca\s+de|estadia(?:\s+de)?)*(\d+)/i) || str.match(/(?:^|[~≈\s])(\d+)\s*(?:dias?|d|\(dias?\)|noites?|n)\b/i);
   if (match) {
     const n = parseInt(match[1], 10);
-    if (n > 0) return n;
+    if (n > 0 && Number.isFinite(n)) {
+      return Math.min(n, 3650);
+    }
   }
-  return padrao;
+  return padraoValido;
 }
 
 /**
@@ -144,14 +204,18 @@ export function calcularDataVolta(dataIdaStr, campoVolta) {
   if (ehSoIda(campoVolta)) return null;
 
   const strTrim = String(campoVolta).trim();
-  // Reconhece formatos de duração como: "10", "10 dias", "10d", "14 (dias)", etc.
-  const matchDias = strTrim.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)))?$/i);
+  // Reconhece formatos de duração como: "10", "10 dias", "10d", "14 (dias)", "7 noites", "7n", etc.
+  const matchDias = strTrim.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)|noites?|n))?$/i);
   if ((!isNaN(campoVolta) && typeof campoVolta === 'number') || matchDias) {
     const dias = matchDias ? parseInt(matchDias[1], 10) : parseInt(strTrim, 10);
-    if (dias > 0 && dataIdaStr) {
-      const [ano, mes, dia] = dataIdaStr.split('-').map(Number);
+    if (dias > 0 && Number.isFinite(dias) && dias <= 3650 && dataIdaStr) {
+      const dataIdaNorm = formatarDataParaBusca(dataIdaStr);
+      if (!dataIdaNorm) return null;
+      const [ano, mes, dia] = dataIdaNorm.split('-').map(Number);
       const dataIda = new Date(Date.UTC(ano, mes - 1, dia));
+      if (isNaN(dataIda.getTime())) return null;
       dataIda.setUTCDate(dataIda.getUTCDate() + dias);
+      if (isNaN(dataIda.getTime())) return null;
       return dataIda.toISOString().split('T')[0];
     }
     return null;
@@ -164,37 +228,52 @@ export function calcularDataVolta(dataIdaStr, campoVolta) {
  * Validação rigorosa de período (ida e volta)
  */
 export function validarPeriodo(dataIdaStr, dataVoltaStr, tipo, semData = false) {
-  if (semData) {
-    if (!dataIdaStr) return { ok: true };
+  const idaTrim = typeof dataIdaStr === 'string' ? dataIdaStr.trim() : (dataIdaStr ? String(dataIdaStr).trim() : '');
+  const semDataBool = semData === 1 || Boolean(semData);
+
+  if (semDataBool) {
+    if (!idaTrim) return { ok: true };
   }
 
   const regex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dataIdaStr || !regex.test(dataIdaStr)) {
+  if (!idaTrim || !regex.test(idaTrim)) {
     return { ok: false, erro: 'Data de ida inválida ou mal formatada' };
   }
 
   function dataValida(str) {
     const [ano, mes, dia] = str.split('-').map(Number);
+    if (!Number.isFinite(ano) || ano < 2000 || ano > 2099) return false;
     const d = new Date(Date.UTC(ano, mes - 1, dia));
-    return !isNaN(d.getTime()) && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+    return !isNaN(d.getTime()) && d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
   }
 
-  if (!dataValida(dataIdaStr)) {
+  if (!dataValida(idaTrim)) {
     return { ok: false, erro: 'Data de ida inexistente no calendário' };
   }
 
-  if (tipo === 'one_way') {
-    if (dataVoltaStr !== null && dataVoltaStr !== undefined && dataVoltaStr !== '') {
+  const tipoNorm = typeof tipo === 'string' ? tipo.trim().toLowerCase().replace(/-/g, '_') : '';
+  const ehTipoSoIda = tipoNorm === 'one_way' || tipoNorm === 'so_ida' || tipoNorm === 'oneway';
+
+  const voltaTrim = typeof dataVoltaStr === 'string' ? dataVoltaStr.trim() : (dataVoltaStr !== null && dataVoltaStr !== undefined ? String(dataVoltaStr).trim() : '');
+  const voltaSemanticaSoIda = ehSoIda(dataVoltaStr);
+
+  if (ehTipoSoIda) {
+    if (voltaTrim && !voltaSemanticaSoIda) {
       return { ok: false, erro: 'Só ida não deve conter data de volta' };
     }
     return { ok: true };
   }
 
-  if (!dataVoltaStr || !regex.test(dataVoltaStr) || !dataValida(dataVoltaStr)) {
+  // Se o tipo não foi especificado explicitamente mas o campo de volta indica Só Ida
+  if (!tipoNorm && voltaSemanticaSoIda) {
+    return { ok: true };
+  }
+
+  if (!voltaTrim || !regex.test(voltaTrim) || !dataValida(voltaTrim)) {
     return { ok: false, erro: 'Data de volta inexistente ou inválida' };
   }
 
-  if (dataVoltaStr < dataIdaStr) {
+  if (voltaTrim < idaTrim) {
     return { ok: false, erro: 'A data de volta não pode ser anterior à data de ida' };
   }
 
@@ -229,17 +308,34 @@ export const KGMID_PARA_NOME = {
  * Converte códigos IATA, KGMIDs, regiões ou nomes com parênteses em termos aceitos e funcionais no Google Flights
  */
 export function resolverCodigoParaLink(cod) {
-  if (!cod) return 'SAO';
+  if (cod === null || cod === undefined) return 'SAO';
+  if (typeof cod !== 'string' && typeof cod !== 'number') return 'SAO';
   const str = String(cod).trim();
-  const matchIata = str.match(/\(([A-Z]{3})\)/);
-  if (matchIata) return matchIata[1];
-  if (KGMID_PARA_NOME[str]) return KGMID_PARA_NOME[str];
+  if (!str) return 'SAO';
+
+  const matchIata = str.match(/\(\s*([A-Za-z]{3})\s*\)/i);
+  if (matchIata) return matchIata[1].toUpperCase();
+
+  // Múltiplos aeroportos IATA separados por vírgula (ex: "GRU, GIG" ou "gru , gig")
+  if (/^[A-Za-z]{3}(\s*,\s*[A-Za-z]{3})+$/.test(str)) {
+    return str.toUpperCase().replace(/\s*,\s*/g, ',');
+  }
+
+  const strLower = str.toLowerCase();
+  if (KGMID_PARA_NOME[strLower]) return KGMID_PARA_NOME[strLower];
+
   const limpoLower = normalizarTexto(str);
   if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'South America';
   if (limpoLower === 'europa' || limpoLower === 'europe') return 'Europe';
   if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'United States';
   if (limpoLower === 'asia') return 'Asia';
-  if (str.startsWith('/m/') || str.startsWith('/g/')) return str.replace(/^\/[mg]\//, '');
+  if (/^\/[mg]\//i.test(str)) return str.replace(/^\/[mg]\//i, '');
+
+  // Código IATA único de 3 letras (ex: "gru", "mia")
+  if (str.length === 3 && /^[A-Za-z]{3}$/.test(str)) {
+    return str.toUpperCase();
+  }
+
   return str;
 }
 
@@ -249,9 +345,14 @@ export function resolverCodigoParaLink(cod) {
 export function rotaEhSoIda(rotaOuDados) {
   if (!rotaOuDados) return false;
   if (typeof rotaOuDados === 'string') return ehSoIda(rotaOuDados);
+  if (typeof rotaOuDados !== 'object' || Array.isArray(rotaOuDados)) return false;
 
-  if (rotaOuDados.tipo === 'one_way' || rotaOuDados.tipo === 'so_ida' || rotaOuDados.tipo_viagem === 'one_way') return true;
-  if (rotaOuDados.tipo === 'round_trip' || rotaOuDados.tipo === 'ida_e_volta' || rotaOuDados.tipo_viagem === 'round_trip') return false;
+  const normalizarTipo = (val) => (typeof val === 'string' ? val.trim().toLowerCase().replace(/-/g, '_') : '');
+  const tipo = normalizarTipo(rotaOuDados.tipo);
+  const tipoViagem = normalizarTipo(rotaOuDados.tipo_viagem);
+
+  if (tipo === 'one_way' || tipo === 'so_ida' || tipoViagem === 'one_way' || tipoViagem === 'so_ida') return true;
+  if (tipo === 'round_trip' || tipo === 'ida_e_volta' || tipoViagem === 'round_trip' || tipoViagem === 'ida_e_volta') return false;
 
   const campoVolta = rotaOuDados.data_volta !== undefined ? rotaOuDados.data_volta : rotaOuDados.dataVolta;
   const semData = rotaOuDados.sem_data === 1 || Boolean(rotaOuDados.sem_data);
@@ -275,22 +376,35 @@ export function rotaEhSoIda(rotaOuDados) {
 /**
  * Gera link direto e estruturado para o Google Flights que abre direto no voo / rota
  */
-export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta) {
+export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda = 'BRL') {
+  const moedaCode = (typeof moeda === 'string' && moeda.trim())
+    ? moeda.trim().toUpperCase()
+    : 'BRL';
   const origemRes = resolverCodigoParaLink(origemCod);
   const destinoRes = resolverCodigoParaLink(destinoCod);
 
   const origemParam = encodeURIComponent(origemRes);
   const destinoParam = encodeURIComponent(destinoRes);
 
-  if (!dataIda) {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=BRL`;
+  const dataIdaNorm = formatarDataParaBusca(dataIda);
+
+  if (!dataIdaNorm) {
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   }
 
   const soIda = ehSoIda(dataVolta);
-  if (!soIda && dataVolta) {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20returning%20${dataVolta}&hl=pt-BR&gl=BR&curr=BRL`;
+  let voltaEfetiva = null;
+  if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
+    const voltaResolvida = calcularDataVolta(dataIdaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaResolvida && voltaResolvida >= dataIdaNorm) {
+      voltaEfetiva = voltaResolvida;
+    }
+  }
+
+  if (voltaEfetiva) {
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20returning%20${voltaEfetiva}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20one-way&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   }
 }
 
@@ -298,8 +412,12 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
  * Codifica inteiro como varint do Protocol Buffers
  */
 export function encodeVarint(num) {
+  const val = Number(num);
+  if (!Number.isFinite(val) || val <= 0) {
+    return Buffer.from([0]);
+  }
+  let n = Math.floor(val);
   const bytes = [];
-  let n = num;
   while (n > 0x7f) {
     bytes.push((n & 0x7f) | 0x80);
     n >>>= 7;
@@ -312,21 +430,50 @@ export function encodeVarint(num) {
  * Codifica campo length-delimited do Protocol Buffers (wire type 2)
  */
 export function encodeLengthDelimited(tag, buf) {
-  const tagByte = (tag << 3) | 2;
-  return Buffer.concat([Buffer.from([tagByte]), encodeVarint(buf.length), buf]);
+  const tagNum = (Number.isFinite(+tag) && +tag > 0) ? Math.floor(+tag) : 1;
+  const tagVarint = encodeVarint((tagNum << 3) | 2);
+
+  let bufferEfetivo;
+  if (Buffer.isBuffer(buf)) {
+    bufferEfetivo = buf;
+  } else if (buf instanceof Uint8Array) {
+    bufferEfetivo = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+  } else if (typeof buf === 'string') {
+    bufferEfetivo = Buffer.from(buf, 'utf8');
+  } else {
+    bufferEfetivo = Buffer.alloc(0);
+  }
+
+  return Buffer.concat([tagVarint, encodeVarint(bufferEfetivo.length), bufferEfetivo]);
 }
 
 /**
  * Gera o payload binário protobuf (tfs) compatível com o Google Flights
  */
-export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null }) {
-  const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
+export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null } = {}) {
+  // Normalização defensiva de origens e destinos (suporta arrays, strings únicas e filtra entradas inválidas)
+  const listaOrigens = (Array.isArray(origens) ? origens : (origens ? [origens] : ['SAO']))
+    .map(o => (o !== null && o !== undefined) ? String(o).trim() : '')
+    .filter(Boolean);
+  const origensEfetivas = listaOrigens.length > 0 ? listaOrigens : ['SAO'];
+
+  const listaDestinos = (Array.isArray(destinos) ? destinos : (destinos ? [destinos] : []))
+    .map(d => (d !== null && d !== undefined) ? String(d).trim() : '')
+    .filter(Boolean);
+  const destinosEfetivos = listaDestinos.length > 0 ? listaDestinos : ['SAO'];
+
+  // Normalização e validação das datas para formato YYYY-MM-DD
+  const idaNorm = formatarDataParaBusca(dataIda) || (typeof dataIda === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataIda.trim()) ? dataIda.trim() : '2027-01-01');
+  const voltaRaw = ehSoIda(dataVolta) ? null : dataVolta;
+  const voltaEfetiva = voltaRaw ? (formatarDataParaBusca(voltaRaw) || (typeof voltaRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(voltaRaw.trim()) ? voltaRaw.trim() : null)) : null;
+
   const leg1Parts = [];
-  leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataIda)]));
-  if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
-    leg1Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
+  leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(idaNorm)]));
+  const maxMinNum = Number(maxDurationMinutes);
+  if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
+    leg1Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
   }
-  for (const orig of origens) {
+  for (const orig of origensEfetivas) {
     const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
     const origBytes = Buffer.from(orig);
     const sub = Buffer.concat([
@@ -336,7 +483,7 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     ]);
     leg1Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
   }
-  for (const dest of destinos) {
+  for (const dest of destinosEfetivos) {
     const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
     const destBytes = Buffer.from(dest);
     const sub = Buffer.concat([
@@ -357,10 +504,10 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
   if (voltaEfetiva) {
     const leg2Parts = [];
     leg2Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(voltaEfetiva)]));
-    if (maxDurationMinutes && maxDurationMinutes > 0 && maxDurationMinutes < 900 * 60) {
-      leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(maxDurationMinutes)]));
+    if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
+      leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
     }
-    for (const dest of destinos) {
+    for (const dest of destinosEfetivos) {
       const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
       const destBytes = Buffer.from(dest);
       const sub = Buffer.concat([
@@ -370,7 +517,7 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
       ]);
       leg2Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
     }
-    for (const orig of origens) {
+    for (const orig of origensEfetivas) {
       const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
       const origBytes = Buffer.from(orig);
       const sub = Buffer.concat([
@@ -388,10 +535,83 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
 }
 
 /**
- * Gera link direto e estruturado para o Google Flights que abre FORÇADAMENTE na aba Cheapest (Menor Preço)
+ * Constrói o payload binário tfu (Travel Filter URL) do Google Flights,
+ * que controla número de passageiros e classe de cabine na URL do Cheapest.
+ *
+ * @param {number} adultos - Número total de adultos (>= 1, padrão 1)
+ * @param {number} criancas - Número de crianças (2-11 anos, padrão 0)
+ * @param {number} bebes - Número de bebês no colo (< 2 anos, padrão 0)
+ * @param {string} classeViagem - 'economy' | 'premium_economy' | 'business' | 'first' (padrão 'economy')
+ * @returns {string} Payload base64url compatível com o parâmetro tfu do Google Flights
  */
-export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
+export function construirTfu(adultos = 1, criancas = 0, bebes = 0, classeViagem = 'economy') {
+  // Mapa canônico de cabines para o encoding Protobuf do Google Flights
+  const CABIN_MAP = {
+    economy: 1,
+    premium_economy: 2,
+    business: 3,
+    first: 4
+  };
+
+  // Sanitização defensiva dos parâmetros numéricos
+  const nAdultos = Math.max(1, Math.min(9, Number.isFinite(+adultos) ? Math.floor(+adultos) : 1));
+  const nCriancas = Math.max(0, Math.min(8, Number.isFinite(+criancas) ? Math.floor(+criancas) : 0));
+  const nBebes = Math.max(0, Math.min(nAdultos, Number.isFinite(+bebes) ? Math.floor(+bebes) : 0));
+  const classeStr = typeof classeViagem === 'string' ? classeViagem.toLowerCase().trim() : 'economy';
+  const classeNum = CABIN_MAP[classeStr] || 1;
+
+  // Google Flights codifica adultos adicionais acima do padrão de 1 (adultos - 1 = extras)
+  const adultosExtras = nAdultos - 1;
+
+  // Submensagem interna: passageiros e cabine
+  const innerParts = [
+    Buffer.from([0x08, adultosExtras]), // field 1 varint = adultos extras (0 = 1 adulto padrão)
+    Buffer.from([0x10, nCriancas]),     // field 2 varint = crianças
+    Buffer.from([0x18, nBebes]),        // field 3 varint = bebês no colo
+    Buffer.from([0x20, 0x02]),          // field 4 varint = 2 (max_stops canônico fixo do Google)
+    Buffer.from([0x28, 0x03])           // field 5 varint = 3 (sort_by=melhor preço, padrão do Google)
+  ];
+
+  // Classe de cabine: field 6 varint — omitir quando economy (1) pois é o padrão implícito
+  if (classeNum > 1) {
+    innerParts.push(Buffer.from([0x30, classeNum]));
+  }
+
+  const inner = Buffer.concat(innerParts);
+  // Envelope externo: field 2, length-delimited
+  const outer = Buffer.concat([Buffer.from([0x12, inner.length]), inner]);
+  return outer.toString('base64url');
+}
+
+/**
+ * Gera link direto e estruturado para o Google Flights que abre FORÇADAMENTE na aba Cheapest (Menor Preço).
+ * Suporta múltiplos passageiros (adultos, crianças) e seleção de classe de cabine.
+ *
+ * @param {string} origemCod - Código IATA ou KGMID da origem
+ * @param {string} destinoCod - Código IATA, KGMID ou macrorregião do destino
+ * @param {string} dataIda - Data de ida no formato YYYY-MM-DD
+ * @param {string|null} dataVolta - Data de volta (ou 'Só Ida' / null para one-way)
+ * @param {number|null} duracaoMaxHoras - Duração máxima do voo em horas
+ * @param {number} adultos - Número de adultos (padrão 1)
+ * @param {number} criancas - Número de crianças 2-11 anos (padrão 0)
+ * @param {string} classeViagem - 'economy' | 'premium_economy' | 'business' | 'first' (padrão 'economy')
+ * @returns {string|null} URL canônica do Google Flights aba Cheapest ou null se sem dataIda
+ */
+export function gerarLinkGoogleFlightsCheapest(
+  origemCod,
+  destinoCod,
+  dataIda,
+  dataVolta = null,
+  duracaoMaxHoras = null,
+  adultos = 1,
+  criancas = 0,
+  classeViagem = 'economy',
+  moeda = 'BRL'
+) {
   if (!dataIda) return null;
+  const dataIdaNorm = formatarDataParaBusca(dataIda);
+  if (!dataIdaNorm) return null;
+
   const strDest = String(destinoCod || '').trim();
   const limpoLower = normalizarTexto(strDest);
   const ehMacrorregiao = strDest.startsWith('/m/') || strDest.startsWith('/g/') ||
@@ -410,7 +630,7 @@ export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, d
     if (hubIata) {
       destinoEfetivo = hubIata;
     } else {
-      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIdaNorm, dataVolta, moeda);
     }
   }
 
@@ -419,19 +639,41 @@ export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, d
   const origens = normalizarParaSerpApi(origCod).split(',').map(s => s.trim()).filter(Boolean);
   const destinos = normalizarParaSerpApi(destCod).split(',').map(s => s.trim()).filter(Boolean);
   const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
-  const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
-  const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
-  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfs}&tfu=EgoIABAAGAAgAigD`;
+
+  const soIda = ehSoIda(dataVolta);
+  let voltaEfetiva = null;
+  if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
+    const voltaResolvida = calcularDataVolta(dataIdaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaResolvida && voltaResolvida >= dataIdaNorm) {
+      voltaEfetiva = voltaResolvida;
+    }
+  }
+
+  const tfs = gerarTfs({ origens, destinos, dataIda: dataIdaNorm, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
+  const tfu = construirTfu(adultos, criancas, 0, classeViagem);
+  const moedaCode = (typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL';
+  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaCode}&tfs=${tfs}&tfu=${tfu}`;
 }
 
+
 /**
- * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo)
+ * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo) com validação defensiva contra erros de tempo
  */
 export function somarDiasData(dataStr, dias) {
   if (!dataStr) return null;
-  const [ano, mes, dia] = dataStr.split('-').map(Number);
+  const formatada = formatarDataParaBusca(dataStr);
+  if (!formatada) return null;
+
+  const delta = typeof dias === 'number' ? dias : parseInt(dias, 10);
+  if (!Number.isFinite(delta)) return formatada;
+
+  const [ano, mes, dia] = formatada.split('-').map(Number);
   const d = new Date(Date.UTC(ano, mes - 1, dia));
-  d.setUTCDate(d.getUTCDate() + dias);
+  if (isNaN(d.getTime())) return null;
+
+  d.setUTCDate(d.getUTCDate() + delta);
+  if (isNaN(d.getTime())) return null;
+
   return d.toISOString().split('T')[0];
 }
 
@@ -439,8 +681,11 @@ export function somarDiasData(dataStr, dias) {
  * Gera data inicial padrão (ex: D+30 dias, preferencialmente terça-feira)
  */
 export function gerarDataPadraoInicial(diasOffset = 30) {
+  const parsed = typeof diasOffset === 'number' ? diasOffset : parseInt(diasOffset, 10);
+  const offsetFinal = (Number.isFinite(parsed) && parsed >= 0) ? Math.min(parsed, 3650) : 30;
+
   const agora = new Date();
-  agora.setUTCDate(agora.getUTCDate() + diasOffset);
+  agora.setUTCDate(agora.getUTCDate() + offsetFinal);
   // Se cair no sábado (6) ou domingo (0), ajusta para terça-feira (+2 ou +3 dias)
   const diaSemana = agora.getUTCDay();
   if (diaSemana === 0) agora.setUTCDate(agora.getUTCDate() + 2); // Domingo -> Terça
@@ -454,15 +699,19 @@ export function gerarDataPadraoInicial(diasOffset = 30) {
  */
 export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 10, qtdAmostras = 4, soIda = false } = {}) {
   const agoraStr = gerarDataPadraoInicial(25);
-  // Se dataBase for nula ou anterior à data inicial padrão (ex: drift ou data passada), usa a base atual de hoje
-  const base = (!dataBase || dataBase < agoraStr) ? agoraStr : dataBase;
+  // Se dataBase for nula, inválida ou anterior à data inicial padrão (ex: drift ou data passada), usa a base atual de hoje
+  const dataBaseNorm = formatarDataParaBusca(dataBase);
+  const base = (!dataBaseNorm || dataBaseNorm < agoraStr) ? agoraStr : dataBaseNorm;
   const [ano, mes, dia] = base.split('-').map(Number);
   const dataReferencia = new Date(Date.UTC(ano, mes - 1, dia));
 
   const janelas = [];
   // Gera amostras estratégicas espaçadas nos próximos meses
   const offsetsDias = [0, 30, 60, 90, 120, 150];
-  const total = Math.min(qtdAmostras, offsetsDias.length);
+  const qtdNum = Number(qtdAmostras);
+  const total = Math.max(0, Math.min(Number.isFinite(qtdNum) ? Math.round(qtdNum) : 4, offsetsDias.length));
+  const estadiaDias = extrairDiasEstadia(diasEstadia, 10);
+  const ehSoIdaFinal = (typeof soIda === 'string') ? ehSoIda(soIda) : Boolean(soIda);
 
   for (let i = 0; i < total; i++) {
     const d = new Date(dataReferencia);
@@ -474,7 +723,7 @@ export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 1
     d.setUTCDate(d.getUTCDate() + ajusteTerça);
 
     const dataIda = d.toISOString().split('T')[0];
-    const dataVolta = soIda ? null : somarDiasData(dataIda, diasEstadia);
+    const dataVolta = ehSoIdaFinal ? null : somarDiasData(dataIda, estadiaDias);
 
     const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const labelMes = `${mesesNomes[d.getUTCMonth()]}/${String(d.getUTCFullYear()).slice(2)}`;
@@ -495,18 +744,31 @@ export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 1
  * Gera as combinações de datas na janela de flexibilidade (±0 a ±7 dias)
  */
 export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeDias = 0) {
-  const flex = Math.min(7, Math.max(0, parseInt(flexibilidadeDias, 10) || 0));
-  if (flex === 0) {
-    return [{ dataIda, dataVolta, deltaDias: 0, label: 'Data Base' }];
+  const idaNorm = formatarDataParaBusca(dataIda);
+
+  let voltaEfetiva = null;
+  if (!ehSoIda(dataVolta) && dataVolta !== null && dataVolta !== undefined) {
+    const voltaCalculada = calcularDataVolta(idaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaCalculada) {
+      if (!idaNorm || voltaCalculada >= idaNorm) {
+        voltaEfetiva = voltaCalculada;
+      }
+    }
+  }
+
+  const flexRaw = typeof flexibilidadeDias === 'number' ? flexibilidadeDias : parseInt(flexibilidadeDias, 10);
+  const flex = Number.isFinite(flexRaw) ? Math.min(7, Math.max(0, flexRaw)) : 0;
+  if (!idaNorm || flex === 0) {
+    return [{ dataIda: idaNorm, dataVolta: voltaEfetiva, deltaDias: 0, label: 'Data Base' }];
   }
 
   const combinacoes = [
-    { dataIda, dataVolta, deltaDias: 0, label: 'Data Base' }
+    { dataIda: idaNorm, dataVolta: voltaEfetiva, deltaDias: 0, label: 'Data Base' }
   ];
 
   for (let delta = 1; delta <= flex; delta++) {
-    const idaMenos = somarDiasData(dataIda, -delta);
-    const voltaMenos = dataVolta ? somarDiasData(dataVolta, -delta) : null;
+    const idaMenos = somarDiasData(idaNorm, -delta);
+    const voltaMenos = voltaEfetiva ? somarDiasData(voltaEfetiva, -delta) : null;
     combinacoes.push({
       dataIda: idaMenos,
       dataVolta: voltaMenos,
@@ -514,8 +776,8 @@ export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeD
       label: `${-delta}d`
     });
 
-    const idaMais = somarDiasData(dataIda, delta);
-    const voltaMais = dataVolta ? somarDiasData(dataVolta, delta) : null;
+    const idaMais = somarDiasData(idaNorm, delta);
+    const voltaMais = voltaEfetiva ? somarDiasData(voltaEfetiva, delta) : null;
     combinacoes.push({
       dataIda: idaMais,
       dataVolta: voltaMais,

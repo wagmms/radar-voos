@@ -1,19 +1,40 @@
 import { TERMOS_BUG_FARE, TERMOS_MARKETING_BANIDOS } from './dicionarios.js';
-import { ehSoIda } from './rotas.js';
+import { ehSoIda, resolverDestino } from './rotas.js';
+import { parsePreco } from './calculadora.js';
 
 /**
  * Classifica um item do feed RSS como Bug Fare autêntico, promoção comercial ou lixo de marketing
  */
 export function classificarItemFeed(titulo, link) {
-  const tituloLower = String(titulo || '').toLowerCase();
-  const linkLower = String(link || '').toLowerCase();
+  const tituloLower = String(titulo || '').toLowerCase().trim();
+  const linkLower = String(link || '').toLowerCase().trim();
 
-  // 1. Filtro implacável contra lixo de marketing, pacotes, hotéis, cupons e afiliados
-  const ehMarketing = TERMOS_MARKETING_BANIDOS.some(
+  if (!tituloLower) {
+    return {
+      valido: false,
+      ehBugFare: false,
+      tipo: 'Descartado',
+      motivo: 'Título vazio ou ausente'
+    };
+  }
+
+  // 1. Detecta positivamente se o título anuncia erro de tarifa legítimo
+  const ehBugFare = TERMOS_BUG_FARE.some(t => tituloLower.includes(t));
+
+  // Produtos não-aéreos e serviços que JAMAIS devem ser anunciados, mesmo se alegarem "bug fare"
+  const TERMOS_PRODUTOS_BANIDOS = [
+    'pacote', 'pacotes', 'hotel', 'hotéis', 'hoteis', 'resort', 'resorts',
+    'pousada', 'pousadas', 'fazenda', 'cupom', 'cupons', 'seguro', 'seguro viagem',
+    'carro', 'aluguel', 'locação', 'rent a car', 'cartão', 'cartao', 'cartões', 'cartoes',
+    'milhas', 'pontos', 'pontuação', 'clube', 'livelo', 'esfera', 'smiles', 'latam pass', 'tudoazul',
+    'cruzeiro', 'navio', 'ingressos', 'disney'
+  ];
+
+  const contemProdutoBanido = TERMOS_PRODUTOS_BANIDOS.some(
     t => tituloLower.includes(t) || linkLower.includes(t)
   );
 
-  if (ehMarketing) {
+  if (contemProdutoBanido) {
     return {
       valido: false,
       ehBugFare: false,
@@ -21,14 +42,29 @@ export function classificarItemFeed(titulo, link) {
     };
   }
 
-  // 2. Filtro estrito: exige positivamente termos de erro de tarifa
-  const ehBugFare = TERMOS_BUG_FARE.some(t => tituloLower.includes(t));
-
+  // Se for erro de tarifa autêntico para passagens aéreas (mesmo que cite desconto, off ou executiva)
   if (ehBugFare) {
     return {
       valido: true,
       ehBugFare: true,
       tipo: '🚨 BUG FARE (ERRO DE TARIFA!)'
+    };
+  }
+
+  // 2. Filtro estrito de marketing comercial para posts que NÃO são Bug Fares
+  const ehMarketing = TERMOS_MARKETING_BANIDOS.some(t => {
+    // Permite "super desconto" sem que seja barrado pelo termo genérico "desconto"
+    if (t === 'desconto' && tituloLower.includes('super desconto')) {
+      return false;
+    }
+    return tituloLower.includes(t) || linkLower.includes(t);
+  });
+
+  if (ehMarketing) {
+    return {
+      valido: false,
+      ehBugFare: false,
+      motivo: 'Conteúdo de marketing ou publieditorial banido'
     };
   }
 
@@ -94,9 +130,22 @@ export const PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE = {
  * Identifica a macrorregião a partir do código do aeroporto ou nome de destino
  */
 export function identificarRegiaoDestino(destinoCod) {
-  if (!destinoCod) return 'OUTRO';
-  const cod = String(destinoCod).toUpperCase().trim();
-  const nomeLower = String(destinoCod).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (destinoCod === null || destinoCod === undefined) return 'OUTRO';
+
+  let entrada = destinoCod;
+  if (typeof entrada === 'object' && entrada !== null) {
+    entrada = entrada.iata || entrada.codigo || entrada.code || entrada.airport || entrada.cidade || entrada.city || entrada.destino || entrada.nome || entrada.name || '';
+  }
+
+  if (typeof entrada !== 'string' && typeof entrada !== 'number') return 'OUTRO';
+  const str = String(entrada).trim();
+  if (!str) return 'OUTRO';
+
+  const cod = str.toUpperCase();
+  const nomeLower = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  const destinoResolvido = resolverDestino(str);
+  const codResolvido = destinoResolvido ? String(destinoResolvido).toUpperCase().trim() : null;
 
   const europa = [
     'LIS', 'OPO', 'MAD', 'BCN', 'CDG', 'ORY', 'PAR', 'LHR', 'LGW', 'LON', 'FCO', 'MXP', 'ROM', 'MIL',
@@ -142,18 +191,32 @@ export function identificarRegiaoDestino(destinoCod) {
     'NVT', 'LDB', 'MGF', 'XAP', 'CXJ', 'JOI'
   ];
 
-  if (europa.some(e => cod.includes(e))) return 'EUROPA';
-  if (amNorte.some(e => cod.includes(e))) return 'AMERICA_NORTE';
-  if (caribe.some(e => cod.includes(e))) return 'CARIBE_AMERICA_CENTRAL';
-  if (orienteMedio.some(e => cod.includes(e))) return 'ORIENTE_MEDIO';
-  if (africa.some(e => cod.includes(e))) return 'AFRICA';
-  if (amSul.some(e => cod.includes(e))) return 'AMERICA_SUL';
-  if (asia.some(e => cod.includes(e))) return 'ASIA_OCEANIA';
-  if (brasil.some(e => cod.includes(e))) return 'DOMESTICO';
+  const casarRegiao = (lista) => {
+    return lista.some(item => {
+      if (item.startsWith('/M/') || item.startsWith('/G/')) {
+        return cod === item || (codResolvido && codResolvido === item) || cod.includes(item);
+      }
+      if (codResolvido && (codResolvido === item || codResolvido.split(',').includes(item))) return true;
+      if (cod === item) return true;
+      // Match estrito com fronteira de palavra/não-alfanumérico (evita que "CHI" case em "CHILE" ou "SAN" em "SANTIAGO")
+      const regexToken = new RegExp(`(^|[^A-Z0-9])${item}([^A-Z0-9]|$)`);
+      return regexToken.test(cod);
+    });
+  };
+
+  if (casarRegiao(europa)) return 'EUROPA';
+  if (casarRegiao(amNorte)) return 'AMERICA_NORTE';
+  if (casarRegiao(caribe)) return 'CARIBE_AMERICA_CENTRAL';
+  if (casarRegiao(orienteMedio)) return 'ORIENTE_MEDIO';
+  if (casarRegiao(africa)) return 'AFRICA';
+  if (casarRegiao(amSul)) return 'AMERICA_SUL';
+  if (casarRegiao(asia)) return 'ASIA_OCEANIA';
+  if (casarRegiao(brasil)) return 'DOMESTICO';
 
   // Fallback por correspondência semântica de nomes
-  if (nomeLower.includes('europa') || nomeLower.includes('portugal') || nomeLower.includes('espanha') || nomeLower.includes('franca') || nomeLower.includes('italia')) return 'EUROPA';
-  if (nomeLower.includes('estados unidos') || nomeLower.includes('eua') || nomeLower.includes('usa') || nomeLower.includes('orlando') || nomeLower.includes('miami')) return 'AMERICA_NORTE';
+  if (nomeLower.includes('brasil') || nomeLower.includes('nacional') || nomeLower.includes('domestico')) return 'DOMESTICO';
+  if (nomeLower.includes('europa') || nomeLower.includes('portugal') || nomeLower.includes('espanha') || nomeLower.includes('franca') || nomeLower.includes('italia') || nomeLower.includes('alemanha') || nomeLower.includes('reino unido') || nomeLower.includes('inglaterra')) return 'EUROPA';
+  if (nomeLower.includes('estados unidos') || nomeLower.includes('eua') || nomeLower.includes('usa') || nomeLower.includes('orlando') || nomeLower.includes('miami') || nomeLower.includes('canada')) return 'AMERICA_NORTE';
   if (nomeLower.includes('cancun') || nomeLower.includes('punta cana') || nomeLower.includes('caribe')) return 'CARIBE_AMERICA_CENTRAL';
   if (nomeLower.includes('argentina') || nomeLower.includes('chile') || nomeLower.includes('uruguai') || nomeLower.includes('peru') || nomeLower.includes('colombia')) return 'AMERICA_SUL';
   if (nomeLower.includes('japao') || nomeLower.includes('toquio') || nomeLower.includes('asia') || nomeLower.includes('australia')) return 'ASIA_OCEANIA';
@@ -166,47 +229,63 @@ export function identificarRegiaoDestino(destinoCod) {
 /**
  * Analisa uma tarifa encontrada pelo scanner e determina se é um Bug Fare em tempo real
  */
-export function detectarBugFareEstatistico({
-  origemCod,
-  destinoCod,
-  preco,
-  precoMedioHistorico = null,
-  desvioPadrao = null,
-  cabine = 'economy',
-  dataVolta = null
-}) {
+export function detectarBugFareEstatistico(params = {}) {
+  if (!params || typeof params !== 'object') {
+    return { ehBugFare: false };
+  }
+
+  const {
+    origemCod,
+    destinoCod,
+    preco,
+    precoMedioHistorico = null,
+    desvioPadrao = null,
+    cabine = 'economy',
+    dataVolta = null
+  } = params;
+
+  const precoNum = typeof preco === 'number' ? preco : parsePreco(preco);
   // Filtro de ruído: valores inferiores a R$ 40 geralmente são taxas isoladas ou erros de parsing de centavos
-  if (!preco || preco < 40) return { ehBugFare: false };
+  if (!Number.isFinite(precoNum) || precoNum < 40) return { ehBugFare: false };
 
   const ehIdaEVolta = Boolean(dataVolta) && !ehSoIda(dataVolta);
   const regiao = identificarRegiaoDestino(destinoCod);
   const pisoBase = PISOS_ESTRUTURAIS_BUG_FARE[regiao];
-  const multCabine = MULTIPLICADORES_CABINE_BUG_FARE[cabine] || 1.0;
+
+  const cabineRaw = typeof cabine === 'string' ? cabine.trim().toLowerCase() : 'economy';
+  const ALIASES_CABINE = {
+    executiva: 'business',
+    primeira_classe: 'first',
+    primeira: 'first',
+    premium: 'premium_economy'
+  };
+  const cabineNormalizada = ALIASES_CABINE[cabineRaw] || (MULTIPLICADORES_CABINE_BUG_FARE[cabineRaw] ? cabineRaw : 'economy');
+  const multCabine = MULTIPLICADORES_CABINE_BUG_FARE[cabineNormalizada] || 1.0;
 
   // Filtro de Inviabilidade e Tarifa Espúria:
   // Se o preço for inferior ao piso mínimo plausível de segurança da região (ajustado por cabine),
   // trata-se de ruído/erro de extração de scraping (ex: R$ 362 para Europa quando as taxas já somam > R$ 500)
   const pisoMinimoObj = PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE[regiao] || PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE.OUTRO;
   const valorPisoMinimo = Math.round((ehIdaEVolta ? pisoMinimoObj.idaEVolta : pisoMinimoObj.soIda) * multCabine);
-  if (preco < valorPisoMinimo) {
+  if (precoNum < valorPisoMinimo) {
     return {
       ehBugFare: false,
       descartadoPorInviabilidade: true,
-      motivo: `Tarifa de R$ ${preco} abaixo do piso mínimo plausível de R$ ${valorPisoMinimo} para ${regiao} (dado espúrio/ruído de extração)`
+      motivo: `Tarifa de R$ ${precoNum} abaixo do piso mínimo plausível de R$ ${valorPisoMinimo} para ${regiao} (dado espúrio/ruído de extração)`
     };
   }
 
   // 1. Piso estrutural de preço irreal no GDS ajustado por cabine
   if (pisoBase) {
     const valorPiso = Math.round((ehIdaEVolta ? pisoBase.idaEVolta : pisoBase.soIda) * multCabine);
-    if (preco <= valorPiso) {
-      const labelCabine = cabine !== 'economy' ? ` em ${cabine.toUpperCase()}` : '';
-      const descontoEstimado = Math.round(((valorPiso * 1.8 - preco) / (valorPiso * 1.8)) * 100);
+    if (precoNum <= valorPiso) {
+      const labelCabine = cabineNormalizada !== 'economy' ? ` em ${cabineNormalizada.toUpperCase()}` : '';
+      const descontoEstimado = Math.round(((valorPiso * 1.8 - precoNum) / (valorPiso * 1.8)) * 100);
       return {
         ehBugFare: true,
         severidade: 'CRITICA',
         tipo: '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
-        motivo: `Preço R$ ${preco.toFixed(0)}${labelCabine} está abaixo do piso estrutural de R$ ${valorPiso} para ${regiao}`,
+        motivo: `Preço R$ ${precoNum.toFixed(0)}${labelCabine} está abaixo do piso estrutural de R$ ${valorPiso} para ${regiao}`,
         regiao,
         pisoReferencia: valorPiso,
         descontoEstimadoPct: Math.max(descontoEstimado, 40)
@@ -214,34 +293,41 @@ export function detectarBugFareEstatistico({
     }
   }
 
+  const numMedio = typeof precoMedioHistorico === 'number'
+    ? precoMedioHistorico
+    : (precoMedioHistorico !== null && precoMedioHistorico !== undefined ? parsePreco(precoMedioHistorico) : null);
+  const numDesvio = typeof desvioPadrao === 'number'
+    ? desvioPadrao
+    : (desvioPadrao !== null && desvioPadrao !== undefined ? parsePreco(desvioPadrao) : null);
+
   // 2. Anomalia estatística baseada em Z-Score (quando há desvio padrão amostral robusto)
-  if (precoMedioHistorico && desvioPadrao && desvioPadrao >= 50 && precoMedioHistorico > 0) {
-    const zScore = (preco - precoMedioHistorico) / desvioPadrao;
+  if (Number.isFinite(numMedio) && numMedio > 0 && Number.isFinite(numDesvio) && numDesvio >= 50) {
+    const zScore = (precoNum - numMedio) / numDesvio;
     if (zScore <= -2.2) {
-      const quedaPct = Math.round(((precoMedioHistorico - preco) / precoMedioHistorico) * 100);
+      const quedaPct = Math.round(((numMedio - precoNum) / numMedio) * 100);
       return {
         ehBugFare: true,
         severidade: 'ALTA',
         tipo: '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA (Z-SCORE)',
-        motivo: `Tarifa a ${Math.abs(zScore).toFixed(1)} desvios padrão da média (${quedaPct}% abaixo da média de R$ ${precoMedioHistorico.toFixed(0)})`,
+        motivo: `Tarifa a ${Math.abs(zScore).toFixed(1)} desvios padrão da média (${quedaPct}% abaixo da média de R$ ${numMedio.toFixed(0)})`,
         regiao,
-        pisoReferencia: precoMedioHistorico,
+        pisoReferencia: numMedio,
         descontoEstimadoPct: quedaPct
       };
     }
   }
 
   // 3. Queda percentual extrema (anomalia de >= 50% abaixo da média histórica da rota)
-  if (precoMedioHistorico && precoMedioHistorico > 0) {
-    const quedaPct = ((precoMedioHistorico - preco) / precoMedioHistorico) * 100;
+  if (Number.isFinite(numMedio) && numMedio > 0) {
+    const quedaPct = ((numMedio - precoNum) / numMedio) * 100;
     if (quedaPct >= 50) {
       return {
         ehBugFare: true,
         severidade: 'ALTA',
         tipo: '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA',
-        motivo: `Queda anômala de ${quedaPct.toFixed(0)}% em relação à média histórica (R$ ${precoMedioHistorico.toFixed(0)})`,
+        motivo: `Queda anômala de ${quedaPct.toFixed(0)}% em relação à média histórica (R$ ${numMedio.toFixed(0)})`,
         regiao,
-        pisoReferencia: precoMedioHistorico,
+        pisoReferencia: numMedio,
         descontoEstimadoPct: Math.round(quedaPct)
       };
     }

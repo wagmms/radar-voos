@@ -12,7 +12,8 @@ export class SerpApiProvider extends FlightProviderInterface {
     return serpApiPool.temChaveDisponivel();
   }
 
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
+  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
+    const moedaCode = (curr || moeda || 'BRL').trim().toUpperCase();
     const chaveInfo = serpApiPool.obterChaveDisponivel();
     if (!chaveInfo) {
       return {
@@ -35,7 +36,7 @@ export class SerpApiProvider extends FlightProviderInterface {
       departure_id: origemSerp,
       arrival_id: destinoSerp,
       outbound_date: dataIda,
-      currency: 'BRL',
+      currency: moedaCode,
       hl: 'pt',
       gl: 'br',
       type: dataVoltaEfetiva ? '1' : '2',
@@ -163,13 +164,14 @@ export class SerpApiProvider extends FlightProviderInterface {
         const linkVooEspecifico = (json.search_metadata && json.search_metadata.google_flights_url)
           ? json.search_metadata.google_flights_url
           : (dataIda
-              ? (gerarLinkGoogleFlightsCheapest(origemCod, codigoDestinoReal, dataIda, dataVolta, duracaoMaxHoras) || gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta))
-              : gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta));
+              ? (gerarLinkGoogleFlightsCheapest(origemCod, codigoDestinoReal, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaCode) || gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta, moedaCode))
+              : gerarLinkGoogleFlights(origemCod, codigoDestinoReal, dataIda, dataVolta, moedaCode));
 
         if (!melhorOpcao || preco < melhorOpcao.preco) {
           vooEleito = voo;
           melhorOpcao = {
             preco,
+            moeda: moedaCode,
             duracaoHoras: duracaoMinutos / 60,
             destinoReal: destinoFinal,
             codigoDestinoReal,

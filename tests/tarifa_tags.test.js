@@ -139,4 +139,47 @@ describe('Cockpit PWA: Tags Visuais de Tarifas (Cheapest & Parceiros/OTAs)', () 
     assert.equal(info.tipo, 'cheapest');
     assert.equal(info.preco, 2890);
   });
+
+  it('deve lidar defensivamente com melhor_opcao_flexivel contendo link nao-string (sem lancar TypeError)', () => {
+    const rotaAdversarialLinkNum = {
+      id: 7,
+      melhor_opcao_flexivel: { link: 12345, preco: 999 }
+    };
+    assert.equal(extrairInfoTarifaEspecial(rotaAdversarialLinkNum), null);
+
+    const rotaAdversarialLinkBool = {
+      id: 8,
+      melhor_opcao_flexivel: JSON.stringify({ link: true, preco: 999 })
+    };
+    assert.equal(extrairInfoTarifaEspecial(rotaAdversarialLinkBool), null);
+
+    const rotaAdversarialLinkObj = {
+      id: 9,
+      melhor_opcao_flexivel: { link: { url: 'https://...' }, preco: 999 }
+    };
+    assert.equal(extrairInfoTarifaEspecial(rotaAdversarialLinkObj), null);
+  });
+
+  it('deve retornar null graciosamente para arrays e entradas nulas ou indefinidas', () => {
+    assert.equal(extrairInfoTarifaEspecial([]), null);
+    assert.equal(extrairInfoTarifaEspecial(null), null);
+    assert.equal(extrairInfoTarifaEspecial(undefined), null);
+    assert.equal(extrairInfoTarifaEspecial(12345), null);
+    assert.equal(extrairInfoTarifaEspecial('rota_string'), null);
+  });
+
+  it('deve extrair e normalizar preco monetario em melhor_opcao_flexivel formatado como string', () => {
+    const rotaFlexString = {
+      id: 10,
+      melhor_opcao_flexivel: {
+        link: 'https://www.google.com/travel/flights?tfu=EgoIABAAGAAgAigD',
+        preco: 'R$ 1.950'
+      }
+    };
+    const info = extrairInfoTarifaEspecial(rotaFlexString);
+    assert.ok(info);
+    assert.equal(info.tipo, 'cheapest');
+    assert.equal(info.preco, 1950);
+  });
 });
+

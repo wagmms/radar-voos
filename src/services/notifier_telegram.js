@@ -5,15 +5,25 @@ import { weatherService } from './weather_service.js';
 import { ehSoIda } from '../domain/rotas.js';
 
 export function escapeHtml(texto) {
-  return String(texto || '')
+  if (texto === null || texto === undefined) return '';
+  return String(texto)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
-export function ehPeriodoNoturno() {
-  const agora = new Date();
-  const hora = agora.getHours();
+export function ehPeriodoNoturno(dataRef = new Date()) {
+  let data = dataRef;
+  if (!(data instanceof Date) || isNaN(data.getTime())) {
+    if (typeof dataRef === 'string' || typeof dataRef === 'number') {
+      const d = new Date(dataRef);
+      data = !isNaN(d.getTime()) ? d : new Date();
+    } else {
+      data = new Date();
+    }
+  }
+  const hora = data.getHours();
   // Silencioso entre 22h e 07h59
   return hora >= 22 || hora < 8;
 }
@@ -173,6 +183,30 @@ class NotifierTelegram {
       msg += `\n💡 <i>${escapeHtml(dicaStopover)}</i>\n`;
     }
 
+    // Mini-tabela de histórico recente — exibida somente quando há registros disponíveis
+    if (rotaId) {
+      try {
+        const historico = rotasRepo.obterHistoricoRecente(rotaId, 3);
+        if (Array.isArray(historico) && historico.length > 0) {
+          msg += `\n📈 <b>Histórico Recente:</b>\n`;
+          for (const entrada of historico) {
+            const dataFormatada = entrada.data_checagem
+              ? new Date(entrada.data_checagem).toLocaleDateString('pt-BR', {
+                  day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Sao_Paulo'
+                })
+              : '—';
+            const precoFormatado = typeof entrada.preco === 'number' && entrada.preco > 0
+              ? `R$ ${entrada.preco.toFixed(0)}`
+              : '—';
+            const termometro = entrada.termometro ? ` ${escapeHtml(entrada.termometro)}` : '';
+            msg += `  • ${dataFormatada}: <b>${precoFormatado}</b>${termometro}\n`;
+          }
+        }
+      } catch (_) {
+        // Falha silenciosa — histórico é informação complementar, não bloqueia o alerta
+      }
+    }
+
     msg += `\n⚠️ <i>Tarifas dinâmicas sujeitas a alteração pelas companhias.</i>`;
 
     const inlineKeyboard = [
@@ -202,6 +236,8 @@ class NotifierTelegram {
     let periodo = null;
     let preco = null;
     let motivo = null;
+    let iataOrigem = null;
+    let iataDestino = null;
 
     if (typeof tituloOuObjeto === 'object' && tituloOuObjeto !== null) {
       titulo = tituloOuObjeto.titulo;
@@ -212,6 +248,8 @@ class NotifierTelegram {
       periodo = tituloOuObjeto.periodo_texto;
       preco = tituloOuObjeto.preco;
       motivo = tituloOuObjeto.motivo;
+      iataOrigem = tituloOuObjeto.iata_origem || null;
+      iataDestino = tituloOuObjeto.iata_destino || null;
     }
 
     let msg = `<b>${escapeHtml(tipoBug)}</b>\n\n`;
@@ -226,6 +264,24 @@ class NotifierTelegram {
     }
 
     msg += `⚡ <i>ATENÇÃO: Erros de tarifa esgotam em questão de minutos! Verifique a disponibilidade imediatamente no Google Flights.</i>`;
+
+    // Monta o inline keyboard com botão principal e, se disponível, atalho de regras de bagagem
+    const inlineKeyboard = [];
+
+    // Linha 1: botão principal de compra
+    if (urlLink) {
+      inlineKeyboard.push([{ text: '⚡ Ver no Google Flights', url: urlLink }]);
+    }
+
+    // Linha 2: botão de regras de bagagem (apenas quando IATAs da rota estão disponíveis)
+    if (iataOrigem && iataDestino) {
+      const urlBagagem = `https://www.google.com/travel/flights/search?tfs=CBwQAhooagcIARIDGRUdSBNaG5BMACIAKAASAhAAOgAMAVAAWAAYAQ%3D%3D&hl=pt-BR#flt=${encodeURIComponent(iataOrigem)}.${encodeURIComponent(iataDestino)}.;c:BRL;e:1;s:0*1;sd:1`;
+      inlineKeyboard.push([{ text: '🧳 Ver Regras de Bagagem', url: urlBagagem }]);
+    }
+
+    if (inlineKeyboard.length > 0) {
+      return this.enviarMensagem(msg, null, '', false, inlineKeyboard);
+    }
 
     return this.enviarMensagem(msg, urlLink, '⚡ Ver no Google Flights');
   }

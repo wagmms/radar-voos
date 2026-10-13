@@ -3,14 +3,20 @@ import assert from 'node:assert/strict';
 import {
   detectarBloqueioBot,
   extrairPrecoCheapestTab,
+  decodificarPrecoDoTfu,
   construirUrlCheapest,
   extrairVoosDoHtml,
+  extrairCiaIataDoTrecho,
+  MAPA_CIAS_IATA,
   ScraplingProvider
 } from '../src/services/providers/scrapling_client.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Helpers de HTML mock
+// Helpers de HTML mock e tokens de teste
 // ──────────────────────────────────────────────────────────────────────────────
+const TOKEN_CHEAPEST_CANONICO = 'CjRIMS1mNTFfb3VtQ1FBQUpjMmdCRy0tLS0tLWNlYmNyMy1uMkFBQUFBR3JOTVBBSDFrZHNBEhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsIzMoDEAIaA0JSTDgdcPtb';
+const URL_RESPOSTA_COM_TFU = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=CBwQA...&tfu=${TOKEN_CHEAPEST_CANONICO}`;
+
 const HTML_COM_CHEAPEST = `
   <html>
     <div aria-label="A partir de 890 Reais brasileiros. Voo da LATAM Airlines com 1 parada. Conexão de 2 h em Campinas (VCP). Duração total: 3 h 40 min. Mala de mão incluída."></div>
@@ -44,6 +50,17 @@ const HTML_SOMENTE_ARIA_SIMPLES = `
   </html>
 `;
 
+const HTML_AJAX_REDIRECT_SEM_CORPO = `
+  <html>
+    <head>
+      <script>
+        window.location.replace("https://www.google.com/travel/flights?tfs=CBwQA...&tfu=CjRIMS1mNTFfb3VtQ1FBQUpjMmdCRy0tLS0tLWNlYmNyMy1uMkFBQUFBR3JOTVBBSDFrZHNBEhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsIzMoDEAIaA0JSTDgdcPtb");
+      </script>
+    </head>
+    <body>Carregando voos...</body>
+  </html>
+`;
+
 // ──────────────────────────────────────────────────────────────────────────────
 describe('ScraplingClient: detectarBloqueioBot', () => {
   it('deve detectar bloqueio por status 429', () => {
@@ -72,13 +89,49 @@ describe('ScraplingClient: detectarBloqueioBot', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+describe('ScraplingClient: decodificarPrecoDoTfu (Base64url / Protobuf tfu)', () => {
+  it('deve decodificar tarifa R$ 587 a partir do token tfu real do Google Flights', () => {
+    const preco = decodificarPrecoDoTfu(TOKEN_CHEAPEST_CANONICO);
+    assert.equal(preco, 587);
+  });
+
+  it('deve decodificar tarifa R$ 587 a partir de URL completa contendo tfu', () => {
+    const preco = decodificarPrecoDoTfu(URL_RESPOSTA_COM_TFU);
+    assert.equal(preco, 587);
+  });
+
+  it('deve decodificar token tfu em formato URL-encoded', () => {
+    const urlEncoded = encodeURIComponent(TOKEN_CHEAPEST_CANONICO);
+    const preco = decodificarPrecoDoTfu(`https://www.google.com/travel/flights?tfu=${urlEncoded}`);
+    assert.equal(preco, 587);
+  });
+
+  it('deve retornar null para token inicial EgoIABAAGAAgAigD sem preço', () => {
+    assert.equal(decodificarPrecoDoTfu('EgoIABAAGAAgAigD'), null);
+    assert.equal(decodificarPrecoDoTfu('https://www.google.com/travel/flights?tfu=EgoIABAAGAAgAigD'), null);
+  });
+
+  it('deve retornar null para strings vazias, nulas ou indefinidas', () => {
+    assert.equal(decodificarPrecoDoTfu(null), null);
+    assert.equal(decodificarPrecoDoTfu(undefined), null);
+    assert.equal(decodificarPrecoDoTfu(''), null);
+    assert.equal(decodificarPrecoDoTfu('   '), null);
+  });
+
+  it('deve retornar null para base64 inválido ou corrompido', () => {
+    assert.equal(decodificarPrecoDoTfu('!!!invalido!!!'), null);
+    assert.equal(decodificarPrecoDoTfu('AAAA'), null);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 describe('ScraplingClient: extrairPrecoCheapestTab', () => {
   it('deve extrair preço R$ 587 da aba Cheapest via padrão comprehensiveness_lure', () => {
     const preco = extrairPrecoCheapestTab(HTML_COM_CHEAPEST);
     assert.equal(preco, 587);
   });
 
-  it('deve retornar null para HTML sem dados da aba Cheapest', () => {
+  it('deve retornar null para HTML sem dados da aba Cheapest e sem URL', () => {
     const preco = extrairPrecoCheapestTab(HTML_SEM_PRECOS);
     assert.equal(preco, null);
   });
@@ -101,8 +154,23 @@ describe('ScraplingClient: extrairPrecoCheapestTab', () => {
       AF_initDataCallback({data: [null, null, [[null, 1350], "EhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsI"]]});
     `;
     const preco = extrairPrecoCheapestTab(htmlAf);
-    // Pode retornar null se o formato específico não for reconhecido — sem assertiva de igualdade rígida
     assert.ok(preco === null || (typeof preco === 'number' && preco >= 80 && preco <= 60000));
+  });
+
+  it('deve extrair preço R$ 587 via Camada 4 (URL de resposta com parâmetro tfu) quando HTML é vazio', () => {
+    const preco = extrairPrecoCheapestTab(HTML_SEM_PRECOS, URL_RESPOSTA_COM_TFU);
+    assert.equal(preco, 587);
+  });
+
+  it('deve extrair preço R$ 587 via Camada 4 quando HTML é resposta AJAX de redirecionamento', () => {
+    const preco = extrairPrecoCheapestTab(HTML_AJAX_REDIRECT_SEM_CORPO);
+    assert.equal(preco, 587);
+  });
+
+  it('deve manter prioridade das Camadas 1-3 do HTML quando disponíveis', () => {
+    // HTML com R$ 587 e URL com o mesmo valor ou fornecida
+    const preco = extrairPrecoCheapestTab(HTML_COM_CHEAPEST, URL_RESPOSTA_COM_TFU);
+    assert.equal(preco, 587);
   });
 });
 
@@ -128,6 +196,14 @@ describe('ScraplingClient: construirUrlCheapest', () => {
     // tfs de round-trip deve ser maior que one-way (leg de volta adiciona bytes)
     const { tfs: tfsOw } = construirUrlCheapest('SAO', 'MIA', '2027-03-15', null, 12);
     assert.ok(tfs.length > tfsOw.length, 'tfs Round-Trip deve ser maior que One-Way pela leg de volta');
+  });
+
+  it('deve construir URL com moeda customizada (USD, EUR)', () => {
+    const { url: urlUsd } = construirUrlCheapest('GRU', 'MIA', '2027-03-15', null, 12, 'USD');
+    assert.match(urlUsd, /curr=USD/);
+
+    const { url: urlEur } = construirUrlCheapest('GRU', 'LIS', '2027-04-10', '2027-04-24', 14, 'EUR');
+    assert.match(urlEur, /curr=EUR/);
   });
 
   it('deve tratar strings de Só Ida como One-Way corretamente', () => {
@@ -400,6 +476,34 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
     }
   });
 
+  it('deve capturar tarifa Cheapest R$ 587 via URL de redirecionamento com parâmetro tfu quando HTML é esparso', async () => {
+    const provider = new ScraplingProvider();
+
+    const fetchOriginal = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: URL_RESPOSTA_COM_TFU,
+      text: async () => '<html><body>Carregando voos...</body></html>'
+    });
+
+    try {
+      const res = await provider.buscarOfertas({
+        origemCod: 'GRU',
+        destinoCod: 'SSA',
+        dataIda: '2027-02-10'
+      });
+
+      assert.ok(res.ok, 'Deve retornar ok: true');
+      assert.ok(res.encontrouVoos, 'Deve encontrar voos via URL tfu');
+      assert.equal(res.oferta.preco, 587, 'Tarifa R$ 587 deve ser extraída do parâmetro tfu da URL de resposta');
+      assert.ok(res.oferta.cheapestTabAtivada, 'Flag cheapestTabAtivada deve ser true');
+      assert.ok(res.oferta.detalhes.includes('Cheapest'), 'Detalhes devem mencionar Cheapest');
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+
   it('deve reportar estaDisponivel() como true por padrão', () => {
     const provider = new ScraplingProvider();
     assert.equal(provider.estaDisponivel(), true);
@@ -501,3 +605,131 @@ describe('ScraplingClient: Integração com FlightProviderManager (cadeia Scrapl
     );
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+describe('ScraplingClient: extrairCiaIataDoTrecho & Fallback por Código IATA (data-*, logos, matrizes)', () => {
+  it('MAPA_CIAS_IATA deve conter mapeamentos para principais companhias aéreas', () => {
+    assert.equal(MAPA_CIAS_IATA.G3, 'GOL');
+    assert.equal(MAPA_CIAS_IATA.LA, 'LATAM');
+    assert.equal(MAPA_CIAS_IATA.AD, 'Azul');
+    assert.equal(MAPA_CIAS_IATA.TP, 'TAP Portugal');
+    assert.equal(MAPA_CIAS_IATA.AF, 'Air France');
+    assert.equal(MAPA_CIAS_IATA.AA, 'American Airlines');
+    assert.equal(MAPA_CIAS_IATA.KL, 'KLM');
+    assert.equal(MAPA_CIAS_IATA.LH, 'Lufthansa');
+    assert.equal(MAPA_CIAS_IATA.IB, 'Iberia');
+  });
+
+  it('deve extrair companhia via atributo data-airline="G3"', () => {
+    const trecho = '<div data-airline="G3" class="flight-card"><span>Preço</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'GOL');
+  });
+
+  it('deve extrair companhia via atributo data-carrier="LA"', () => {
+    const trecho = '<div data-carrier="LA" data-price="1200"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'LATAM');
+  });
+
+  it('deve extrair companhia via atributo data-marketing-carrier="AD"', () => {
+    const trecho = '<div data-marketing-carrier="AD"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'Azul');
+  });
+
+  it('deve extrair companhia via data-flight-number="TP 1234"', () => {
+    const trecho = '<div data-flight-number="TP 1234"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'TAP Portugal');
+  });
+
+  it('deve extrair companhia via URL de logo com código IATA do Google Flights', () => {
+    const trecho = '<img src="https://www.gstatic.com/flights/airline_logos/70px/AF.png" alt="logo">';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'Air France');
+  });
+
+  it('deve extrair companhia via matriz de voo JSON ["G3", 1542]', () => {
+    const trecho = '<script>{"flights": [["G3", 1542], ["G3", 1543]]}</script>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'GOL');
+  });
+
+  it('deve extrair companhia via JSON com carrier: "LA"', () => {
+    const trecho = '{"legs":[{"carrier":"LA","flightNumber":3210}]}';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'LATAM');
+  });
+
+  it('deve extrair companhia a partir de número de voo no texto auxiliar ou aria-label', () => {
+    const aria = 'Voo G3 1542 direto. Duração: 1 h 20 min.';
+    assert.equal(extrairCiaIataDoTrecho('', aria), 'GOL');
+  });
+
+  it('deve preservar código IATA não mapeado em atributo data-airline="XY"', () => {
+    const trecho = '<div data-airline="XY"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'XY');
+  });
+
+  it('deve retornar null quando nenhum atributo ou código IATA for encontrado', () => {
+    const trecho = '<div class="card"><span>Sem dados de cia</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), null);
+    assert.equal(extrairCiaIataDoTrecho(null), null);
+  });
+
+  it('extrairVoosDoHtml: Camada A deve usar fallback IATA quando aria-label não traz nome extenso', () => {
+    const htmlComDataG3 = `
+      <div data-airline="G3">
+        <div aria-label="Preço total a partir de 450 Reais brasileiros. Duração total: 1 h 15 min. Sem paradas."></div>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlComDataG3);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 450);
+    assert.equal(voos[0].cia, 'GOL');
+  });
+
+  it('extrairVoosDoHtml: Camada A deve resolver código de voo no aria-label (ex: Voo LA 3000)', () => {
+    const htmlComVooLa = `
+      <div>
+        <div aria-label="Preço total a partir de 820 Reais brasileiros. Voo LA 3000 com 1 parada. Duração total: 4 h 10 min."></div>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlComVooLa);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 820);
+    assert.equal(voos[0].cia, 'LATAM');
+  });
+
+  it('extrairVoosDoHtml: Camada A deve extrair cia via logo no trecho adjacente', () => {
+    const htmlComLogo = `
+      <div>
+        <img src="https://www.gstatic.com/flights/airline_logos/70px/TP.png" />
+        <div aria-label="Preço total a partir de 2.850 Reais brasileiros. Duração total: 9 h 40 min. Sem paradas."></div>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlComLogo);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 2850);
+    assert.equal(voos[0].cia, 'TAP Portugal');
+  });
+
+  it('extrairVoosDoHtml: Camada B (aria simples) deve usar código IATA presente no contexto adjacente', () => {
+    const htmlAriaSimplesComData = `
+      <div data-carrier="AD">
+        <button aria-label="A partir de 620 Reais brasileiros"></button>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlAriaSimplesComData);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 620);
+    assert.equal(voos[0].cia, 'Azul');
+  });
+
+  it('extrairVoosDoHtml: Camada C (BRL raw) deve usar código IATA presente no contexto adjacente', () => {
+    const htmlBrlComData = `
+      <div data-flight-number="AF 454">
+        <span>R$ 3.890</span>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlBrlComData);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 3890);
+    assert.equal(voos[0].cia, 'Air France');
+  });
+});
+

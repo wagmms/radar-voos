@@ -114,4 +114,54 @@ describe('Inteligência de Alertas e Critérios Estritos (alertasRepo.deveDispar
     assert.strictEqual(dNovaQueda.deve, true);
     assert.strictEqual(dNovaQueda.motivo, 'nova_queda_mesmo_dia');
   });
+
+  it('7. NUNCA deve alertar quando oscilação for normal de mercado (INFO) e usuário não tem meta', () => {
+    const chaveSemMeta = 'TESTE_RIO_MIA_SEM_META';
+    const db = getDb();
+    db.prepare('DELETE FROM alertas_disparados WHERE chave_alerta = ?').run(chaveSemMeta);
+
+    // Rota oscilou de R$ 3500 para R$ 3400 (queda de ~2.8%, delta INFO sem cruzamento de meta)
+    const resInfo = alertasRepo.deveDisparar(
+      chaveSemMeta,
+      3400,
+      3500,
+      null, // Sem preço alvo
+      true,
+      'TYPICAL',
+      -2.8,
+      {
+        classificacaoDelta: 'INFO',
+        zScore: -0.3,
+        deltaMediaPct: 2.8
+      }
+    );
+
+    assert.strictEqual(resInfo.deve, false);
+    assert.strictEqual(resInfo.motivo, 'oscilacao_normal_mercado_info');
+  });
+
+  it('8. DEVE alertar quando análise estatística comprova OPORTUNIDADE (Z-Score <= -1.5)', () => {
+    const chaveOportunidade = 'TESTE_SAO_JFK_OPORTUNIDADE';
+    const db = getDb();
+    db.prepare('DELETE FROM alertas_disparados WHERE chave_alerta = ?').run(chaveOportunidade);
+
+    // Preço caiu para R$ 2400 (média era R$ 3500, Z-Score = -1.8)
+    const resOportunidade = alertasRepo.deveDisparar(
+      chaveOportunidade,
+      2400,
+      3200,
+      null, // Sem meta manual do usuário, detectada por exceção
+      true,
+      'LOW',
+      -25.0,
+      {
+        classificacaoDelta: 'OPORTUNIDADE',
+        zScore: -1.8,
+        deltaMediaPct: 31.4
+      }
+    );
+
+    assert.strictEqual(resOportunidade.deve, true);
+    assert.strictEqual(resOportunidade.tipo, 'OPORTUNIDADE_ESTATISTICA');
+  });
 });

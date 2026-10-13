@@ -85,6 +85,130 @@ const HTTP_TIMEOUT_MS = 15000;
 const MAX_TENTATIVAS = 2;
 
 /**
+ * Mapa canônico de códigos IATA de 2 letras de companhias aéreas para nomes amigáveis.
+ * Utilizado para decodificação rápida a partir de atributos data-*, logos e matrizes de voos.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const MAPA_CIAS_IATA = Object.freeze({
+  // Nacionais / América do Sul
+  G3: 'GOL',
+  LA: 'LATAM',
+  JJ: 'LATAM',
+  AD: 'Azul',
+  VO: 'Voepass',
+  '2Z': 'Voepass',
+  H2: 'SKY Airline',
+  JA: 'JetSMART',
+  WJ: 'JetSMART',
+  AR: 'Aerolíneas Argentinas',
+  AV: 'Avianca',
+  CM: 'Copa Airlines',
+  // América do Norte
+  AA: 'American Airlines',
+  DL: 'Delta',
+  UA: 'United',
+  AC: 'Air Canada',
+  AM: 'Aeroméxico',
+  // Europa
+  TP: 'TAP Portugal',
+  AF: 'Air France',
+  KL: 'KLM',
+  LH: 'Lufthansa',
+  LX: 'Swiss',
+  IB: 'Iberia',
+  UX: 'Air Europa',
+  BA: 'British Airways',
+  AZ: 'ITA Airways',
+  FR: 'Ryanair',
+  U2: 'easyJet',
+  VY: 'Vueling',
+  W6: 'Wizz Air',
+  TO: 'Transavia',
+  EW: 'Eurowings',
+  OS: 'Austrian Airlines',
+  SN: 'Brussels Airlines',
+  AY: 'Finnair',
+  SK: 'SAS',
+  VS: 'Virgin Atlantic',
+  // Oriente Médio / Ásia / África / Oceania
+  QR: 'Qatar Airways',
+  EK: 'Emirates',
+  TK: 'Turkish Airlines',
+  ET: 'Ethiopian',
+  SQ: 'Singapore Airlines',
+  NH: 'ANA',
+  JL: 'Japan Airlines',
+  QF: 'Qantas',
+  NZ: 'Air New Zealand',
+  SA: 'South African Airways',
+  AT: 'Royal Air Maroc'
+});
+
+/**
+ * Extrai e resolve o nome ou código da companhia aérea a partir de códigos IATA de 2 letras
+ * em atributos data-*, logos, números de voo e matrizes JSON do Google Flights.
+ *
+ * @param {string|null} trechoHtml - Trecho HTML adjacente ao elemento do voo
+ * @param {string|null} [textoAuxiliar=''] - Texto opcional (ex: aria-label ou contexto)
+ * @returns {string|null} Nome da companhia mapeada ou código IATA, ou null se não detectado
+ */
+export function extrairCiaIataDoTrecho(trechoHtml, textoAuxiliar = '') {
+  const trecho = String(trechoHtml || '');
+  const aux = String(textoAuxiliar || '');
+
+  // 1. Atributos data-* específicos do Google Flights com código IATA de 2 letras
+  const matchDataCode = trecho.match(/\bdata-(?:airline(?:-code)?|carrier(?:-code)?|marketing-carrier|iata|flight-code)=["']([A-Za-z0-9]{2})["']/i);
+  if (matchDataCode) {
+    const cod = matchDataCode[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  // 2. Atributos data-flight-number ou data-flight com código IATA e número de voo
+  const matchDataFlt = trecho.match(/\bdata-(?:flight(?:-number)?|flt)=["']([A-Za-z0-9]{2})\s*\d{1,5}["']/i);
+  if (matchDataFlt) {
+    const cod = matchDataFlt[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  // 3. Logos de companhias aéreas do Google Flights (ex: gstatic / airline_logos)
+  const matchLogo = trecho.match(/airline_logos\/(?:(?:70px|[A-Za-z0-9_-]+)\/)?([A-Za-z0-9]{2})\.(?:png|svg|webp|gif)/i);
+  if (matchLogo) {
+    const cod = matchLogo[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  // 4. Matrizes de voo JSON ou arrays de callback do Google Flights (ex: ["G3", 1234] ou "carrier":"LA")
+  const matchJsonCarrier = trecho.match(/(?:["'](?:carrier|airline|airlineCode|carrierCode|marketingCarrier)["']\s*[:=]\s*["']([A-Za-z0-9]{2})["'])/i);
+  if (matchJsonCarrier) {
+    const cod = matchJsonCarrier[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  const matchMatrizArray = trecho.match(/\[\s*["']([A-Za-z0-9]{2})["']\s*,\s*["']?\d{2,4}["']?\s*\]/);
+  if (matchMatrizArray) {
+    const cod = matchMatrizArray[1].toUpperCase();
+    if (MAPA_CIAS_IATA[cod]) return MAPA_CIAS_IATA[cod];
+  }
+
+  // 5. Padrão de número de voo no texto auxiliar ou aria-label (ex: "Voo G3 1542", "Flight LA 3000")
+  const matchVooTexto = aux.match(/(?:(?:Voo|Flight)\s*(?:nº|n[oº]|#)?\s*|^|\b)([A-Za-z0-9]{2})\s*\d{2,4}\b/i) ||
+                        trecho.match(/(?:(?:Voo|Flight)\s*(?:nº|n[oº]|#)?\s*)([A-Za-z0-9]{2})\s*\d{2,4}\b/i);
+  if (matchVooTexto) {
+    const cod = matchVooTexto[1].toUpperCase();
+    if (MAPA_CIAS_IATA[cod]) return MAPA_CIAS_IATA[cod];
+  }
+
+  // 6. Atributos alt ou title com código IATA conhecido
+  const matchAlt = trecho.match(/(?:alt|title)=["']([A-Za-z0-9]{2})["']/i);
+  if (matchAlt) {
+    const cod = matchAlt[1].toUpperCase();
+    if (MAPA_CIAS_IATA[cod]) return MAPA_CIAS_IATA[cod];
+  }
+
+  return null;
+}
+
+/**
  * Gera delay com jitter aleatório (comportamento humano scrapling)
  * @param {number} min
  * @param {number} max
@@ -148,43 +272,203 @@ export function detectarBloqueioBot(resp) {
 }
 
 /**
- * Extrai preço da aba Cheapest do Google Flights a partir do HTML raw.
+ * Decodifica o menor preço embutido no payload Protobuf tfu (base64url) do Google Flights.
  *
- * O Google Flights embute o menor preço da aba "Cheapest" em um array JS
- * no formato: [[null, PRECO], "...comprehensiveness_lure..."]
- * que é codificado em base64 dentro do parâmetro tfu da URL.
+ * Estrutura do Protobuf tfu:
+ * - Field 3 (length-delimited): Submensagem de moeda/tarifa
+ *   - Subfield 1 (varint): Preço em centavos (ou unidades)
+ *   - Subfield 2 (varint): Escala/casas decimais (normalmente 2 para centavos)
+ *   - Subfield 3 (string/bytes): Código ISO da moeda ("BRL", "USD", etc.)
  *
- * Regex multicamada para capturar variações de formato encontradas em campo.
+ * @param {string} tokenOuUrl - String contendo o token tfu em base64/base64url ou URL completa
+ * @returns {number|null} Menor preço inteiro em BRL ou null se não decodificável
+ */
+export function decodificarPrecoDoTfu(tokenOuUrl) {
+  if (!tokenOuUrl || typeof tokenOuUrl !== 'string') return null;
+
+  let token = tokenOuUrl.trim();
+  // Se for uma URL ou fragmento com parâmetro tfu, extrai o valor do parâmetro
+  const matchParam = token.match(/(?:[?&]tfu=|"tfu"\s*:\s*"|tfu=)([A-Za-z0-9+/=_-]{16,})/i);
+  if (matchParam) {
+    token = matchParam[1];
+  }
+
+  // Desfaz URL encoding caso esteja percent-encoded
+  try {
+    token = decodeURIComponent(token);
+  } catch {}
+
+  // Remove eventuais delimitadores residuais
+  token = token.replace(/["'\s;,].*$/, '');
+
+  try {
+    // Normaliza Base64URL (- _) para Base64 padrão (+ /) com padding
+    const base64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + '='.repeat(pad);
+    const buf = Buffer.from(padded, 'base64');
+    if (buf.length < 12) return null;
+
+    // Estratégia 1: Varredura orientada por âncoras de moedas conhecidas
+    const moedas = ['BRL', 'USD', 'EUR', 'GBP', 'ARS', 'CLP'];
+    for (const moeda of moedas) {
+      const idxMoeda = buf.indexOf(Buffer.from(moeda));
+      if (idxMoeda !== -1) {
+        const inicioJanela = Math.max(0, idxMoeda - 20);
+        for (let i = inicioJanela; i < idxMoeda; i++) {
+          if (buf[i] === 0x08) { // Tag 1 (varint do preço)
+            let val = 0;
+            let shift = 0;
+            let j = i + 1;
+            while (j < idxMoeda && j < buf.length) {
+              const b = buf[j++];
+              val |= (b & 0x7f) << shift;
+              shift += 7;
+              if ((b & 0x80) === 0) break;
+            }
+            if (val > 0) {
+              let escala = 2; // Google Flights padrão para centavos
+              if (j < idxMoeda && buf[j] === 0x10) { // Tag 2 (escala)
+                escala = buf[j + 1];
+              }
+              const precoComEscala = Math.round(val / (10 ** escala));
+              if (precoComEscala >= 80 && precoComEscala <= 60000) {
+                return precoComEscala;
+              }
+              if (val >= 80 && val <= 60000) {
+                return val;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Estratégia 2: Decodificação estruturada do Protobuf raiz (Field 3 = Price message)
+    let offset = 0;
+    while (offset < buf.length) {
+      const tagByte = buf[offset++];
+      const wire = tagByte & 7;
+      const field = tagByte >> 3;
+      if (wire === 2) { // length-delimited
+        let len = 0;
+        let shift = 0;
+        while (offset < buf.length) {
+          const b = buf[offset++];
+          len |= (b & 0x7f) << shift;
+          shift += 7;
+          if ((b & 0x80) === 0) break;
+        }
+        if (field === 3) {
+          const sub = buf.subarray(offset, offset + len);
+          let subOff = 0;
+          let valor = null;
+          let escala = 2;
+          while (subOff < sub.length) {
+            const subTag = sub[subOff++];
+            const subWire = subTag & 7;
+            const subField = subTag >> 3;
+            if (subWire === 0) {
+              let v = 0;
+              let s = 0;
+              while (subOff < sub.length) {
+                const b = sub[subOff++];
+                v |= (b & 0x7f) << s;
+                s += 7;
+                if ((b & 0x80) === 0) break;
+              }
+              if (subField === 1) valor = v;
+              if (subField === 2) escala = v;
+            } else if (subWire === 2) {
+              let l = 0;
+              let s = 0;
+              while (subOff < sub.length) {
+                const b = sub[subOff++];
+                l |= (b & 0x7f) << s;
+                s += 7;
+                if ((b & 0x80) === 0) break;
+              }
+              subOff += l;
+            } else {
+              break;
+            }
+          }
+          if (valor !== null && valor > 0) {
+            const finalPreco = Math.round(valor / (10 ** escala));
+            if (finalPreco >= 80 && finalPreco <= 60000) return finalPreco;
+            if (valor >= 80 && valor <= 60000) return valor;
+          }
+        }
+        offset += len;
+      } else if (wire === 0) {
+        while (offset < buf.length && (buf[offset++] & 0x80) !== 0) {}
+      } else {
+        break;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Extrai preço da aba Cheapest do Google Flights a partir do HTML raw ou URL de resposta.
  *
- * @param {string} html
+ * Múltiplas camadas de extração:
+ * 1. Padrão canônico comprehensiveness_lure em array JS: [[null, PRECO], "...comprehensiveness_lure..."]
+ * 2. Padrão ampliado: [[null, PRECO], "base64long"]
+ * 3. Padrão compacto minificado: [null, PRECO], "EhZ..."
+ * 4. Decode base64url do parâmetro canônico `tfu` da URL de resposta ou embutido em respostas AJAX de redirecionamento.
+ *
+ * @param {string|null} html
+ * @param {string|null} [urlResposta=null]
  * @returns {number|null}
  */
-export function extrairPrecoCheapestTab(html) {
-  if (!html) return null;
+export function extrairPrecoCheapestTab(html, urlResposta = null) {
+  if (!html && !urlResposta) return null;
 
-  // Camada 1: Padrão canônico com comprehensiveness_lure — tolerante a espaços extras
-  const r1 = /\[\[null,\s*(\d+)\s*\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
-  const m1 = html.match(r1);
-  if (m1) {
-    const p = parseInt(m1[1], 10);
-    if (p >= 80 && p <= 60000) return p;
+  if (html) {
+    // Camada 1: Padrão canônico com comprehensiveness_lure — tolerante a espaços extras
+    const r1 = /\[\[null,\s*(\d+)\s*\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
+    const m1 = html.match(r1);
+    if (m1) {
+      const p = parseInt(m1[1], 10);
+      if (p >= 80 && p <= 60000) return p;
+    }
+
+    // Camada 2: Padrão ampliado — captura [[null,NUM],"base64long"] em qualquer contexto de callback
+    const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
+    const m2 = html.match(r2);
+    if (m2) {
+      const p = parseInt(m2[1], 10);
+      if (p >= 80 && p <= 60000) return p;
+    }
+
+    // Camada 3: Padrão compacto minificado — [null,NUM],"EhZ..." ou com palavras literais
+    // EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl = token base64 canônico de comprehensiveness_lure
+    const r3 = /\[null,\s*(\d{3,6})\s*\],\s*"(?:EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl|[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest))/i;
+    const m3 = html.match(r3);
+    if (m3) {
+      const p = parseInt(m3[1], 10);
+      if (p >= 80 && p <= 60000) return p;
+    }
   }
 
-  // Camada 2: Padrão ampliado — captura [[null,NUM],"base64long"] em qualquer contexto de callback
-  const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
-  const m2 = html.match(r2);
-  if (m2) {
-    const p = parseInt(m2[1], 10);
-    if (p >= 80 && p <= 60000) return p;
+  // Camada 4: Decode base64url do parâmetro canônico tfu da URL de resposta ou embutido em AJAX/redirect
+  if (urlResposta) {
+    const precoTfuUrl = decodificarPrecoDoTfu(urlResposta);
+    if (precoTfuUrl) return precoTfuUrl;
   }
 
-  // Camada 3: Padrão compacto minificado — [null,NUM],"EhZ..." ou com palavras literais
-  // EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl = token base64 canônico de comprehensiveness_lure
-  const r3 = /\[null,\s*(\d{3,6})\s*\],\s*"(?:EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl|[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest))/i;
-  const m3 = html.match(r3);
-  if (m3) {
-    const p = parseInt(m3[1], 10);
-    if (p >= 80 && p <= 60000) return p;
+  if (html) {
+    // Se o HTML contiver links ou redirecionamentos com tfu (ex: AJAX responses sem corpo rico)
+    const regexTfu = /(?:[?&]tfu=|"tfu"\s*:\s*"|tfu=)([A-Za-z0-9+/=_-]{20,})/gi;
+    let matchTfu;
+    while ((matchTfu = regexTfu.exec(html)) !== null) {
+      const precoTfu = decodificarPrecoDoTfu(matchTfu[1]);
+      if (precoTfu) return precoTfu;
+    }
   }
 
   return null;
@@ -201,7 +485,8 @@ export function extrairPrecoCheapestTab(html) {
  * @param {number|null} duracaoMaxHoras - Duração máxima em horas (filtro opcional)
  * @returns {{ url: string, tipoViagem: 'one_way'|'round_trip', tfs: string }}
  */
-export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
+export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null, moeda = 'BRL') {
+  const moedaEfetiva = (moeda || 'BRL').trim().toUpperCase();
   const origResolvido = resolverCodigoParaLink(origemCod);
   const destResolvido = resolverCodigoParaLink(destinoCod);
 
@@ -224,7 +509,7 @@ export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta =
     maxDurationMinutes: maxMin
   });
 
-  const url = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfsPayload}&tfu=EgoIABAAGAAgAigD`;
+  const url = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaEfetiva}&tfs=${tfsPayload}&tfu=EgoIABAAGAAgAigD`;
 
   return { url, tipoViagem, tfs: tfsPayload };
 }
@@ -240,12 +525,12 @@ export function extrairVoosDoHtml(html) {
   const voos = [];
 
   // Camada A: Blocos completos com preço, cia, duração e detalhes
-  const regexAriaBloco = /aria-label=["']((?:[^"']|\\.)*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)(?:[^"']|\\.)*?)["']/gi;
+  const regexAriaBloco = /aria-label=["']((?:[^"']|\\.)*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)(?:[^"']|\\.)*?)["']/gi;
   let m;
 
   while ((m = regexAriaBloco.exec(html)) !== null) {
     const ariaTexto = m[1];
-    const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)/i);
+    const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
     const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
     if (!preco || preco < 80 || preco > 60000) continue;
 
@@ -259,7 +544,21 @@ export function extrairVoosDoHtml(html) {
     const mCia = ariaTexto.match(/(?:Voo|Flight)\s*(?:[^.]*?)\s*(?:da|with|operado por|operated by)\s*([^.]+?)(?:\.|$)/i) ||
                  ariaTexto.match(/(?:Voo|Flight)\s+([A-Za-zÀ-ÿ0-9\s]+?)(?:\.|com\s|\s+direto)/i);
     if (mCia) ciaBruta = mCia[1].trim();
-    const cia = limparNomeCompanhia(ciaBruta);
+    let cia = limparNomeCompanhia(ciaBruta);
+
+    // Se a cia for um código de voo (ex: "G3 1542" ou "LA 3210") ou código IATA isolado ("G3", "LA")
+    const matchCodVoo = cia.match(/^([A-Za-z0-9]{2})(?:\s*\d{1,4})?$/i);
+    if (matchCodVoo && MAPA_CIAS_IATA[matchCodVoo[1].toUpperCase()]) {
+      cia = MAPA_CIAS_IATA[matchCodVoo[1].toUpperCase()];
+    }
+
+    // Fallback defensivo por código IATA (data-*, logos, matrizes de voos) quando o nome for genérico
+    if (cia === 'Companhia Aérea') {
+      const ciaIata = extrairCiaIataDoTrecho(trecho, ariaTexto);
+      if (ciaIata) {
+        cia = ciaIata;
+      }
+    }
 
     // Duração
     let durTexto = '12 h';
@@ -306,9 +605,13 @@ export function extrairVoosDoHtml(html) {
     while ((ms = regexSimples.exec(html)) !== null) {
       const preco = extrairPrecoNumerico(ms[1]);
       if (preco && preco >= 80 && preco <= 60000) {
+        const posIni = Math.max(0, ms.index - 250);
+        const posFim = Math.min(html.length, ms.index + ms[0].length + 900);
+        const trecho = html.slice(posIni, posFim);
+        const cia = extrairCiaIataDoTrecho(trecho, ms[0]) || 'Companhia Aérea';
         voos.push({
           preco,
-          cia: 'Companhia Aérea',
+          cia,
           duracaoTexto: '12 h',
           duracaoHoras: 12.0,
           escalas: 0,
@@ -328,9 +631,13 @@ export function extrairVoosDoHtml(html) {
     while ((mb = regexBRL.exec(html)) !== null) {
       const num = parseFloat(mb[1].replace(/\./g, ''));
       if (num >= 80 && num <= 60000) {
+        const posIni = Math.max(0, mb.index - 250);
+        const posFim = Math.min(html.length, mb.index + mb[0].length + 900);
+        const trecho = html.slice(posIni, posFim);
+        const cia = extrairCiaIataDoTrecho(trecho, mb[0]) || 'Companhia Aérea';
         voos.push({
           preco: num,
-          cia: 'Companhia Aérea',
+          cia,
           duracaoTexto: '12 h',
           duracaoHoras: 12.0,
           escalas: 0,
@@ -382,21 +689,25 @@ export class ScraplingProvider extends FlightProviderInterface {
    * @param {number} [params.duracaoMaxHoras]
    * @param {string} [params.cabine]
    * @param {number} [params.adultos]
+   * @param {string} [params.moeda]
+   * @param {string} [params.curr]
    * @returns {Promise<{ok:boolean, encontrouVoos?:boolean, oferta?:object, erro?:boolean, mensagemErro?:string}>}
    */
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
+  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
     // Validação de entrada defensiva
     if (!origemCod || !destinoCod || !dataIda) {
       return { ok: false, erro: true, mensagemErro: 'ScraplingProvider: parâmetros de busca incompletos (origemCod, destinoCod e dataIda são obrigatórios).' };
     }
 
+    const moedaEfetiva = (curr || moeda || 'BRL').trim().toUpperCase();
+
     // Constrói URL Cheapest com distinção One-Way vs Round-Trip
-    const { url: urlCheapest, tipoViagem } = construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras);
+    const { url: urlCheapest, tipoViagem } = construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, moedaEfetiva);
 
     // Link canônico de fallback para exibição (sem tfs)
     const linkCanônico = dataIda
-      ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras) || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta)
-      : gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+      ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaEfetiva) || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva)
+      : gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva);
 
     let ultimoErro = 'Nenhuma tentativa realizada';
 
@@ -436,8 +747,8 @@ export class ScraplingProvider extends FlightProviderInterface {
 
         const html = await resp.text();
 
-        // Extração do preço da aba Cheapest (camada prioritária)
-        const precoCheapest = extrairPrecoCheapestTab(html);
+        // Extração do preço da aba Cheapest (camadas 1-3 no HTML + camada 4 via URL de resposta/tfu)
+        const precoCheapest = extrairPrecoCheapestTab(html, resp.url);
 
         // Extração da lista de voos detalhados
         const voosDetalhados = extrairVoosDoHtml(html);
@@ -510,6 +821,7 @@ export class ScraplingProvider extends FlightProviderInterface {
           encontrouVoos: true,
           oferta: {
             preco: melhorOferta.preco,
+            moeda: moedaEfetiva,
             precoOriginal: melhorOferta.precoOriginal,
             duracaoHoras: melhorOferta.duracaoHoras,
             destinoReal: destinoCod,

@@ -4,6 +4,1000 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.41] - 2026-10-13 — Blindagem Adversarial em extrairInfoBagagem contra Textos sem Acento e Suporte a Plurais/Múltiplos (Provedor Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`extrairInfoBagagem`):
+  - Normalização prévia de texto via NFD (`normalize('NFD').replace(/[\u0300-\u036f]/g, '')`), eliminando falhas de extração causadas por strip accents ou strings sem acento (`mão`/`mao`, `não`/`nao`, `incluída`/`incluida`).
+  - Suporte completo a plurais e quantificadores numéricos (`malas?`, `bagagem|bagagens`, `despachadas?`, `incluidas?`, `(?:\d+\s+)?`) tanto para bagagem de mão quanto para bagagem despachada.
+  - Preservada degradação graciosa para entradas vazias, nulas, indefinidas ou numéricas sem menção de regras de bagagem.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) strings sem acentos ("sem bagagem de mao", "2 malas despachadas incluidas"), (2) plurais e múltiplos ("Inclui 2 malas despachadas", "Inclui 2 malas de mao", "Bagagens despachadas pagas"), e (3) degradação graciosa para nulos, números e strings vazias.
+
+## [v2.18.40] - 2026-10-13 — Blindagem Adversarial em identificarRegiaoDestino contra Objetos Estruturados e Expansão Semântica (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`identificarRegiaoDestino`):
+  - Blindada resolução para aceitar objetos estruturados de rotas e ofertas (`{ iata }`, `{ codigo }`, `{ destino }`, `{ cidade }`, etc.) extraindo a propriedade representativa sem degradar para `'OUTRO'`.
+  - Expandida detecção semântica textual no fallback de nomes para rotas com `'Brasil'`, `'nacional'` ou `'doméstico'` (resolvendo para `'DOMESTICO'`), bem como destinos na `'Alemanha'`, `'Reino Unido'` / `'Inglaterra'` (resolvendo para `'EUROPA'`) e `'Canadá'` (resolvendo para `'AMERICA_NORTE'`).
+  - Preservada estrita imunidade a objetos vazios, primitivos falsy, nulos ou indefinidos mantendo fallback seguro `'OUTRO'`.
+- **`tests/bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) objetos estruturados com `iata`, `destino` e `cidade`, (2) menções textuais a Brasil, voos nacionais e domésticos, (3) resoluções semânticas para Alemanha, Reino Unido e Canadá.
+
+## [v2.18.39] - 2026-10-13 — Blindagem Adversarial em encodeLengthDelimited com Suporte a Campos Protobuf >= 16 e Buffers Nulos (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`encodeLengthDelimited`):
+  - Corrigida codificação de tags Protobuf para campos com número `>= 16` (`(field_number << 3) | 2 >= 128`), substituindo o byte fixo `Buffer.from([tagByte])` por `encodeVarint((tagNum << 3) | 2)` em conformidade estrita com o wire format oficial de Protocol Buffers.
+  - Sanitização defensiva do payload: buffers nulos, indefinidos ou de tipos primitivos numéricos agora degradam graciosamente para buffer vazio (`Buffer.alloc(0)`) sem disparar `TypeError: Cannot read properties of null (reading 'length')`.
+  - Suporte resiliente a conversão de `string` (utf-8) e `Uint8Array` para instâncias de `Buffer`.
+  - Normalização defensiva de números de campo negativos, nulos ou `NaN` para campo padrão `1`.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) campo canônico tag 3, (2) campo tag 16 com varint multi-byte `[0x82, 0x01]`, (3) conversão de strings e Uint8Array, e (4) resiliência a nulos, indefinidos, tipos inesperados e tags inválidas.
+
+## [v2.18.38] - 2026-10-13 — Blindagem Adversarial em ehPeriodoNoturno com Injeção Determinística de Horário e Fallback Gracioso (Notificador Telegram)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/notifier_telegram.js`** (`ehPeriodoNoturno`):
+  - Habilitada injeção determinística de parâmetro `dataRef` (suportando instâncias de `Date`, números de timestamp unix e strings de data) para permitir testes determinísticos e validação precisa de limiares noturnos (22h00 a 07h59) sem depender de `new Date()` mutável no relógio do sistema.
+  - Degradação defensiva e graciosa em caso de entradas inválidas, nulas, indefinidas ou datas corrompidas (`NaN`), garantindo fallback para data atual sem nunca lançar `TypeError`.
+- **`tests/telegram_callbacks.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) limiares exatos noturnos (22h00, 23h45, 00h30, 07h59), (2) limiares exatos diurnos (08h00, 14h30, 21h59), (3) timestamps e strings alternativas, e (4) resiliência a `null`, `undefined`, `{}` e datas inválidas.
+
+## [v2.18.37] - 2026-10-13 — Blindagem Adversarial em extrairDiasEstadia contra Datas de Calendário e Prefixos Textuais (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`extrairDiasEstadia`):
+  - Corrigida anomalia crítica onde datas absolutas de calendário (como `'2026-11-20'` ou `'20/11/2026'`) passadas no campo de estadia tinham seu ano (`2026`) ou dia (`20`) indevidamente capturados como quantidade de dias de estadia, agora retornando defensivamente o valor padrão seguro (`padraoValido`).
+  - Suporte resiliente a prefixos descritivos e aproximados de estadia (ex: `'~14 dias'`, `'aprox. 12 dias'`, `'estadia de 7 dias'`, `'cerca de 15 dias'`), garantindo extração robusta da contagem correta.
+  - Rejeição defensiva imediata de strings negativas (`'-10 dias'`) e sanitização de strings mal formatadas.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo: datas absolutas ISO/BR/timestamp, prefixos aproximados e strings mal formatadas ou negativas.
+
+## [v2.18.36] - 2026-10-13 — Blindagem Adversarial em gerarCombinacoesFlexibilidade contra Datas Nulas/Inválidas e Deltas Fantasmas (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarCombinacoesFlexibilidade`):
+  - Corrigida anomalia onde `dataIda` nula, indefinida ou inválida combinada com `flexibilidadeDias > 0` gerava deltas fantasmas compostos por objetos com `dataIda: null`.
+  - Eliminado vazamento de strings corrompidas ou `[object Object]` quando `dataIda` não representava uma data reconhecível pelo calendário, assegurando que `idaNorm` seja validada unicamente via `formatarDataParaBusca` e retornando apenas a entrada base sanitizada.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) `dataIda: null` com flexibilidade positiva (`3`), (2) `dataIda` malformatada (`'data-invalida'`), e (3) `dataIda` como objeto `{ dia: 15 }`, assegurando retorno atômico de 1 registro base sem deltas fantasmas.
+
+## [v2.18.35] - 2026-10-13 — Blindagem Adversarial em validarPeriodo contra Aliases de Só Ida, Espaços e Anos Fora da Faixa Civil (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`validarPeriodo`):
+  - Normalização defensiva de `tipo` para aceitar variações e aliases de Só Ida (`'so_ida'`, `'one-way'`, `'ONE_WAY'`, `'oneway'`), além de inferência automática quando `tipo` é omitido e `dataVoltaStr` expressa só ida (`null`, `undefined` ou `ehSoIda`).
+  - Corrigido falso positivo quando `dataVoltaStr` continha apenas espaços em branco (`'   '`) ou termos semânticos de só ida (`'Só Ida'`, `'sem volta'`), evitando rejeição indevida.
+  - Blindagem contra anos espúrios fora da faixa civil (2000-2099) e distorções de `Date.UTC` (onde ano 0 era tratado como 1900), garantindo `d.getUTCFullYear() === ano`.
+- **`tests/domain.test.js`**:
+  - Adicionado teste adversarial verificando normalização de aliases só-ida, rejeição de data de volta conflitante em voos só-ida, e rejeição estrita de ano zero (`'0000-01-01'`) e datas inexistentes (`'2026-02-30'`).
+
+## [v2.18.34] - 2026-10-13 — Blindagem Adversarial em rotaEhSoIda contra Tipos Não-Objeto, Case Sensitivity e Hífens (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`rotaEhSoIda`):
+  - Corrigido tratamento de `tipo` e `tipo_viagem` para aceitar variações case-insensitive (ex: `'ONE_WAY'`, `'ROUND_TRIP'`, `'SO_IDA'`, `'IDA_E_VOLTA'`), com suporte a hífens (ex: `'one-way'`, `'round-trip'`) e espaços extras nas pontas (`trim`).
+  - Corrigido falso positivo de Só Ida quando tipos primitivos não-objeto (números como `12345`, booleanos como `true`, ou arrays como `[]`) eram passados, assegurando agora retorno defensivo de `false`.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionados testes de borda adversariais validando: (1) `tipo: 'ONE_WAY'`, (2) `tipo: 'one-way'`, (3) `tipo: '  so_ida  '`, (4) `tipo_viagem: 'ONE-WAY'`, (5) `tipo: 'ROUND_TRIP'`, (6) `tipo: 'round-trip'`, (7) `tipo_viagem: 'ROUND_TRIP'`, e (8) tipos não-objeto (`12345`, `true`, `[]`, `['voo']`).
+
+## [v2.18.33] - 2026-10-13 — Blindagem Adversarial em parsePreco contra Preços Negativos com Moeda, Centavos sem Zero e Caracteres Invisíveis (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido falso positivo em que strings com sinal negativo antes do símbolo monetário (ex: `"-R$ 800"`, `"-EUR 120"`, `"-$50"`, `"- $ 500"`) tinham o sinal descartado e retornavam valores positivos espúrios, assegurando agora retorno defensivo de `0` para qualquer tarifa negativa.
+  - Corrigida perda de centavos em formatos numéricos sem zero à esquerda (ex: `",50"`, `".50"`, `"Taxa: ,50"`, `"R$ ,75"`), que anteriormente tinham o separador decimal indevidamente descartado virando `50` ou `75` (fator x100), agora retornando com precisão `0.50` e `0.75`.
+  - Adicionada sanitização defensiva para caracteres invisíveis como zero-width space e byte-order mark (`\u200B-\u200D\uFEFF`), frequentes em scrapers anti-cópia e payloads HTML.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes de borda adversariais validando: (1) sinal negativo antecedendo moedas (`"-R$ 800"`, `"-EUR 120"`, `"-$50"`, `"- $ 500"`), (2) centavos decimais sem zero (`",50"`, `".50"`, `"R$ ,75"`, `"USD .25"`, `"Taxa: ,50"`), e (3) strings com zero-width spaces e BOM (`"R$\u200B1.500"`, `"\uFEFF2.300"`).
+
+## [v2.18.32] - 2026-10-13 — Blindagem Adversarial em resolverDestinoConcreto contra Vazamento de [object Object] e Suporte a Objetos Estruturados (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`resolverDestinoConcreto`):
+  - Corrigido vazamento de `[object Object]` nos campos `iata`, `codigoLink`, `nome` e `cidade` quando `codigoDestino` ou `destino` são passados como objetos literais (ex: `{ codigoDestino: { iata: 'MAD' } }` ou `{ codigoDestino: {} }`).
+  - Integrada resolução via `obterInfoAeroporto` para `codigoDestino`, habilitando resolução direta para destinos estruturados ou com separadores (ex: `'LIS - Lisboa'`) e preservando a integridade das regiões catalogadas.
+  - Implementada extração defensiva prévia (`codRaw`, `destRaw`) antes do cálculo de normalização e fallback, assegurando fallbacks seguros e limpos (`'DEST'`, `'Destino'`) sem strings corrompidas.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) resolução de objeto estruturado em `codigoDestino` (`{ iata: 'MAD' }`), (2) resolução de string com separador (`'LIS - Lisboa'`), e (3) rejeição e sanitização estrita de objetos vazios `{}` sem vazamento de `[object Object]`.
+
+## [v2.18.31] - 2026-10-13 — Blindagem Adversarial em converterDuracaoParaHoras contra Formatos Compactos Zerados e Durações Negativas (Provedor Direto)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`converterDuracaoParaHoras`):
+  - Corrigido retorno indevido de `0` em durações no formato compacto zerado (ex: `"0h 0m"`, `"0h0m"`), assegurando o retorno do fallback defensivo padrão de `12.0` horas (alinhado a `"00:00"` e `0`).
+  - Implementada rejeição defensiva para strings com prefixo de sinal negativo (ex: `"-2h 30m"`, `"-1h"`, `"-45min"`), prevenindo a extração errônea de valores positivos em durações espúrias ou corrompidas.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados testes de borda adversariais validando: (1) fallback de 12.0 para tempo zerado em formato compacto (`"0h 0m"` e `"0h0m"`), e (2) fallback de 12.0 para durações negativas em string (`"-2h 30m"`, `"-1h"`, `"-45min"`).
+
+## [v2.18.30] - 2026-10-13 — Blindagem Adversarial em montarCardBugFare para Duração em Dias, Datas Invertidas e Sanitização Defensiva (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`montarCardBugFare`):
+  - Corrigido cálculo de `voltaEfetiva` quando `dataVolta` é expressa como duração (ex: `"10 dias"` ou número `14`), agora resolvendo a data ISO canônica `YYYY-MM-DD` via `calcularDataVolta` e garantindo coerência total com `periodo_texto` e os links do Google Flights (`tfs`).
+  - Implementada validação defensiva que descarta datas de volta que sejam anteriores à data de ida (`voltaCalculada < dataIdaNorm`), degradando graciosamente para Só Ida (`data_volta = null`) e prevenindo links corrompidos de busca.
+  - Assegurada consistência estrita entre `periodo_texto`, `data_volta` e `link` em todos os fluxos de cards de Bug Fare.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) resolução de duração textual e numérica para data ISO e link `tfs`, (2) degradação automática para Só Ida quando a volta é anterior à ida, e (3) sanitização defensiva de preços negativos e códigos IATA com espaços extras.
+
+## [v2.18.29] - 2026-10-13 — Blindagem Adversarial em obterInfoAeroporto para Espaços Internos em Parênteses e Separadores Adicionais (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`obterInfoAeroporto`):
+  - Corrigido falso negativo em códigos IATA informados com espaços internos entre parênteses (ex: `"Santiago ( SCL )"` ou `"Auckland ( AKL )"`), tornando os regexes tolerantes a espaços em branco (`\s*`).
+  - Expandido o parser de separadores para suportar delimitadores com pipe e dois pontos (`[-/|:]`, ex: `"GRU | São Paulo"`, `"EZE: Buenos Aires"`), além do traço e barra preexistentes.
+  - Sanitizada a extração de `nomeCidade` para remover adequadamente parênteses com espaços internos, prevenindo nomes corrompidos de aeroportos não catalogados.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo entradas com espaços internos nos parênteses (`"Santiago ( SCL )"` e destino internacional `"Auckland ( AKL )"`), e separadores com pipe (`"GRU | São Paulo"`) e dois pontos (`"EZE: Buenos Aires"`).
+
+## [v2.18.28] - 2026-10-13 — Blindagem Adversarial em classificarItemFeed contra Falsos Negativos em Bug Fares com Desconto/Cabine e Megapromoções (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`classificarItemFeed`):
+  - Corrigido falso negativo crítico onde Bug Fares reais que continham termos descritivos de voo e economia (`"desconto"`, `"off"`, `"executiva"`, `"business"`) eram sumariamente descartados pelo filtro de marketing antes do reconhecimento de erro de tarifa.
+  - Implementada segregação defensiva entre termos de produtos não-aéreos banidos (`hotel`, `resort`, `pacote`, `cruzeiro`, `milhas`, `carro`, `seguro`) e termos descritivos de tarifas, preservando a prioridade máxima para erros de tarifa autênticos de aviação.
+  - Corrigido conflito estrutural que impedia o reconhecimento de megapromoções com `"super desconto"` devido ao bloqueio prévio pela palavra genérica `"desconto"`.
+  - Tratadas entradas nulas, indefinidas ou com strings em branco com retorno gracioso de descarte sem exceções.
+- **`tests/bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo Bug Fares legítimos com menção a desconto/cabine executiva, persistência de descarte para produtos não-aéreos (hotel/resort) mesmo que aleguem erro de tarifa, reconhecimento de megapromoção com "super desconto" e resiliência com entradas nulas/vazias.
+
+## [v2.18.27] - 2026-10-13 — Blindagem Adversarial em extrairInfoTarifaEspecial contra Links Não-String, Preços Monetários e Tipos Anômalos (PWA Cockpit)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/public/js/tarifa_tags.js`** (`extrairInfoTarifaEspecial`):
+  - Blindada a checagem de link em `melhor_opcao_flexivel` (`typeof flexObj?.link === 'string'`), eliminando crash fatal por `TypeError: flexObj.link.includes is not a function` caso o objeto flexível contenha links não-string (ex: números, booleanos ou objetos aninhados).
+  - Blindada a função contra arrays (`Array.isArray(rota)`), garantindo retorno gracioso de `null` e prevenindo inspeções espúrias.
+  - Implementada extração e normalização resiliente de preço em `melhor_opcao_flexivel` para suportar tanto números primitivos quanto strings formatadas monetárias com separadores de milhar (`"R$ 1.950"`).
+- **`tests/tarifa_tags.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais verificando links não-string em `melhor_opcao_flexivel`, descarte defensivo de arrays e valores nulos/indefinidos, e normalização de strings monetárias com separador de milhar.
+
+## [v2.18.26] - 2026-10-13 — Blindagem Adversarial em gerarCombinacoesFlexibilidade para Duração Relativa, Volta no Passado e Tipos Corrompidos (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarCombinacoesFlexibilidade`):
+  - Blindada a resolução de `dataVolta` contra durações relativas (`"10 dias"`, `14`, `"7 noites"`) via `calcularDataVolta(idaNorm, dataVolta)`, eliminando o bug que gerava `dataVolta: null` em todas as combinações de flexibilidade (±1d a ±7d) quando a rota monitorada possuía duração de estadia em dias.
+  - Adicionada salvaguarda cronológica que detecta e degrada graciosamente datas de volta anteriores à ida para `null` (Só Ida), prevenindo buscas com intervalos temporais invertidos.
+  - Sanitizado o parâmetro `flexibilidadeDias` contra valores não finitos (`NaN`, `Infinity`, strings inválidas) e strings corrompidas no campo de volta.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionado conjunto de testes de borda adversariais cobrindo durações relativas de estadia (string e número puro), degradação defensiva para datas no passado e descarte de strings corrompidas.
+
+## [v2.18.25] - 2026-10-13 — Blindagem Adversarial em gerarDataPadraoInicial contra Coerção de Strings, Valores Nulos e Extremos (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarDataPadraoInicial`):
+  - Blindada a recepção de `diasOffset` com parsing defensivo (`parseInt(diasOffset, 10)`), prevenindo bug clássico de coerção acidental de tipos do JavaScript (`13 + '30' = '1330'`) onde strings numéricas resultavam em deslocamento espúrio de anos no calendário.
+  - Adicionado fallback seguro para 30 dias em caso de valores nulos, não finitos (`NaN`), tipos espúrios ou offsets negativos, além de salvaguarda de limite superior (`Math.min(parsed, 3650)`) para evitar `RangeError: Invalid time value` em `toISOString()`.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionados testes de borda adversariais validando strings numéricas (`"30"`), tipos inválidos (`null`, `NaN`, `"invalido"`, `{}`, `[]`), números negativos e valores extremos.
+
+## [v2.18.24] - 2026-10-13 — Blindagem Adversarial em gerarJanelasExploracaoSemData contra Datas Não-ISO, Tipos Não-String e Estadia Negativa (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarJanelasExploracaoSemData`):
+  - Blindada a normalização de `dataBase` com `formatarDataParaBusca`, prevenindo quebras fatais por `RangeError: Invalid time value` e `TypeError: base.split is not a function` ao receber strings descritivas (`"sem data"`, `"flexivel"`, `"qualquer data"`), formato brasileiro (`"31/12/2026"`) ou tipos não-string (`20261115`, `{}`).
+  - Normalizado o parâmetro `diasEstadia` com `extrairDiasEstadia`, garantindo fallback gracioso para 10 dias caso sejam passados valores negativos ou descritivos (`"15 dias"`).
+  - Sanitizados os limites de `qtdAmostras` com `Number.isFinite` e `Math.max(0, ...)` e detecção de modalidade `soIda` via `ehSoIda`.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando entradas espúrias de `dataBase`, `diasEstadia` negativo/formatado e limites de amostras.
+
+## [v2.18.23] - 2026-10-13 — Blindagem Adversarial em identificarRegiaoDestino contra Tipos Não-Primitivos e Strings em Branco (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`identificarRegiaoDestino`):
+  - Blindada a função contra entradas não-primitivas (`Object.create(null)`, objetos vazios, arrays, booleanos, funções) que podiam causar crash fatal por `TypeError: Cannot convert object to primitive value` ao invocar `String(destinoCod)`.
+  - Tratamento defensivo imediato para strings vazias e com apenas espaços em branco (`'   '`, `'\t\n'`), retornando `'OUTRO'` sem alocações ou execuções desnecessárias de regex.
+- **`tests/bug_fares.test.js`**:
+  - Adicionados casos de teste de borda adversariais verificando `Object.create(null)`, `{}`, `[]`, `true`, `false`, `'   '` e `'\t\n  '`.
+
+## [v2.18.22] - 2026-10-13 — Blindagem Adversarial em gerarLinkGoogleFlightsCheapest contra Datas Inválidas, Duração em Volta, Retorno Retroativo e Moeda Não-String (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarLinkGoogleFlightsCheapest`):
+  - Blindada a validação de `dataIda`: strings malformadas, datas inexistentes ou tipos não-data agora retornam `null` graciosamente em vez de gerar link Protobuf corrompido com data padrão fictícia (`2027-01-01`).
+  - Implementada resolução de `dataVolta` fornecida como duração/estadia (ex: `"10 dias"`, `14`): calcula com precisão a data de retorno a partir da ida via `calcularDataVolta`, gerando a perna de volta no payload `tfs=` Protobuf (Round-Trip).
+  - Blindada a checagem contra volta retroativa (`voltaResolvida < dataIdaNorm`), degradando para Só Ida sem perna de retorno inconsistente no passado.
+  - Sanitizado o parâmetro `moeda`, prevenindo `TypeError: (moeda || "BRL").trim is not a function` quando invocada com tipos numéricos, booleanos ou nulos.
+- **`tests/construir_tfu_passageiros.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais cobrindo entradas malformadas de data de ida, cálculo de duração/descarte de volta retroativa e sanitização resiliente de parâmetro moeda.
+
+## [v2.18.21] - 2026-10-13 — Blindagem Adversarial em ehSoIda contra Booleano False, Sentinelas e Ausência Explícita de Volta (Domínio Rotas)
+
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`ehSoIda`):
+  - Corrigido falso negativo em que entradas booleanas `false`, numéricas zeradas (`0`), `NaN` ou strings sentinelas de ausência de volta (ex: `"sem volta"`, `"sem_volta"`, `"sem retorno"`, `"null"`, `"undefined"`, `"none"`, `"n/a"`, `"no return"`, `"single"`) eram interpretadas indevidamente como viagens de Ida e Volta (`Round-Trip`), causando corrupção de modalidade e exibição errônea nos alertas do Telegram e rotas flexíveis.
+  - Implementada checagem defensiva para primitivos falsy/booleanos e vocabulário semântico de viagens de Só Ida / sem retorno.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo `false`, `0`, `NaN`, `"sem volta"`, `"sem retorno"`, `"no return"`, `"single"`, `"null"`, `"undefined"`, `"none"` e `"n/a"`, garantindo 100% de precisão na classificação de modalidades.
+
+## [v2.18.20] - 2026-10-13 — Blindagem Adversarial em gerarLinkGoogleFlights contra Datas Malformadas e Volta Retroativa (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarLinkGoogleFlights`):
+  - Eliminado vazamento de strings malformadas ou inexistentes no calendário (ex: `"data-invalida"`, `"2026-02-31"`) na URL do Google Flights (`"on data-invalida one-way"`), forçando a normalização estrita via `formatarDataParaBusca` e degradando graciosamente para a busca genérica de rota sem data.
+  - Blindada a resolução de `dataVolta` para descartar datas de retorno retroativas (anteriores à data de ida) ou inexistentes, convertendo a rota de forma resiliente para Só Ida (`one-way`) em vez de gerar URLs com datas inconsistentes (`"returning"` anterior à ida).
+- **`tests/domain.test.js`**:
+  - Adicionados casos de teste de borda adversariais (Casos 4 e 5) validando degradação para rota sem data em datas de ida inválidas e conversão automática para one-way em voltas retroativas ou inexistentes.
+
+## [v2.18.19] - 2026-10-13 — Blindagem Adversarial em montarCardBugFare contra Entradas Nulas, Moeda/NaN e Datas Date (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`montarCardBugFare`):
+  - Blindada a assinatura da função com fallback defensivo para evitar `TypeError: Cannot destructure property 'origem' of 'undefined'` quando invocada sem parâmetros, com `null` ou tipos primitivos.
+  - Implementada sanitização resiliente de preço, tolerando strings monetárias brasileiras (ex: `"R$ 414,50"`, `"1.250"`), descartando `NaN` e valores negativos com fallback para 0, eliminando corrupção de strings como `"por R$ NaN!"`.
+  - Normalizadas datas `dataIda` e `dataVolta` para o formato canônico `YYYY-MM-DD` via `formatarDataParaBusca`, prevenindo propagação de instâncias de `Date` nativas no payload de persistência e garantindo geração íntegra do link Protobuf `tfs=` da aba Cheapest.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando tolerância a chamadas sem parâmetros/nulas, normalização de preços formatados e sanitização de objetos Date.
+
+## [v2.18.18] - 2026-10-13 — Blindagem Adversarial em detectarBugFareEstatistico contra Formatos Monetários e Milhar (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`detectarBugFareEstatistico`):
+  - Corrigido descarte silencioso de tarifas de Bug Fare e anomalias de Z-Score quando `preco`, `precoMedioHistorico` ou `desvioPadrao` eram fornecidos em formatos monetários comuns (ex: `"R$ 1.450,00"`, `"1.450"`, `"R$ 4.200,00"`, `"R$ 800"`). A conversão ingênua `Number(preco)` resultava em `NaN` ou interpretava `"1.450"` como float `1.45`, acionando indevidamente o filtro de descarte de ruído (< R$ 40).
+  - Integrado parsing resiliente com `parsePreco` de `src/domain/calculadora.js` para normalização precisa de strings de preço, média histórica e desvio padrão.
+- **`tests/bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo formatos monetários brasileiros (`R$ 1.450,00`), cálculo de Z-Score com média e desvio monetários e queda percentual extrema com pontos de milhar.
+
+## [v2.18.17] - 2026-10-13 — Blindagem Adversarial em classificarDeltaPreco contra Moedas em Desvio Padrão (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`classificarDeltaPreco`):
+  - Corrigido comportamento anômalo onde `desvioPadrao` passado como string formatada com símbolo ou código monetário (ex: `"R$ 500"`, `"BRL 500"`, `"$ 500"`) falhava na asserção `/^-?\d/`, resultando indevidamente em `NaN` e `desvioPadrao: null`. Esse descarte silencioso rebaixava anomalias estatísticas severas (`BUG_FARE`, Z-Score <= -2.5) para meras `OPORTUNIDADE` ou `INFO`.
+  - Implementada validação defensiva que rejeita strings sem dígitos (`!/\d/.test`), descarta valores explicitamente negativos (inclusive com moeda, ex: `"-R$ 80"`) e processa strings com símbolos monetários de forma resiliente via `parsePreco`.
+- **`tests/calculadora.test.js`**:
+  - Adicionados casos de teste de borda adversariais (Casos 8, 9 e 10) cobrindo prefixos monetários em `desvioPadrao`, desvio com moeda negativo e strings em branco.
+
+## [v2.18.16] - 2026-10-13 — Blindagem Adversarial em parsePreco contra Tipos Espúrios (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido comportamento anômalo onde tipos de dados complexos ou não-textuais (instâncias de `Date`, `Error`, `Array`, `Function`, `RegExp` e objetos arbitrários) tinham seus métodos `toString()` convertidos cegamente, extraindo números internos (ex: data `new Date()` virando preço `13202600`, `new Error('Erro 404')` virando `404` e array `[123, 456]` virando float `123.456`).
+  - Implementada validação defensiva estrita para aceitar exclusivamente strings e números (primitivos ou instâncias wrapper de `String`/`Number`), retornando `0` de forma resiliente para qualquer outro tipo.
+- **`tests/calculadora.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando a rejeição imediata de objetos espúrios (`Date`, `Array`, `Function`, `Error`, `RegExp`, `Object`) e a correta aceitação de wrappers `String`/`Number`.
+
+## [v2.18.15] - 2026-10-13 — Blindagem Adversarial em parsePreco (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido comportamento anômalo onde valores monetários precedidos por prefixos contextuais ou rótulos (ex: `"A partir de R$ 1.250"`, `"Voo 123 por R$ 890"`, `"Preço: 1.500"`) resultavam indevidamente em `0` devido ao início alfabético que induzia `parseFloat` a retornar `NaN`.
+  - Implementada extração prioritária de blocos numéricos vinculados a moedas e eliminação cirúrgica de prefixos alfabéticos não numéricos.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes de borda adversariais validando extração precisa de preços quando precedidos por expressões contextuais e rótulos.
+
+## [v2.18.14] - 2026-10-13 — Blindagem Adversarial em encodeVarint (Domínio Rotas / Protobuf)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`encodeVarint`):
+  - Corrigido comportamento anômalo e corrupção silenciosa de dados em codificação protobuf varint quando entradas negativas (ex: `-1`, `-50`), decimais ou não-finitas (`Infinity`, `NaN`) eram passadas. Números negativos burlavam a condição `while (n > 0x7f)` e geravam bytes positivos espúrios (ex: `-1` gerava `Buffer.from([0x7f])` = `127`), enquanto `Infinity` gerava varint malformado (`[0x80, 0x00]`).
+  - Implementada validação defensiva estrita com coerção numérica (`Number(num)`), garantia de finitude (`Number.isFinite`), tratamento de números <= 0 retornando `Buffer.from([0])` e truncamento de inteiros via `Math.floor`.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando inteiros canônicos (0, 1, 127, 128, 300), degradação graciosa para varint 0 em números negativos e rejeição de entradas nulas, não-finitas e strings malformadas.
+
+## [v2.18.13] - 2026-10-13 — Blindagem Adversarial em parsearTempoMinutos (Cockpit PWA / Conexões)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/public/js/conexao_badges.js`** (`parsearTempoMinutos`):
+  - Corrigido comportamento anômalo onde durações negativas em formato de texto (ex: `"-2h"`, `"-45min"`, `"-01:30"`, `" - 90m"`) ignoravam o sinal negativo e retornavam valores inteiros positivos (ex: `120`, `45`, `90`), divergindo da regra defensiva já aplicada para números negativos (`tempoStr = -60` -> `null`).
+  - Adicionado suporte a strings puramente numéricas representando minutos (ex: `"120"`, `"45"`, `"0"`), convertendo-as defensivamente para inteiros válidos.
+- **`tests/conexao_badges.test.js`**:
+  - Adicionados testes de borda adversariais validando rejeição de strings negativas e conversão de strings numéricas puras.
+
+## [v2.18.12] - 2026-10-13 — Blindagem Adversarial em extrairInfoConexoes (Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`extrairInfoConexoes`):
+  - Corrigido falso positivo crítico onde voos indiretos ou com paradas eram erroneamente catalogados como voos diretos (`0 escalas`), decorrente de match ingênuo por substring da palavra `direto` (que capturava `"indireto"` e `"não direto"`).
+  - Reordenada a avaliação com prioridade para detecção de escalas explícitas e termos de conexão, associada à verificação estrita de fronteira de palavra (`(?<!n[aã]o\s+)\bdireto\b`), garantindo que voos indiretos mantenham suas escalas e aeroportos de conexão catalogados com fidelidade.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais validando voo indireto com conexão, voo com negação de direto e inferência padrão de parada para termo indireto.
+
+## [v2.18.11] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverDestino`):
+  - Blindada a resolução de cidades e regiões por dicionários (`DICIONARIO_REGIOES` e `DICIONARIO_CIDADES`) contra prototype pollution e colisão com propriedades herdadas de `Object.prototype` (ex: `"constructor"`, `"__proto__"`, `"valueOf"`, `"toString"`).
+  - Implementada verificação estrita via `Object.hasOwn(...)` e garantia de tipo string primitivo, impedindo o retorno inadvertido de funções nativas ou protótipos de objeto quando chaves reservadas forem consultadas como destinos.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando a rejeição e retorno defensivo de `null` para `"constructor"`, `"__proto__"`, `"valueOf"` e `"toString"`.
+
+## [v2.18.10] - 2026-10-13 — Blindagem Adversarial em avaliarCustoDestinoComTotal (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`avaliarCustoDestinoComTotal`):
+  - Corrigido o cálculo de dias de permanência e custo terrestre quando o campo de volta é informado como duração textual (ex: `"10 dias"`, `"7 noites"`, `"14d"`), que antes falhava ao tentar realizar `split('-')` ingênuo, resultando em `diasViagem = 0` e omitindo as diárias do custo total da viagem.
+  - Integradas as funções canônicas `formatarDataParaBusca` e `calcularDataVolta` do domínio de rotas para normalizar datas de ida e volta, suportando datas no padrão brasileiro (`DD/MM/AAAA`) e timestamps ISO sem quebras.
+  - Adicionado suporte à opção explícita `diasEstadia` em `opcoes` e estabelecido teto de segurança defensivo (`Math.min(dias, 3650)`) contra números astronômicos ou maliciosos.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes de borda adversariais cobrindo durações textuais em dias e noites, formato de data brasileiro e opção explícita `diasEstadia` com teto de segurança.
+
+
+## [v2.18.9] - 2026-10-13 — Blindagem Adversarial em extrairPrecoNumerico (Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`extrairPrecoNumerico`):
+  - Corrigido descarte de centavos decimais seguidos de delimitadores ou texto contextual (ex: `"1.450,00 Reais brasileiros"` e `"R$ 1.500,50 por pessoa"`), evitando que a regex `/[,.]\d{2}$/` falhasse na âncora final e concatenasse os dígitos dos centavos, inflacionando o valor em 100x.
+  - Blindada a função contra valores negativos (ex: `"-500"`, `"R$ -1.250"`, `-500`) e tipos não-finitos (`Infinity`, `-Infinity`, `NaN`), retornando `null` defensivamente.
+  - Adicionado suporte defensivo para entradas numéricas diretas (`number`), convertendo valores positivos válidos e truncando decimais para número inteiro de reais.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados 3 novos testes de borda adversariais cobrindo centavos com sufixos textuais, rejeição de valores negativos e suporte defensivo a tipos numéricos.
+
+## [v2.18.8] - 2026-10-13 — Blindagem Adversarial em resolverCodigoParaLink (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverCodigoParaLink`):
+  - Corrigida a extração de códigos IATA entre parênteses para tolerar espaços internos arbitrários (ex: `"São Paulo ( GRU )"` e `"Miami (  MIA  )"`), alinhando o comportamento ao parser canônico de `resolverDestino`.
+  - Adicionada normalização automática para maiúsculo em códigos IATA individuais de 3 letras informados em minúsculas (ex: `"gru"` → `"GRU"`, `"mia"` → `"MIA"`), prevenindo a geração de URLs e queries de scraping com códigos em caixa baixa.
+  - Preservada a precedência de mapeamento para regiões canônicas (ex: `"eua"` → `"United States"`).
+- **`tests/domain.test.js`**:
+  - Adicionados testes de borda adversariais cobrindo parênteses com espaços internos arbitrários e códigos IATA únicos em minúsculas.
+
+## [v2.18.7] - 2026-10-13 — Blindagem Adversarial em formatarDataParaBusca (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`formatarDataParaBusca`):
+  - Corrigido suporte a datas fornecidas como strings ISO 8601 completas ou DateTime de bancos de dados SQLite (ex: `'2026-11-15T00:00:00.000Z'`, `'2026-11-15 14:30:00'` e `'15/11/2026 18:00'`), que antes retornavam `null` e quebravam links do Google Flights e queries de scanners.
+  - Preservada rigorosa validação de calendário Gregoriano via `Date.UTC`, garantindo que datas impossíveis (ex: `'2026-02-31T00:00:00Z'` ou `'2026-04-31 12:00:00'`) continuem sumariamente descartadas como `null`.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo timestamps ISO 8601, SQLite DateTime, rejeição de datas inexistentes e entradas malformadas.
+
+## [v2.18.6] - 2026-10-13 — Blindagem Adversarial em obterInfoAeroporto (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`obterInfoAeroporto`):
+  - Corrigido suporte a entradas fornecidas como objetos estruturados de aeroporto ou trecho (ex: `{ iata: 'GRU' }`, `{ airport: 'EZE' }`, `{ codigo: 'MIA' }`), que antes falhavam por conversão cega para `"[OBJECT OBJECT]"` e retornavam `null`.
+  - Adicionada resolução defensiva para códigos IATA de 3 letras informados entre parênteses fora do catálogo fixo (ex: `"Reykjavik (KEF)"`), preservando o código IATA e montando a estrutura canônica em vez de descartar o destino.
+  - Adicionado suporte a delimitadores por hífen e barra com código IATA de 3 letras (ex: `"AKL - Auckland"`, `"Hamad / DOH"`).
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando objetos estruturados, IATA entre parênteses fora do catálogo e delimitadores por hífen/barra.
+
+## [v2.18.5] - 2026-10-13 — Blindagem Adversarial em converterDuracaoParaHoras (Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`converterDuracaoParaHoras`):
+  - Corrigido suporte a formatos de relógio digital `"HH:MM"` (ex: `"02:30"` → 2.5h, `"1:45"` → 1.75h) que antes caíam incorretamente no fallback de 12.0h, descartando indevidamente voos rápidos em filtros de duração máxima.
+  - Adicionado suporte a formatos decimais diretos com ponto ou vírgula (ex: `"2.5h"` → 2.5h, `"1,5 h"` → 1.5h), prevenindo truncamento para a parte inteira.
+  - Blindagem estrita para durações zeradas em relógio digital (ex: `"00:00"`, `"0:00"`), retornando o fallback seguro de 12.0h.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais validando formato de relógio digital `"HH:MM"`, formatos decimais com ponto/vírgula e entradas zeradas.
+
+## [v2.18.4] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverDestino`):
+  - Corrigido reconhecimento de identificadores KGMID/Freebase para aceitar prefixos maiúsculos e identificadores mistos (ex: `"/M/02j9z"`, `"/M/02J9Z"`, `"/G/11b6"`), normalizando para o formato canônico minúsculo do Google Flights em vez de retornar `null`.
+  - Tratamento resiliente de código IATA entre parênteses com espaços internos arbitrários (ex: `"São Paulo ( GRU )"` ou `"Miami (  MIA  )"`), extraindo o código IATA corretamente.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste adversarial validando KGMIDs maiúsculos/mistos e espaços internos em parênteses IATA.
+
+## [v2.18.3] - 2026-10-13 — Blindagem Adversarial em formatarPeriodoViagem (Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`formatarPeriodoViagem`):
+  - Corrigido bug onde valores como `0`, `'0'`, `'0 dias'` ou strings inválidas no campo de volta causavam vazamento de dados espúrios na mensagem (ex: `"Ida: 08/12/2026 ➔ Volta: 0"` ou `"➔ Volta: xyz"`), passando a degradar graciosamente para `(Só Ida)`.
+  - Tratamento defensivo contra viagens no passado (data de volta anterior à data de ida), degradando para `(Só Ida)` em vez de permitir períodos temporais inconsistentes.
+  - Blindagem estrita para data de ida inexistente no calendário (ex: `'2026-02-31'`), strings corrompidas ou instâncias de `Date` inválidas, retornando `'Data a Definir'`.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste adversarial com validação de entradas espúrias (`0`, `'0'`, `'0 dias'`, `'xyz_invalido'`), volta no passado e datas inválidas.
+
+## [v2.18.2] - 2026-10-13 — Blindagem Adversarial em resolverCodigoParaLink (Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverCodigoParaLink`):
+  - Blindagem estrita de tipos para entradas não primitivas (objetos `{}`, arrays `[]`, booleans e `Symbol`), retornando o fallback seguro `'SAO'` sem quebrar na montagem de URLs do Google Flights nem lançar exceções.
+  - Suporte a KGMIDs em maiúsculas (ex: `"/M/02J9Z"`, `"/M/06_1"`, `"/M/09C7W0"`), normalizando em minúsculo para mapeamento correto com `KGMID_PARA_NOME` e regex case-insensitive para prefixos `/m/` e `/g/`.
+  - Normalização defensiva de múltiplos aeroportos IATA com espaços e minúsculas (ex: `"  gru , gig  "` -> `"GRU,GIG"`), prevenindo URLs mal formadas no Google Flights.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando tipos não primitivos, KGMIDs case-insensitive e limpeza de listas com múltiplos IATAs.
+
+## [v2.18.1] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverDestino`):
+  - Corrigida resolução de destinos onde strings contendo códigos IATA embutidos entre parênteses (ex: `"São Paulo (GRU)"`, `"Miami (MIA)"`) retornavam `null`, passando a extrair o IATA prioritariamente com segurança.
+  - Adicionado suporte defensivo a múltiplos aeroportos IATA separados por vírgula com espaços arbitrários (ex: `"GRU, GIG"`, `"  GRU , BSB , CNF  "`), normalizando a saída para formato canônico sem espaços (`"GRU,GIG"`, `"GRU,BSB,CNF"`).
+  - Blindagem de tipos: rejeição antecipada de entradas nulas, vazias, objetos (`{}`), arrays (`[]`), números soltos e formatos truncados/corrompidos (`"GRU,"`, `",GRU"`, `"GRU,,GIG"`).
+- **`tests/domain.test.js`**:
+  - Adicionados testes de borda e adversariais para `resolverDestino` cobrindo parênteses, espaçamento em listas IATA e entradas inválidas.
+
+## [v2.18.0] - 2026-10-13 — calcularMilhasRota no Backend + milhas_estimadas em escanearRota
+
+### ✈️ Novo Recurso: Estimativa de Milhas Calculada no Servidor
+
+- **`src/services/flight_scanner.js`** · `calcularMilhasRota` (nova função exportada):
+  - Espelha `calcularMilhasEstimadas` do frontend (`card_rota.js`) para uso no backend (API, Telegram, `escanearRota`)
+  - Constante `COTACOES_MILHA_MILHEIRO_BACKEND` com cotações de referência para smiles (17.50), latam/latampass (24.00), livelo (35.00), azul/tudoazul (20.00), iberia (65.00), tap (32.00)
+  - Usa `paridade_milhas` customizada da rota quando disponível; cai para cotação padrão do programa quando ausente
+  - Arredondamento `Math.ceil` para nunca subestimar milhas necessárias
+  - Parsing defensivo de preço como string numérica; retorna `null` para preços inválidos/zero/negativos
+
+- **`src/services/flight_scanner.js`** · `escanearRota` (step 6 adicionado):
+  - Calcula `milhas_estimadas` automaticamente ao final da varredura usando `paridade_milhas` e `programa_milhas` da rota
+  - Inclui `milhas_estimadas: { milhas, programa, cotacaoMilheiro } | null` no payload de retorno
+  - Elimina necessidade de recalcular no cliente (Cockpit PWA) ou no Telegram
+
+- **`tests/flight_scanner.test.js`** · 12 novos testes:
+  - 10 unitários para `calcularMilhasRota` (paridade customizada, cotação padrão, Math.ceil, null para preços inválidos, fallback smiles, latampass alias, paridade negativa ignorada, preço como string)
+  - 2 integração para `escanearRota` (milhas_estimadas com paridade padrão e com paridade customizada)
+  - Suíte: **376/376 testes aprovados (0 falhas)**
+
+## [v2.17.1] - 2026-10-13 — Blindagem Adversarial em parsePreco (Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido bug de parsing onde separador de milhar com ponto único em strings de tarifas contendo sufixos contextuais de scraping (ex: `"1.500 por pessoa"`, `"1.500/trecho"`, `"R$ 1.950 ida e volta"`) não removia o ponto, truncando valores para decimais (ex: 1.5 em vez de 1500).
+  - Adicionada blindagem contra valores do tipo `Symbol` para evitar exceção `TypeError`.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes adversariais cobrindo sufixos contextuais e entradas inválidas/Symbols.
+
+## [v2.17.0] - 2026-10-13 — Widget de Edição Inline de Milhas no Cockpit PWA
+
+### ✈️ Novo Recurso: Configuração de Paridade de Milhas Diretamente nos Cards
+
+- **`src/db.js`** · Migrações SQLite defensivas:
+  - `paridade_milhas REAL` — cotação customizada R$/milheiro por rota
+  - `programa_milhas TEXT DEFAULT 'smiles'` — programa de fidelidade da rota
+  - `rotasRepo.atualizar()`: incluídos no `UPDATE` com validação de tipo (numérico positivo ou null; string normalizada lowercase)
+
+- **`src/server/routes/rotas_routes.js`** · Novo endpoint `PATCH /api/rotas/:id/milhas`:
+  - Schema Ajv defensivo (params integer, body com `paridade_milhas` number/null e `programa_milhas` string 1-32 chars, `additionalProperties: false`)
+  - Validação de range: `paridade_milhas > 0`
+  - Emite telemetria `rota_milhas_atualizada` via SSE
+
+- **`src/public/js/card_rota.js`** · `renderizarBadgeMilhas` e `salvarMilhasInline`:
+  - Badge de estimativa (.milhas-estimativa-row) exibida quando há `preco_atual`
+  - Botão toggle ✏️ com cotação atual ou "Configurar milhas" (quando sem paridade)
+  - Formulário inline oculto com `<select>` de programa e `<input type="number">` de cotação
+  - Placeholder dinâmico sugerindo cotação padrão do programa selecionado
+  - Validação visual: classe `milhas-input-erro` quando paridade ≤ 0 ou NaN
+  - `salvarMilhasInline(rotaId, options)` exportada com mocks injetáveis (fetch, toast, document, recarregarDados)
+
+- **`src/public/app.js`** · Funções globais expostas no `window`:
+  - `window.salvarMilhasInline(rotaId)` — delega para `salvarMilhasInline` importado com callbacks do app
+  - `window.toggleMilhasEditor(rotaId)` — alterna display do formulário inline e foca no select ao abrir
+  - `window.atualizarPlaceholderMilhas(rotaId)` — atualiza placeholder ao trocar programa e remove estado de erro
+
+- **`src/public/styles.css`** · +155 linhas de CSS dark-mode anti-UI-slop:
+  - `.badge-milhas-estimadas`, `.milhas-estimativa-row`, `.milhas-editor-toggle`
+  - `.btn-milhas-editar` com hover cyan; `.milhas-editor-form` com border accent
+  - `.milhas-select`, `.milhas-input-cot` com estados `:focus` e `.milhas-input-erro`
+  - `.btn-milhas-salvar` (verde) e `.btn-milhas-cancelar` (hover vermelho)
+
+- **`tests/card_rota.test.js`** · +21 novos testes — **364/364 JS verdes (100%)**:
+  - `renderizarBadgeMilhas`: badge com ID por rota, botão toggle, formulário inline, select com opções e pré-seleção, oculta estimativa sem preco_atual, retorna '' sem rota.id
+  - `salvarMilhasInline`: sucesso com fetch mock, paridade zero, NaN, DOM ausente, erro de rede, erro HTTP 4xx/5xx, sem document/fetch
+
+## [v2.16.10] - 2026-10-13 — Blindagem Adversarial de analisarLayoversEStopover (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Análise de Conexões e Stopover)
+- `src/domain/calculadora.js` · `analisarLayoversEStopover`:
+  - Corrigido bug de parsing de durações em formatos compactos sem 'm' (ex: `'8h30'`) e formatos de relógio militar (ex: `'08:30'`, `'09:15'`), que anteriormente perdiam os minutos residuais ou eram convertidos indevidamente em durações diminutas via fallback `parseFloat`.
+  - Adicionada blindagem contra valores textuais de duração negativos (ex: `'-8h'`, `'-30m'`), prevenindo que fossem parseados como durações positivas espúrias e ativassem dicas de stopover incorretas.
+  - Implementado desempacotamento resiliente de aeroportos fornecidos como objetos aninhados (ex: `airport: { code: 'MIA', name: 'Miami International' }`), extraindo o código IATA e nome do aeroporto em vez de atribuir o fallback `'N/A'`.
+  - Tratamento defensivo de flags booleanas passadas como strings (`'false'`, `'0'`, `'sim'`) para a indicação de pernoite/overnight.
+- `tests/calculadora.test.js`:
+  - Adicionados testes de borda adversariais validando formatos compactos e relógio, objetos aninhados de aeroportos, descarte de durações negativas e parsing correto de strings booleanas.
+  - Suíte total: **353/353 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.9] - 2026-10-13 — Blindagem Adversarial de gerarLinkGoogleFlights (Domínio / Rotas)
+
+### 🛡️ Correção Defensiva & Robustez (Geração de Links Estruturados do Google Flights)
+- `src/domain/rotas.js` · `gerarLinkGoogleFlights`:
+  - Corrigido bug de `TypeError: (moeda || 'BRL').trim is not a function` quando o argumento de moeda recebia tipos adversariais não-string (ex: números `123`, booleanos ou objetos), aplicando validação de tipo defensiva com fallback seguro para `'BRL'`.
+  - Normalização defensiva de `dataIda` aceitando instâncias de `Date` e strings em formato brasileiro (`DD/MM/YYYY`) convertidas para o padrão canônico `YYYY-MM-DD`, prevenindo quebras e poluição na query string de busca.
+  - Tratamento resiliente de `dataVolta` quando expressa em dias relativos (ex: `'10 dias'`, `14`), calculando a data de retorno somada à data de ida em vez de injetar texto cru no parâmetro `returning`.
+- `tests/domain.test.js`:
+  - Adicionados testes de borda adversariais validando degradação graciosa para moeda não-string, normalização de objetos `Date`/formato BR e cálculo de data de retorno a partir de duração relativa.
+  - Suíte total: **353/353 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.8] - 2026-10-13 — Blindagem Adversarial de converterDuracaoParaHoras (Provedores / Google Flights Direct)
+
+### 🛡️ Correção Defensiva & Robustez (Provedor Google Flights Direct)
+- `src/services/providers/google_flights_direct_provider.js` · `converterDuracaoParaHoras`:
+  - Corrigido bug onde formatos compactos contendo apenas minutos (ex: `'45m'`, `'50 m'`) falhavam na captura de minutos e acionavam fallback indevido de 12 horas (`12.0`), distorcendo filtros de duração máxima e telemetria de voos rápidos de curta distância (como ponte aérea).
+  - Adicionado suporte a entradas numéricas diretas com validação de finitude positiva e preservação de precisão decimal de 3 casas.
+  - Implementado tratamento defensivo contra valores numéricos extremos ou inválidos (`-10`, `Infinity`, `NaN`).
+- `tests/flight_providers_adversarial.test.js`:
+  - Adicionados testes de borda adversariais para formatos compactos de minutos (`'45m'`, `'50 m'`) e entradas numéricas válidas/extremas.
+  - Suíte total: **352/352 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.7] - 2026-10-13 — Blindagem Adversarial de converterMoeda (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Conversão Monetária e Parsing de Preços)
+- `src/domain/calculadora.js` · `converterMoeda`:
+  - Corrigido bug onde valores monetários em formato string (ex: `'R$ 550,00'` ou com separador de milhar `'1.100'`) falhavam ou eram corrompidos devido ao uso de `parseFloat` cru, retornando `0` ou valores distorcidos em vez de utilizar o parser resiliente `parsePreco`.
+  - Tratamento defensivo para códigos de moeda vazios ou contendo apenas espaços em branco (ex: `'   '`), garantindo fallback consistente para `'BRL'`.
+- `tests/calculadora.test.js`:
+  - Adicionados casos de teste de borda adversariais validando conversão de strings monetárias brasileiras, separadores de milhar e sanitização de whitespace em moedas.
+  - Suíte total: **350/350 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.6] - 2026-10-13 — Blindagem Adversarial de ordenarRotasPorEconomia (Cockpit PWA / Sparklines)
+
+### 🛡️ Correção Defensiva & Robustez (Cockpit PWA / Ordenação de Rotas)
+- `src/public/js/sparkline.js` · `ordenarRotasPorEconomia`:
+  - Corrigido bug crítico de `TypeError: Cannot read properties of null (reading 'preco_atual')` quando a lista de rotas continha elementos nulos, indefinidos ou objetos corrompidos ao ordenar por `economia` ou `preco`.
+  - Implementado helper defensivo interno `extrairPreco` com validação de tipo objeto, conversão segura de strings numéricas e fallback consistente para `999999` em entradas não-finitas ou inválidas.
+  - Prevenção de quebra silenciosa no `.sort()` do frontend ao interagir com filtros do Cockpit PWA.
+- `tests/geo_routes.test.js`:
+  - Adicionados 3 casos de teste de borda adversariais cobrindo listas com `null`, `undefined`, objetos vazios, strings numéricas mal formatadas e entradas não-array.
+  - Suíte total: **350/350 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.5] - 2026-10-13 — Blindagem Adversarial de extrairDiasEstadia (Domínio / Rotas)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Rotas e Estadia)
+- `src/domain/rotas.js` · `extrairDiasEstadia`:
+  - Corrigido bug de validação onde valores não-finitos numéricos (ex: `Infinity`) passavam na checagem ingênua de `!isNaN(valor) && valor > 0` e retornavam `Infinity` em vez do valor padrão defensivo.
+  - Implementado teto máximo de segurança de 3650 dias (~10 anos) para valores astronômicos ou maliciosos, alinhando com a regra de integridade de `calcularDataVolta`.
+  - Sanitização do parâmetro `padrao` contra valores não numéricos, negativos ou não-finitos, com fallback seguro para 10.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial cobrindo valores não-finitos (`Infinity`, `-Infinity`, `NaN`), clamping de valores astronômicos e sanitização de `padrao` corrompido.
+  - Suite total: **347/347 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.4] - 2026-10-13 — Blindagem Adversarial de avaliarTermometro (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Termômetro de Tarifas do Google Flights)
+- `src/domain/calculadora.js` · `avaliarTermometro`:
+  - Corrigido bug de case-sensitivity onde níveis de preço em minúsculas retornados pelo Google Flights / SerpAPI (ex: `'low'`, `'high'`) caíam incorretamente no `else` e eram classificados como "Preço Normal / Típico", perdendo sinalização de tarifas super baratas e caras.
+  - Adicionado suporte a propriedades camelCase (`priceLevel`), strings diretas de nível (ex: `'LOW'`, `'HIGH'`) e sanitização de espaços com `trim().toUpperCase()`.
+  - Blindagem adversarial contra entradas nulas, indefinidas, tipos primitivos numéricos e objetos mal formatados com degradação graciosa para `NORMAL`.
+- `tests/calculadora.test.js`:
+  - Adicionado caso de teste adversarial com validação de case-insensitivity, propriedades alternativas (camelCase / string direta) e resiliência a entradas nulas/corrompidas.
+  - Suite total: **346/346 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.3] - 2026-10-13 — Blindagem Adversarial de analisarLayoversEStopover (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Conexões e Stopover)
+- `src/domain/calculadora.js` · `analisarLayoversEStopover`:
+  - Corrigido bug de parsing onde durações de escalas em strings compostas (ex: `"8h 30m"`, `"9h"`, `"8h"`) eram truncadas para apenas as horas (ex: 8 minutos em vez de 510 minutos) pelo uso ingênuo de `parseFloat`, inviabilizando a identificação de stopovers (>= 480 min).
+  - Adicionado suporte a propriedades alternativas de provedores (`duration_minutes`, `minutos`, `airport`, `iata`, `nome`, `pernoite`).
+  - Blindagem adversarial contra entradas nulas/indefinidas, objetos vazios, strings não numéricas e números negativos.
+- `tests/calculadora.test.js`:
+  - Adicionado caso de teste adversarial com 3 cenários de borda validando parsing de formato textual de duração, resiliência a entradas corrompidas e compatibilidade com provedores variados.
+  - Suite total: **345/345 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.2] - 2026-10-13 — Blindagem Adversarial de classificarDeltaPreco (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Preços e Estatísticas)
+- `src/domain/calculadora.js` · `classificarDeltaPreco`:
+  - Corrigido bug de parsing onde strings com símbolos monetários ou formatação brasileira (ex: `"R$ 2.600"`, `"4.000,00"`, `"BRL 1.500"`) retornavam `NaN` ou valores truncados pelo uso de `parseFloat` cru em vez de `parsePreco`.
+  - Blindagem adversarial do tratamento de desvio padrão em strings (`dpRaw`) contra valores corrompidos ou mal formatados, preservando sanitização rigorosa.
+- `tests/calculadora.test.js`:
+  - Adicionados casos de teste adversariais cobrindo strings monetárias formatadas em BRL, pontos de milhar e cálculo preciso de Z-Score e queda percentual.
+  - Suite total: **344/344 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.1] - 2026-10-13 — Blindagem Adversarial de parsearTempoMinutos (Cockpit PWA)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Badges de Conexão)
+- `src/public/js/conexao_badges.js` · `parsearTempoMinutos`:
+  - Corrigido bug de descarte de minutos no formato compacto sem sufixo "m" (ex: `"2h30"`, `"1h45"`, `"8h15"`), que extraía apenas as horas e perdia os minutos restantes.
+  - Adicionado suporte nativo a formato relógio militar / Google Flights `HH:MM` (ex: `"2:30"`, `"01:15"`).
+  - Blindagem adversarial contra entradas numéricas diretas em minutos (`typeof tempoStr === 'number'`), valores nulos/indefinidos, `NaN`, `Infinity`, números negativos, objetos e arrays.
+- `tests/conexao_badges.test.js`:
+  - 2 novos casos de teste adversariais cobrindo formatos compactos, relógio `HH:MM`, números primitivos e entradas adversariais.
+  - Suite total: **344/344 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.16.0] - 2026-10-13 — Cache Defensivo de 6h em Memória no WeatherService
+
+### ✨ Nova Funcionalidade & Otimização (Serviço Meteorológico)
+- `src/services/weather_service.js`:
+  - `TTL_CACHE_CLIMA_MS`: exportada constante oficial configurável com TTL de 6 horas (`21.600.000 ms`).
+  - `WeatherService`: construtor parametrizado com suporte a TTL customizado (`constructor(ttlMs = TTL_CACHE_CLIMA_MS)`), facilitando testes e políticas customizadas de retenção.
+  - `obterClimaDestino`: implementada verificação estrita de idade do cache. Se uma entrada tiver idade maior ou igual ao TTL de 6h, é imediatamente descartada da memória e uma nova consulta é realizada, nunca retornando dados > 6h desatualizados.
+  - `limparCache`: método para limpeza atômica integral do cache.
+  - `expurgarExpirados`: método defensivo para varrer e remover chaves cuja validade expirou.
+  - `obterTamanhoCache`: método para telemetria e auditoria de entradas ativas no cache.
+- `tests/weather_service.test.js`:
+  - 5 novos testes cobrindo: exportação da constante de 6h, reaproveitamento de chamadas subsequentes dentro da janela, auto-invalidação após expiração, limpeza completa com `limparCache` e expurgo seletivo de entradas vencidas.
+  - Suite total: **343/343 testes JS e 10/10 Python aprovados** (100% verde).
+
+## [v2.15.0] - 2026-10-13 — Mini-Tabela de Histórico de Preços nos Alertas Telegram
+
+### ✨ Nova Funcionalidade (Telegram Notifier)
+- `src/services/notifier_telegram.js` · `enviarAlertaOportunidade`:
+  - Adicionada mini-tabela HTML de histórico recente com os últimos 3 preços registrados da rota (data BR + preço + termômetro) imediatamente antes do aviso de tarifas dinâmicas.
+  - Seção renderizada somente quando `rotasRepo.obterHistoricoRecente(rotaId, 3)` retorna ao menos 1 entrada — zero ruído para rotas sem histórico.
+  - Quando `rotaId` é nulo (alertas avulsos programáticos), bloco inteiramente omitido sem query ao banco.
+  - Falha de leitura do SQLite capturada por `try/catch` silencioso — nunca bloqueia o envio do alerta principal.
+- `tests/telegram_callbacks.test.js`:
+  - 3 novos testes cobrindo: exibição com histórico real, omissão silenciosa sem histórico e omissão quando rotaId é nulo.
+  - Suite total: **338/338 testes aprovados** (era 331 JS → 338 JS + 10 Py).
+
+## [v2.14.5] - 2026-10-13 — Blindagem Defensiva de gerarCombinacoesFlexibilidade (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Rotas e Matriz de Flexibilidade)
+- `src/domain/rotas.js`:
+  - `gerarCombinacoesFlexibilidade`: corrigido bug em que valores textuais de retorno como `"Só Ida"` permaneciam no elemento da Data Base (`combinacoes[0].dataVolta = 'Só Ida'`) enquanto eram convertidos para `null` nos deltas de flexibilidade, causando assimetria na estrutura de retorno de voos One-Way. Implementada normalização canônica prévia de `dataIda` e `dataVolta` via `ehSoIda` e `formatarDataParaBusca`, assegurando que datas em formato brasileiro (`DD/MM/AAAA`) sejam padronizadas para `YYYY-MM-DD` uniformemente em todas as combinações e entradas nulas/não-finitas degradem com resiliência sem exceções não tratadas.
+- `tests/rotas_flexibilidade.test.js`:
+  - Adicionado caso de teste adversarial cobrindo normalização uniforme de `"Só Ida"`, datas em formato brasileiro `DD/MM/AAAA` e entradas nulas/não-finitas, totalizando 335 testes com 100% de aprovação.
+
+## [v2.14.4] - 2026-10-13 — Blindagem Defensiva de formatarPeriodoViagem (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Aeroportos e Formatação de Período)
+- `src/domain/aeroportos.js`:
+  - `formatarPeriodoViagem`: corrigido comportamento em que instâncias de `Date` geravam strings longas em inglês com fuso horário local via `toString()`, datas no padrão brasileiro `DD/MM/AAAA` não tinham sua duração calculada (`diffDias` resultava em `NaN` em `new Date('22/12/2026')`), e expressões de duração no campo de volta (ex: `"14 dias"`) eram impressas incorretamente como `"Volta: 14 dias"`. Integrados `formatarDataParaBusca` e `calcularDataVolta` para normalização canônica UTC e cálculo preciso da data de retorno.
+- `tests/aeroportos_bug_fares.test.js`:
+  - Adicionado caso de teste adversarial cobrindo objetos `Date`, datas no formato `DD/MM/AAAA` e duração textual no campo de retorno, totalizando 334 testes com 100% de aprovação.
+
+## [v2.14.3] - 2026-10-13 — Blindagem Defensiva de resolverDestinoConcreto (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Aeroportos e Resolução de Destinos)
+- `src/domain/aeroportos.js`:
+  - `resolverDestinoConcreto`: corrigido bug em que chamadas sem argumentos (`resolverDestinoConcreto()`), com `null`, `undefined` ou com tipos não-objeto lançavam `TypeError: Cannot destructure property 'destino' of ...`. Implementada desestruturação defensiva com fallback para objeto vazio, suporte transparente a entradas diretas em formato string (ex: `'MIA'`, `'  cdg  '`) e sanitização de maiúsculas/espaços no fallback seguro de aeroportos não cadastrados.
+- `tests/aeroportos_bug_fares.test.js`:
+  - Adicionadas asserções adversariais cobrindo entradas nulas/indefinidas, strings diretas com IATA/cidade e sanitização de maiúsculas e espaços em destinos desconhecidos, totalizando 333 testes com 100% de aprovação.
+
+## [v2.14.2] - 2026-10-13 — Blindagem Defensiva de calcularDataVolta (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Rotas e Calendário Aeronáutico)
+- `src/domain/rotas.js`:
+  - `calcularDataVolta`: corrigido bug crítico de overflow temporal em que valores de estadia astronômicos ou não finitos (ex: `100000000`, `99999999 dias`, `Number.MAX_SAFE_INTEGER`, `Infinity`) disparavam `RangeError: Invalid time value` não tratado em `Date.toISOString()`. Implementada trava defensiva com `Number.isFinite(dias)` e teto de permanência razoável (`dias <= 3650`), validação pós-`setUTCDate` contra datas inválidas, e adicionado suporte a durações com sufixo de estadia `"noites"` / `"n"` (ex: `"7 noites"`).
+- `tests/domain.test.js`:
+  - Adicionadas asserções adversariais cobrindo valores numéricos astronômicos, strings com permanência excessiva, `Infinity` e formato `"7 noites"`, mantendo 100% de sucesso nos gates de validação.
+
+## [v2.14.1] - 2026-10-13 — Blindagem Defensiva de parsePreco (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Calculadora de Preços)
+- `src/domain/calculadora.js`:
+  - `parsePreco`: corrigido bug em que valores formatados com ponto único de milhar sem centavos no padrão brasileiro (ex: `'1.500'`, `'R$ 1.950'`, `'2.350'`) eram incorretamente interpretados como decimais (`1.5`, `1.95`, `2.35`). Implementada detecção de ponto único seguido de 3 dígitos sem vírgula (`/^\d{1,3}\.\d{3}$/`) para remoção segura do separador de milhar. Normalizado também o tratamento de múltiplos espaços sequenciais entre agrupamentos de dígitos (`'1 234 567'`).
+- `tests/calculadora.test.js`:
+  - Adicionadas asserções adversariais cobrindo ponto único de milhar brasileiro sem centavos (`'1.500'`, `'R$ 1.950'`, `'2.350'`) e múltiplos agrupamentos por espaço (`'1 234 567'`) com 100% de aprovação (331 testes passando).
+
+## [v2.14.0] - 2026-10-13 — Badge de Milhas Estimadas no Cockpit PWA
+
+### ✈️🏆 Novo Recurso (Cockpit PWA · Card de Rota)
+- `src/public/js/card_rota.js`:
+  - Adicionado `COTACOES_MILHA_MILHEIRO`: dicionário canônico com cotações R$/milheiro por programa (Smiles 17,50 · LATAM 24,00 · Livelo 35,00 · Azul 20,00 · Iberia 65,00 · TAP 32,00).
+  - Adicionada `calcularMilhasEstimadas(precoAtual, paridadeMilheiro, programa)`: calcula quantas milhas seriam necessárias para emitir o voo ao preço atual via `Math.ceil((preco / cotacao) * 1000)`. Retorna `null` defensivamente para preço zero/negativo/inválido; faz fallback automático para cotação Smiles quando `paridadeMilheiro` é nulo ou programa desconhecido.
+  - Adicionada `renderizarBadgeMilhas(rota)`: renderiza HTML da badge `<div class="badge-milhas-estimadas">` com milhas formatadas em pt-BR, nome do programa capitalizado e tooltip com cotação de referência. Retorna `''` quando não há `preco_atual` válido (zero ruído).
+  - `criarCardRota`: badge integrada no `card-pricing-block`, logo abaixo do preço atual, lendo `rota.paridade_milhas` e `rota.programa_milhas`.
+- `tests/card_rota.test.js`:
+  - 5 novos testes no describe "Badge de Milhas Estimadas":
+    1. Cálculo correto com paridade customizada (R$ 1.750 / R$ 17,50 = 100.000 milhas).
+    2. Fallback para cotação Smiles quando paridade é null ou programa inválido.
+    3. `null` para preço zero, negativo ou inválido.
+    4. Badge HTML com classe, milhas formatadas e programa capitalizado.
+    5. `criarCardRota` inclui `badge-milhas-estimadas` quando rota tem paridade.
+  - Total: **331/331 testes aprovados** (🎉 100% de sucesso).
+
+## [v2.13.5] - 2026-10-13 — Blindagem Defensiva de resolverCoordenadas (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Serviço Meteorológico e Resolução Geográfica)
+- `src/services/weather_service.js`:
+  - `resolverCoordenadas`: blindada contra entradas nulas (`null`, `undefined`), não-primitivas (`{}`, `[]`), strings vazias (`""`) e strings com apenas espaços (`"   "`, `"\t\n"`). Corrigido bug crítico em que strings vazias casavam via substring (`includes("")`) com o primeiro hub catalogado (`GRU`), disparando requisições espúrias a coordenadas de Guarulhos. Adicionada rejeição de consultas curtas (< 3 caracteres como `'A'`, `'1'`) para evitar falsos positivos e implementada normalização diacrítica para suporte insensível a acentuação em nomes de cidades (ex: `'Brasilia'` -> `BSB`).
+- `tests/weather_service.test.js`:
+  - Adicionado caso de teste de borda adversarial validando entradas vazias/nulas, caracteres curtos e cidades sem acento (suíte com 325 testes aprovados com 100% de sucesso).
+
+## [v2.13.4] - 2026-10-13 — Blindagem Defensiva de classificarDeltaPreco (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Classificação Estatística de Delta e Z-Score)
+- `src/domain/calculadora.js`:
+  - `classificarDeltaPreco`: blindada contra desestruturação direta de parâmetros nulos (`classificarDeltaPreco(null)`), evitando `TypeError: Cannot destructure property 'preco' of 'null' as it is null`. Implementada extração defensiva com validação estrita de tipos para `media` e `desvioPadrao`, prevenindo vazamento de strings espúrias no payload de retorno e descartando desvios padrão negativos matematicamente inconsistentes (`desvioPadrao: null`).
+- `tests/calculadora.test.js`:
+  - Adicionados casos de teste de borda adversariais validando chamadas com `null`/`undefined`, desvios em string malformada e valores de desvio padrão negativos (suíte com 324 testes aprovados com 100% de sucesso).
+
+## [v2.13.3] - 2026-10-13 — Blindagem Defensiva de gerarTfs (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Geração de Protobuf tfs no Google Flights)
+- `src/domain/rotas.js`:
+  - `gerarTfs`: blindada contra entradas adversariais, arrays nulos/indefinidos em `origens`/`destinos`, strings unitárias (ex: `origens: 'GIG'`) e elementos nulos/vazios na lista. Normalização e validação resiliente de datas para instâncias de `Date` e strings no formato brasileiro `DD/MM/YYYY`, prevenindo `TypeError` de buffer e corrupção no comprimento estrito de 10 bytes do wire-format Protobuf. Sanitização de `maxDurationMinutes` para strings numéricas.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial validando aceitação de instâncias de `Date`, formato brasileiro `DD/MM/YYYY`, strings únicas e degradação graciosa com origens/destinos nulos (suíte com 324 testes aprovados com 100% de sucesso).
+
+## [v2.13.2] - 2026-10-13 — Blindagem Defensiva de resolverCodigoParaLink (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Resolução de Aeroportos e Links)
+- `src/domain/rotas.js`:
+  - `resolverCodigoParaLink`: adicionada sanitização defensiva contra entradas nulas (`null`, `undefined`), strings vazias (`""`) e strings com apenas espaços (`"   "`, `"\t\n  "`), garantindo o retorno consistente do fallback padrão `'SAO'`. Adicionado suporte case-insensitive para extração de códigos IATA entre parênteses (ex: `'São Paulo (gru)'` -> `'GRU'`), prevenindo geração de URLs quebradas ou descontextualizadas no Google Flights.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial validando resiliência a nulos, strings vazias, espaços em branco e IATA minúsculo entre parênteses (suíte com 323 testes aprovados com 100% de sucesso).
+
+## [v2.13.1] - 2026-10-13 — Blindagem Defensiva de Cabine em detectarBugFareEstatistico (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Detecção de Bug Fares)
+- `src/domain/bug_fares.js`:
+  - `detectarBugFareEstatistico`: adicionada sanitização defensiva do parâmetro `cabine` contra valores nulos (`null`), tipos não-string, case mismatch (ex: `'  BUSINESS  '`) e aliases em português (`'executiva'`, `'primeira_classe'`, `'premium'`). Elimina risco de `TypeError: Cannot read properties of null (reading 'toUpperCase')` e assegura cálculo fidedigno dos multiplicadores de cabine (`MULTIPLICADORES_CABINE_BUG_FARE`).
+- `tests/bug_fares.test.js`:
+  - Adicionado caso de teste adversarial cobrindo `cabine: null`, tolerância a maiúsculas/espaços e resolução de aliases (suite com 322 testes aprovados com 100% de sucesso).
+
+## [v2.13.0] - 2026-10-13 — Suporte à Passagem de Moeda Configurada (Multimoeda) no Ciclo de Varredura e Provedores de Busca
+
+### ✨ Novo Recurso & Arquitetura (Motor de Busca Google Flights Multimoeda)
+- `src/services/flight_scanner.js`:
+  - `executarCicloVarredura`: implementado suporte aos parâmetros `moeda` e `curr` (ex: 'BRL', 'USD', 'EUR'). A moeda é normalizada em caixa alta e propagada para cada rota monitorada ou herdada da própria configuração da rota (`rota.moeda`), registrando o campo `moeda` no resultado de cada rota e no retorno consolidado do ciclo.
+  - `escanearRota`: enriquecido para receber `opcoes.moeda` / `opcoes.curr`, determinando `moedaEfetiva` e transmitindo para todas as consultas de provedor (modo sem data, modo data fixa e matriz de flexibilidade adjacente ±7 dias). Transmite a moeda também para `gerarLinkGoogleFlightsCheapest` e `gerarLinkGoogleFlights` e persiste a moeda em `rotasRepo.atualizarResultadoChecagem`.
+  - `buscarOfertas`: assinatura expandida para receber `moeda = 'BRL'` posicional ou via objeto unificado de parâmetros com retrocompatibilidade integral.
+- `src/domain/rotas.js`:
+  - `gerarLinkGoogleFlights` e `gerarLinkGoogleFlightsCheapest`: adicionado parâmetro opcional `moeda = 'BRL'`, injetando dinamicamente `&curr=${moedaCode}` nas URLs de busca canônica e links da aba Cheapest do Google Flights.
+- `src/services/providers/scrapling_client.js`:
+  - `construirUrlCheapest`: suporte ao 6º parâmetro `moeda = 'BRL'`, parametrizando `&curr=${moedaEfetiva}` na URL gerada.
+  - `ScraplingProvider.buscarOfertas`: repassa `moeda` para `construirUrlCheapest` e links canônicos, devolvendo `moeda` estruturada no objeto `oferta`.
+  - `extrairVoosDoHtml`: ampliada regex de detecção para suportar moedas internacionais (`USD`, `EUR`, `US dollars`, `euros`, etc.).
+- `src/services/providers/google_flights_direct_provider.js`:
+  - `GoogleFlightsDirectProvider.buscarOfertas`: suporta `moeda` e `curr`, substituindo ou adicionando dinamicamente `&curr=${moedaCode}` na URL de consulta stealth e incluindo `moeda: moedaCode` na oferta eleita.
+- `src/services/providers/serpapi_provider.js`:
+  - `SerpApiProvider.buscarOfertas`: suporta `moeda` e `curr`, injetando `currency: moedaCode` na query da SerpAPI e na geração do link específico.
+- `src/db.js`:
+  - Adicionada coluna `moeda TEXT DEFAULT 'BRL'` na tabela `rotas` no `initSchema` e via migração defensiva (`ALTER TABLE rotas ADD COLUMN moeda TEXT DEFAULT 'BRL';`).
+  - Atualizados `rotasRepo.criar`, `rotasRepo.atualizar` e `rotasRepo.atualizarResultadoChecagem` para persistir e consultar a moeda da rota.
+- `src/services/scheduler.js`, `src/server/routes/monitor_routes.js` e `src/server/routes/rotas_routes.js`:
+  - Repasse transparente de parâmetros de moeda nos endpoints `/api/varredura`, `/api/rotas` e `/api/rotas/:id/verificar`.
+- `tests/flight_scanner.test.js` & `tests/scrapling_client.test.js`:
+  - 5 novos testes cobrindo propagação de moeda no ciclo de varredura, normalização de alias `curr`, herança de moeda da rota, encapsulamento posicional e por objeto, e URLs com moeda customizada no Scrapling (321/321 testes JS verdes).
+
+---
+
+## [v2.12.0] - 2026-10-13 — Botão de Cópia Rápida do Link Google Flights com Feedback Toast no Cockpit PWA
+
+### ✨ Novo Recurso (Cockpit PWA Anti-UI-Slop)
+- `src/public/js/card_rota.js`:
+  - Extração modular da função `criarCardRota(rota)` para geração componentizada dos cards de voo do Cockpit PWA.
+  - Implementação do botão de ação rápida `.btn-copy-link` no bloco `.card-actions` com ícone SVG de prancheta/cópia, tooltip e `aria-label="Copiar link do Google Flights"`.
+  - Implementação de `copiarLinkGoogleFlights(event, link, options)` com uso de `navigator.clipboard.writeText`, impedimento de propagação de clique (`event.stopPropagation()`), vibração táctil iOS/Android (`vibrarAoTocar`) e fallback defensivo com `document.execCommand('copy')`.
+  - Exibição de feedback toast visual temporário de 2s ("Link copiado! ✓") com tratamento de erros para links vazios ou permissão negada.
+  - Suporte a classes múltiplas acumuladas no card (ex: rota flexível que também atingiu a meta).
+- `src/public/app.js`:
+  - Integração limpa e concisa de `criarCardRota` e `copiarLinkGoogleFlights`, simplificando `renderizarRotas` de 170 linhas de template inline para mapeamento modular direto.
+  - Aprimoramento de `mostrarToast(mensagem, erro = false, duracaoMs = 4000)` para suportar duração customizável e aplicar classe `.fade-out` 300ms antes da remoção, garantindo transição visual suave.
+  - Exportação e vinculação global em `window` para suporte total a handlers de eventos inline.
+- `src/public/styles.css`:
+  - Adicionados estados `:hover` e `:active` refinados para `.btn-icon-action.btn-copy-link` com realce na cor primária ciano e feedback de pressão tátil (`scale(0.92)`).
+  - Adicionada animação `.toast.fade-out` com transição suave de opacidade e translação vertical.
+- `tests/card_rota.test.js`:
+  - Nova suíte de 12 testes unitários cobrindo estrutura do card, botão de cópia rápida, atributos de acessibilidade, escape defensivo de URLs adversariais, testes de cópia bem-sucedida, rejeição de erros, links vazios, identificação de cabine/tipo de viagem e utilitários de formatação (316/316 testes JS verdes).
+
+---
+
+## [v2.11.1] - 2026-10-13 — Botão inline 🧳 Ver Regras de Bagagem no card de Bug Fare (Telegram)
+
+### ✨ Novo Recurso
+- `src/services/notifier_telegram.js` · `enviarAlertaBugFare`:
+  - Adicionado botão inline `🧳 Ver Regras de Bagagem` no card de alerta de Bug Fare enviado pelo bot Telegram.
+  - A URL do botão é parametrizada dinamicamente com os IATAs de origem e destino da rota, apontando diretamente para o Google Flights, permitindo ao usuário consultar as políticas de bagagem da rota de forma contextual em 1 toque.
+  - Inline keyboard agora tem 2 linhas: linha 1 `⚡ Ver no Google Flights` (link canônico da oferta), linha 2 `🧳 Ver Regras de Bagagem` (apenas quando IATAs disponíveis).
+  - Degradação graciosa: sem IATAs no card → apenas botão principal. Sem URL nenhuma → fallback para envio simples (retrocompatibilidade total com chamadas legadas).
+- `src/domain/aeroportos.js` · `montarCardBugFare`:
+  - Adicionados campos `iata_origem` e `iata_destino` ao objeto retornado, expondo os códigos IATA puros (link codes) necessários para construção da URL de bagagem.
+- `tests/telegram_callbacks.test.js`:
+  - 3 novos testes: botão presente com IATAs (URL verificada com GRU e CDG), ausência graciosa sem IATAs, compatibilidade retroativa com chamada via string simples.
+  - Total: **304/304 testes** aprovados.
+
+---
+
+## [v2.10.10] - 2026-10-13 — QA & Blindagem Adversarial em `parsePreco` (calculadora)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `parsePreco`:
+  - Corrigido bug crítico onde tarifas e diárias com moedas internacionais ou símbolos estrangeiros (`USD 150`, `$ 250.00`, `US$ 99.90`, `€ 85`, `£ 120.50`) resultavam em `0` devido ao `parseFloat` falhar em caracteres não numéricos.
+  - Implementado suporte robusto a múltiplos separadores de milhar sem centavos (ex: `1.500.000` e `1,200,000`), corrigindo anomalia onde valores com múltiplos pontos eram truncados para `1.5`.
+  - Adicionada sanitização para espaços non-breaking (`\u00A0`, `\u202F`) e números com separador de milhar por espaço (ex: `1 500,50`).
+- `tests/calculadora.test.js`:
+  - Adicionado caso de testes adversariais cobrindo moedas estrangeiras, múltiplos separadores de milhar e caracteres non-breaking (100% aprovado).
+
+---
+
+## [v2.10.9] - 2026-10-13 — QA & Blindagem Adversarial em `identificarRegiaoDestino` (bug_fares)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/bug_fares.js` · `identificarRegiaoDestino`:
+  - Eliminado falso positivo crítico de substring onde nomes de cidades e países (ex: `Chile`, `Santiago`, `Parnaíba`) casavam indevidamente com códigos IATA/metropolitanos de 3 letras (`CHI` de Chicago, `SAN` de San Diego, `PAR` de Paris), causando classificação geográfica distorcida (ex: `Chile` como `AMERICA_NORTE`).
+  - Integrada resolução canônica prévia via `resolverDestino` de `src/domain/rotas.js` para mapear nomes de regiões e cidades para seus IATAs/KGMIDs canônicos.
+  - Implementada verificação estrita com fronteira não-alfanumérica (`(^|[^A-Z0-9])COD([^A-Z0-9]|$)`) para permitir múltiplos aeroportos (ex: `JFK,EWR`, `GRU,CGH`) sem permitir substrings em palavras comuns.
+- `tests/bug_fares.test.js`:
+  - Adicionado caso de testes adversariais para falsos positivos de substrings (`Chile`, `Santiago`, `Parnaíba`), listas IATA compostas e entradas nulas/indefinidas/vazias (100% aprovado).
+
+---
+
+## [v2.10.8] - 2026-10-13 — QA & Blindagem Adversarial em `calcularVariacao` (calculadora)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `calcularVariacao`:
+  - Blindado contra valores nulos, zero ou inválidos em `precoAtual`, evitando falsos alertas de queda relâmpago de -100% e retornando `{ texto: 'Indisponível', pct: 0, diff: 0, ehQuedaRelampago: false }`.
+  - Integrado parsing resiliente via `parsePreco` para `precoAtual` e `precoAnterior`, permitindo suporte transparente a strings monetárias formatadas (ex: `'R$ 1.600,00'`) e strings numéricas.
+  - Sanitizado `gatilhoQuedaPct` contra valores não finitos ou negativos, garantindo fallback padrão de 15%.
+- `tests/calculadora.test.js`:
+  - Adicionado caso de testes adversariais para casos de borda com nulos, strings monetárias formatadas, NaNs e zeros (100% aprovado).
+
+---
+
+## [v2.10.7] - 2026-10-13 — QA & Blindagem Adversarial em `detectarBugFareEstatistico` (bug_fares)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/bug_fares.js` · `detectarBugFareEstatistico`:
+  - Corrigido erro de desestruturação quando o método era invocado sem parâmetros, com `null` ou `undefined`, retornando agora `{ ehBugFare: false }` defensivamente.
+  - Adicionada coerção numérica segura (`precoNum`, `numMedio`, `numDesvio`) para suportar strings numéricas (ex: `'1450'`, `'4200'`) e prevenir quebras de `TypeError: .toFixed is not a function`.
+  - Tratamento estrito contra valores não-finitos (`NaN`, `Infinity`, `-Infinity`, preços negativos ou strings não numéricas), prevenindo contaminação estatística.
+- `tests/bug_fares.test.js`:
+  - Adicionado caso de testes adversariais cobrindo entradas nulas/indefinidas, strings numéricas e valores extremos (totalizando 276 testes aprovados).
+
+---
+
+## [v2.10.6] - 2026-10-13 — QA & Blindagem Adversarial em `formatarPeriodoViagem` (aeroportos)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/aeroportos.js` · `formatarPeriodoViagem`:
+  - Corrigido tratamento de strings de datas vazias ou contendo apenas espaços em branco, retornando agora `Data a Definir` com segurança em vez de string malformatada.
+  - Adicionado trim defensivo em strings de data para que datas com espaços (ex: `' 2026-12-08 '`) sejam devidamente reconhecidas e formatadas para `DD/MM/AAAA`.
+  - Corrigida concordância gramatical de duração para viagens de 1 dia, exibindo `(1 dia)` no singular em vez de `(1 dias)`.
+- `tests/aeroportos_bug_fares.test.js`:
+  - Adicionados testes de borda adversariais validando tratamento de entradas vazias com espaços, singular de dias e trim defensivo.
+
+---
+
+## [v2.10.5] - 2026-10-13 — Suporte a Moedas Dinâmicas e Conversão de Diárias Internacionais (calculadora)
+
+### 🚀 Funcionalidades & Inteligência de Domínio
+- `src/domain/calculadora.js` · `avaliarCustoDestinoComTotal`:
+  - Implementado suporte completo a moedas dinâmicas (`moeda: 'USD'`, `'EUR'`, `'GBP'`, etc.) com conversão de voo e diária para a moeda alvo.
+  - Implementada inferência geográfica inteligente para destinos internacionais fora do dicionário base (`DICIONARIO_CUSTO_DESTINO`), com resolução de região via `obterInfoAeroporto` e moeda/diária nativa de referência (`DIARIAS_REGIONAIS_PADRAO`).
+  - Adicionado suporte a ajustes específicos de custo por país (`AJUSTES_PAIS_CUSTO`) para destinos de alto custo (Reino Unido com GBP, Suíça com CHF, Japão com JPY, Canadá com CAD, Austrália com AUD).
+  - Adicionada detecção automática de cidades nacionais e aeroportos brasileiros via `DICIONARIO_CIDADES` (`DOMESTICO`), evitando fallback genérico internacional.
+  - Adicionado suporte à injeção de cotações personalizadas (`cotacoes`) e diárias customizadas (`diariaCustomizada`).
+  - Implementada função utilitária `converterMoeda` com cotações padrão de 15 moedas (`COTACOES_PADRAO`) e fallback defensivo contra valores não-finitos.
+- `src/domain/rotas.js` · `ehSoIda`:
+  - Normalização de strings com underscores (`SO_IDA`), assegurando classificação precisa de voos só ida.
+- `tests/calculadora.test.js`:
+  - Adicionados 5 novos testes cobrindo conversão de moedas cruzadas, destinos internacionais fora do dicionário (Viena, Sydney, Toronto), cidades nacionais (Joinville), moedas dinâmicas e robustez contra casos de borda (totalizando 273/273 testes aprovados).
+
+---
+
+## [v2.10.4] - 2026-10-13 — QA & Blindagem Adversarial em `parsePreco` (calculadora)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `parsePreco`:
+  - Corrigido vazamento de valores não-finitos (`Infinity`, `-Infinity`, `NaN` em números ou strings) que passavam pelo teste `!isNaN(valor)` e contaminavam cálculos posteriores de delta e z-score.
+  - Blindagem contra preços negativos (`< 0`), retornando `0` de forma segura.
+  - Adicionado suporte e higienização para o prefixo monetário `BRL` (além de `R$`) e strings vazias/espaços soltos.
+- `tests/calculadora.test.js`:
+  - Adicionada suíte de testes de borda adversariais validando rejeição de `Infinity`, `-Infinity`, strings malformatadas, valores negativos e parsing com prefixo `BRL` (268/268 testes aprovados).
+
+---
+
+## [v2.10.3] - 2026-10-13 — QA & Blindagem Adversarial em `escapeHtml` (notifier_telegram)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/services/notifier_telegram.js` · `escapeHtml`:
+  - Corrigido bug de coerção falsy `texto || ''` que convertia o número `0` e o booleano `false` em strings vazias, preservando agora valores numéricos e booleanos legítimos.
+  - Adicionado escape defensivo para aspas duplas (`"` -> `&quot;`) em conformidade com as diretrizes do Telegram Bot API, prevenindo quebra e injeção em atributos HTML (como tags `<a href="...">`).
+- `tests/telegram_callbacks.test.js`:
+  - Adicionado teste adversarial validando coerção segura para zero (`0`), booleanos (`false`), valores nulos/indefinidos e strings com aspas duplas (267/267 testes aprovados).
+
+---
+
+## [v2.10.2] - 2026-10-13 — Badges de Conexões e Stopover Noturno em Cards Móveis (Cockpit PWA)
+
+### 🎨 Cockpit PWA & Anti-UI-Slop
+- `src/public/js/conexao_badges.js`:
+  - Módulo ES nativo para extração e renderização de dados de escalas e conexões com precisão:
+    - `parsearTempoMinutos`: parser defensivo de durações de conexão com suporte a horas inteiras/decimais, minutos e formatos variados (`9h 30m`, `1h 45min`, `45 min`).
+    - `extrairInfoConexao`: detecção estruturada de 5 tipos de conexões (`direto`, `curta` <= 3h, `moderada` 3h a 8h, `longa` > 8h, `noturna` / pernoite / overnight) inspecionando `detalhes_voo`, `dica_stopover` e `melhor_opcao_flexivel`.
+    - `renderizarBadgeConexao`: geração de badges compactas estilo pill para o cabeçalho do card de voo com paleta intencional (`tag-conexao-direto`, `tag-conexao-curta`, `tag-conexao-moderada`, `tag-conexao-longa`, `tag-conexao-noturna`).
+    - `renderizarBannerStopover`: callout visual enriquecido para escalas prolongadas (`stopover-longo` com tema âmbar) e escalas noturnas (`stopover-noturno` com tema violeta/índigo estelar), destacando oportunidades de stopover 2-em-1 sem bilhete adicional.
+- `src/public/app.js` · `renderizarRotas`:
+  - Integração da badge de conexão no cabeçalho do card (`card-header-tags`) e renderização do banner refinado de stopover no corpo do card.
+- `src/public/styles.css`:
+  - Adicionadas regras de estilo para as badges de conexão e banners de stopover, com tipografia mono, efeitos de brilho sutis em dark mode e refinamento responsivo para dispositivos móveis (`@media (max-width: 640px)`).
+- `tests/conexao_badges.test.js`:
+  - Nova suíte com 19 testes automatizados cobrindo parsing de durações, voos diretos, conexões rápidas, escalas prolongadas, pernoites noturnos, compatibilidade com opções flexíveis, badges HTML e banners de stopover (266/266 testes aprovados).
+
+---
+
+## [v2.10.1] - 2026-10-13 — QA & Blindagem Adversarial em `calcularDataVolta`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/rotas.js` · `calcularDataVolta`:
+  - Blindada a resolução de data de volta calculada com base em duração de estadia contra exceção crítica `RangeError: Invalid time value`.
+  - Normalização da data de ida via `formatarDataParaBusca`, tratando entradas malformadas, datas inválidas e suportando graciosamente formatos regionais como `DD/MM/YYYY`.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial cobrindo entradas malformadas, nulas/indefinidas, datas inválidas e datas no formato brasileiro (totalizando 247/247 testes aprovados).
+
+---
+
+## [v2.10.0] - 2026-10-13 — Fallback Defensivo de Extração de Companhia Aérea por Código IATA (ScraplingClient)
+
+### 🚀 Novas Funcionalidades & Resiliência de Scraping
+- `src/services/providers/scrapling_client.js` · `MAPA_CIAS_IATA` & `extrairCiaIataDoTrecho`:
+  - Implementado dicionário canônico com mapeamento de códigos IATA de 2 letras para companhias aéreas nacionais e internacionais (G3 -> GOL, LA/JJ -> LATAM, AD -> Azul, 2Z/VO -> Voepass, TP -> TAP Portugal, AF -> Air France, KL -> KLM, LH -> Lufthansa, etc.).
+  - Implementada função auxiliar `extrairCiaIataDoTrecho` com 6 níveis de resolução defensiva: atributos `data-*` (`data-airline`, `data-carrier`, `data-marketing-carrier`, `data-iata`), número de voo (`data-flight-number`), caminhos de logos em CDN (`airline_logos/70px/...`), matrizes JSON (`carrier`, `airlineCode`, arrays `["G3", 1542]`), menções de número de voo no texto e atributos `alt`/`title`.
+- `src/services/providers/scrapling_client.js` · `extrairVoosDoHtml`:
+  - Integração do fallback IATA nas Camadas A (quando aria-label não traz nome por extenso ou traz código de voo como `Voo G3 1542`), B (aria simples) e C (BRL raw), inspecionando o contexto HTML adjacente para eliminar atribuições genéricas de "Companhia Aérea".
+- `tests/scrapling_client.test.js`:
+  - Adicionada suíte de testes com 16 novos testes automatizados dedicados cobrindo atributos `data-*`, URLs de logos, matrizes JSON, regex de números de voo, persistência de códigos não-mapeados e integração nas 3 camadas de extração do HTML (totalizando 246/246 testes aprovados).
+
+---
+
+## [v2.9.9] - 2026-10-13 — Persistência Atômica do Working Buffer em Disco (BugFareHunter)
+
+### 🚀 Novas Funcionalidades & Arquitetura Proativa
+- `src/services/bug_fare_hunter.js` · `BugFareHunter` / `salvarWorkingBufferDisco`:
+  - Implementada persistência atômica do cache do Working Buffer em disco (`data/working_buffer.json`) utilizando padrão temporário `.tmp` no mesmo diretório seguido de `fs.renameSync` para imunidade contra corrupção em falhas inesperadas.
+  - Envelope estruturado com `versao`, `atualizadoEm`, `totalCorredores` e mapa sanitizado de leituras e histórico do último alerta.
+- `src/services/bug_fare_hunter.js` · `carregarWorkingBufferDisco` & Construtor:
+  - Recarregamento automático no boot da classe, garantindo retenção de memória e volatilidade zero após reinicializações do processo.
+  - Suporte resiliente a envelopes versionados e formatos legados planos, além de sanitização estrita de entradas e aplicação do limite de janela deslizante (`BUFFER_MAX_LEITURAS = 5`).
+- `src/services/bug_fare_hunter.js` · `escanearCorredoresProativos`:
+  - Invocação automática de `this.salvarWorkingBufferDisco()` ao término do ciclo de varredura proativa.
+- `.gitignore`:
+  - Adicionado `data/working_buffer.json` e `data/*.tmp*` para manter working tree limpa e sem ruídos em tempo de execução.
+- `tests/bug_fares.test.js`:
+  - 7 novos testes automatizados dedicados cobrindo escrita atômica, restauração no boot, sanitização de leituras corrompidas, arquivos inválidos e orquestração do ciclo de varredura (230/230 testes aprovados).
+
+---
+
+## [v2.9.8] - 2026-10-13 — QA & Blindagem Adversarial em `somarDiasData`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/rotas.js` · `somarDiasData`:
+  - Correção de vulnerabilidade a `RangeError: Invalid time value`: validação defensiva das datas de entrada via `formatarDataParaBusca`, impedindo datas inexistentes no calendário (`2026-02-31`) ou strings corrompidas de disparar exceções no `toISOString()`.
+  - Tratamento resiliente de deltas de dias (`Number.isFinite`), retornando a data original intacta e segura ao invés de quebrar em casos de `NaN`, `Infinity` ou strings malformadas.
+  - Blindagem contra `TypeError` quando a data fornecida não for do tipo string (ex: números ou objetos).
+- `tests/rotas_flexibilidade.test.js`:
+  - Adicionado caso de teste de borda adversarial cobrindo entradas nulas, vazias, malformadas, não-finitas e formatos alternativos (223/223 testes aprovados).
+
+---
+
+## [v2.9.7] - 2026-10-13 — Decodificação Protobuf tfu na Aba Cheapest (ScraplingProvider)
+
+### 🚀 Novas Funcionalidades & Resiliência de Scraping
+- `src/services/providers/scrapling_client.js` · `decodificarPrecoDoTfu`:
+  - Implementada função especializada de decodificação de payload binário Protobuf do parâmetro canônico `tfu` (Base64/Base64URL).
+  - Extração de menor tarifa com detecção automática de moeda (`BRL`, `USD`, `EUR`, etc.) e resolução de escala decimal (centavos/unidades).
+  - Tolerância defensiva para strings URL-encoded, ausência de padding Base64 e validação estrita no intervalo [80, 60.000].
+- `src/services/providers/scrapling_client.js` · `extrairPrecoCheapestTab`:
+  - Adicionada 4ª camada de extração para inspecionar URLs de resposta (`urlResposta`) e ocorrências do parâmetro `tfu` embutidas em tags de redirecionamento ou chamadas AJAX sem corpo HTML rico.
+  - Conexão em `ScraplingProvider.buscarOfertas` passando `resp.url` para garantir captura da tarifa em redirecionamentos.
+- `tests/scrapling_client.test.js`:
+  - 10 novos testes cobrindo tokens reais do Google Flights, URLs completas, redirects AJAX sem corpo rico e edge cases (222/222 testes JS e 10/10 Python aprovados).
+
+---
+
+## [v2.9.6] - 2026-10-13 — QA & Blindagem Adversarial em `classificarDeltaPreco`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `classificarDeltaPreco`:
+  - Correção na classificação de oportunidades: garante que quedas $\ge 30\%$ frente à média recente sejam categorizadas como `OPORTUNIDADE` mesmo sob desvios padrão amplos ($DP \ge 30$) onde o Z-Score ficaria entre os limiares.
+  - Blindagem defensiva com coerção numérica (`Number.isFinite`), prevenindo `NaN`, `Infinity` e strings mal formatadas em `preco`, `media` e `desvioPadrao`.
+- `tests/calculadora.test.js`:
+  - 3 novos casos de teste de borda cobrindo desvios padrão amplos com queda $\ge 30\%$, entradas malformadas/infinitas e coerção de strings numéricas (212/212 testes aprovados).
+- `tests/flight_scanner.test.js`:
+  - Mock determinístico defensivo de `FlightScanner.buscarOfertas` para isolamento estrito sem requisições de rede.
+
+---
+
+## [v2.9.5] - 2026-10-13 — Detecção de Deltas com Z-Score no FlightScanner & ExecutarCicloVarredura
+
+### 🚀 Novas Funcionalidades & Arquitetura Proativa
+- `src/domain/calculadora.js` · `classificarDeltaPreco`:
+  - Implementada função pura de análise estatística de tarifas e cálculo de Z-Score sobre histórico amostral.
+  - Classificação estrita de deltas conforme o padrão proactive-agent (Zero Ruído):
+    - `BUG_FARE`: $Z \le -2.5$ (anomalia tarifária crítica).
+    - `OPORTUNIDADE`: $Z \le -1.5$ ou queda comprovada $\ge 30\%$ em relação à média recente.
+    - `INFO`: Oscilação normal de mercado (sem anomalia).
+- `src/db.js` · `alertasRepo.deveDisparar`:
+  - Supressão de ruído para oscilações normais de mercado (`INFO`) quando o usuário não possui preço alvo ou quando não há cruzamento de meta.
+  - Disparo de oportunidade estatística comprovada (`OPORTUNIDADE_ESTATISTICA`) em tempo hábil com respeito a cooldowns e deduplicação inteligente.
+- `src/services/flight_scanner.js`:
+  - Integração da telemetria de deltas em `escanearRota`, enriquecendo os resultados com `deltaEstatistico`.
+  - Implementado `FlightScanner.executarCicloVarredura({ forcarTodas, limite, aplicarJitter })` para orquestração modular da fila LRU.
+- `src/services/scheduler.js`:
+  - Refatoração limpa do ciclo periódico delegando a varredura para `FlightScanner.executarCicloVarredura`.
+- `tests/flight_scanner.test.js`, `tests/calculadora.test.js` & `tests/alertas_criterios.test.js`:
+  - 6 novos testes cobrindo Z-Score, supressão de ruído INFO, disparo de oportunidade e ciclo de varredura (211/211 testes passando com 100% de sucesso).
+
+---
+
+## [v2.9.4] - 2026-10-13 — QA & Blindagem Defensiva em `analisarLayoversEStopover`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `analisarLayoversEStopover`:
+  - Proteção estrita contra entradas `null`, `undefined` e não-objeto, eliminando riscos de `TypeError` não tratado (`voo.layovers`).
+  - Higienização e descarte de layovers nulos ou corrompidos (`duration <= 0`, NaN, itens indefinidos ou não-objeto).
+  - Coerção resiliente para strings numéricas em durações de conexões longas/Stopover.
+- `tests/calculadora.test.js`:
+  - Novos casos de teste de borda cobrindo payloads corrompidos, nulos e strings numéricas válidas (205/205 testes passando).
+
+---
+
 ## [v2.9.3] - 2026-10-13 — Alertas de Nova Queda no Mesmo Dia & Deduplicação Inteligente
 
 ### ✅ Entregue

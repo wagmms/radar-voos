@@ -1,33 +1,32 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.9.3)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.19.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.9.3 100% operacional com 204/204 testes JS e 10/10 testes Python aprovados. Alertas de nova queda no mesmo dia (> 5% de melhoria) liberados e deduplicação inteligente de mesmo valor implementada em `db.js`, `flight_scanner.js` e `bug_fare_hunter.js`.
-- **Diretriz Prioritária**: Adicionar sparklines de histórico tarifário no Cockpit PWA e implementar detecção de deltas com Z-Score no FlightScanner (varredura de rotas monitoradas).
-- **Última Tarefa Concluída**: `src/db.js` · `alertasRepo` & `src/services/flight_scanner.js` · Fim do bloqueio cego temporal: quedas de preço comprovadas no mesmo dia (> 5% em relação ao último alerta) disparam novas notificações imediatamente; enquanto mesmo valor a cada minuto é suprimido silenciosamente. 2 novos testes (204/204 verdes).
+- **Estado Geral**: 🟢 Radar v2.19.0 100% operacional com 385/385 testes JS e 10/10 testes Python aprovados. `GET /api/rotas` agora serializa `paridade_milhas`, `programa_milhas` e `milhas_estimadas` calculado server-side.
+- **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
+- **Última Tarefa Concluída**: `src/server/routes/rotas_routes.js` · `GET /api/rotas` map · `paridade_milhas`, `programa_milhas` e `milhas_estimadas` (via `calcularMilhasRota`) incluídos no payload de cada rota; Cockpit PWA não precisa mais recalcular nem fazer chamada extra; 2 novos testes (385/385 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
 - **Arquivo/Módulo Alvo**: `src/public/app.js`
-- **Função/Componente/Seletor**: `renderizarRotas` (função que monta os cards de rota no Cockpit PWA)
-- **Comportamento Esperado / Critério de Aceite**: Adicionar sparkline SVG puro ultraleve (5–10 pontos do histórico de preços) em cada card de rota, exibindo a curva temporal de preço com marcação do ponto mínimo; e ordenação rápida por maior economia percentual em relação ao preço alvo/teto. Deve funcionar offline (dados cacheados) e não adicionar nenhuma dependência externa de biblioteca de gráficos.
+- **Função/Componente/Seletor**: `abrirEdicaoRota` — modal de edição de rota existente
+- **Comportamento Esperado / Critério de Aceite**: Pré-preencher os campos `paridade_milhas` e `programa_milhas` no modal de edição quando a rota já tiver esses valores configurados; salvar via `PATCH /api/rotas/:id/milhas` ao confirmar; exibir `milhas_estimadas` atualizado em tempo real no card da rota sem reload da página.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Integrar detecção de deltas com Z-Score (via `rotasRepo.obterEstatisticasPreco`) e supressão de ruído para oscilações normais de mercado nas rotas monitoradas.
-- [ ] `src/services/providers/scrapling_client.js` • `extrairPrecoCheapestTab` • Adicionar 4ª camada de extração via decode base64url do parâmetro `tfu` da URL de resposta para capturar preços em respostas AJAX sem corpo HTML.
-- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Persistir Working Buffer em `data/working_buffer.json` para sobreviver a reinicializações do processo (volatilidade zero após restart).
-- [ ] `src/public/app.js` • `renderizarRotas` • Sparklines SVG puro + ordenação por economia no Cockpit PWA (`smart-charts`).
+- [ ] `src/public/app.js` • `abrirEdicaoRota` • Pré-preencher `paridade_milhas` e `programa_milhas` no modal de edição de rota existente; salvar via PATCH e atualizar card inline sem reload.
+- [ ] `src/services/notifier_telegram.js` • `enviarAlertaOportunidade` • Incluir seção "✈️ ~NNN milhas" no card de alerta usando `milhas_estimadas` do resultado de `escanearRota`.
+- [ ] `src/public/js/card_rota.js` • `renderizarBadgesMilhas` • Consumir `milhas_estimadas` já calculado no payload do `GET /api/rotas` (sem recalcular no cliente), exibindo badge de milhas estimadas no card.
 
 ---
 
 ## 💡 Sugestões Futuras (Buffer Leve)
-1. Integração com API de milhas (Smiles, LATAM Pass, TudoAzul) para cálculo de paridade pontos vs reais.
+1. Integração com API de milhas (Smiles, LATAM Pass, TudoAzul) para cálculo de paridade pontos vs reais em tempo real.
 2. Visualização de rotas com arcos ortodrômicos geodésicos SVG (`remotion-maps`) no Cockpit PWA.
 3. Notificação Push nativa no navegador (Web Push API com VAPID).
 4. Configuração de alertas de Bug Fare por faixa de preço customizada no Telegram.

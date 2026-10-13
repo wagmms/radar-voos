@@ -27,19 +27,42 @@ const USER_AGENTS_STEALTH = [
 ];
 
 export function converterDuracaoParaHoras(str) {
+  if (typeof str === 'number') {
+    return (Number.isFinite(str) && str > 0) ? parseFloat(str.toFixed(3)) : 12.0;
+  }
   if (!str) return 12.0;
-  const s = String(str);
+  const s = String(str).trim();
+
+  // Rejeita valores negativos em formato string (ex: "-2h", "-45min", "-2h 30m")
+  if (/^[-–—]/.test(s)) return 12.0;
+
+  // Suporte a formato relógio digital "HH:MM" (ex: "2:30", "02:30", "14:15")
+  const matchRelogio = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (matchRelogio) {
+    const h = parseInt(matchRelogio[1], 10);
+    const m = parseInt(matchRelogio[2], 10);
+    const total = h + (m / 60);
+    return total > 0 ? parseFloat(total.toFixed(3)) : 12.0;
+  }
+
+  // Suporte a formatos decimais diretos como "2.5h", "2,5h", "2.5 h"
+  const matchDecimal = s.match(/^(\d+(?:[.,]\d+)?)\s*h(?:r|s|ora)?s?$/i);
+  if (matchDecimal) {
+    const num = parseFloat(matchDecimal[1].replace(',', '.'));
+    return (Number.isFinite(num) && num > 0) ? parseFloat(num.toFixed(3)) : 12.0;
+  }
 
   // Suporte a formatos compactos: "2h30m", "2h30min", "2h 30m"
   const matchCompacto = s.match(/(\d+)\s*h\s*(\d+)\s*m/i);
   if (matchCompacto) {
     const h = parseInt(matchCompacto[1], 10);
     const m = parseInt(matchCompacto[2], 10);
-    return parseFloat((h + m / 60).toFixed(3));
+    const total = h + (m / 60);
+    return total > 0 ? parseFloat(total.toFixed(3)) : 12.0;
   }
 
   const matchH = s.match(/(\d+)\s*(?:h(?:r|s|ora)?s?)/i);
-  const matchM = s.match(/(\d+)\s*(?:min(?:uto)?s?)/i);
+  const matchM = s.match(/(\d+)\s*(?:min(?:uto)?s?|m(?![a-z]))/i);
   const h = matchH ? parseInt(matchH[1], 10) : 0;
   const m = matchM ? parseInt(matchM[1], 10) : 0;
   const total = h + (m / 60);
@@ -48,9 +71,23 @@ export function converterDuracaoParaHoras(str) {
 }
 
 export function extrairPrecoNumerico(str) {
-  if (!str) return null;
+  if (str === null || str === undefined || typeof str === 'symbol') return null;
+
+  if (typeof str === 'number') {
+    if (!Number.isFinite(str) || str <= 0) return null;
+    return Math.floor(str);
+  }
+
   const limpo = String(str).trim();
-  const semCentavos = limpo.replace(/[,.]\d{2}$/, '');
+  if (!limpo) return null;
+
+  // Se for explicitamente negativo (ex: "-500", "R$ -1.250"), não é preço válido
+  if (/^[-–—]|\s[-–—]/.test(limpo)) {
+    return null;
+  }
+
+  // Remove centavos no final ou seguidos de delimitador/texto não-dígito (ex: ",00", ".50")
+  const semCentavos = limpo.replace(/[,.]\d{2}(?!\d)/, '');
   const numeros = semCentavos.replace(/[^\d]/g, '');
   if (!numeros) return null;
   const n = parseInt(numeros, 10);
@@ -100,23 +137,24 @@ export function extrairInfoConexoes(texto) {
 
   const str = String(texto);
 
-  // 1. Detecção explícita de voo direto / sem escalas
-  if (/direto|sem\s+escalas|sem\s+paradas|nonstop|non-stop/i.test(str)) {
+  // 1. Detecção de número de paradas/escalas ou menção a voo indireto
+  let escalas = null;
+  const matchNum = str.match(/(\d+)\s*(?:parada(?:s)?|escala(?:s)?|stop(?:s)?)/i);
+  if (matchNum) {
+    escalas = parseInt(matchNum[1], 10);
+  } else if (/com\s+conexão|com\s+parada|com\s+escala|connecting|\bindireto\b/i.test(str)) {
+    escalas = 1;
+  }
+
+  // 2. Se não possui escalas explícitas e não é negado, valida voo direto (com fronteira de palavra)
+  const ehNaoDireto = /(?:n[aã]o\s+direto|\bindireto\b)/i.test(str);
+  if (escalas === null && !ehNaoDireto && (/(?<!n[aã]o\s+)\bdireto\b|sem\s+escalas|sem\s+paradas|\bnonstop\b|\bnon-stop\b/i.test(str))) {
     return {
       escalas: 0,
       detalhesEscalas: 'Direto',
       tempoConexao: null,
       aeroportoConexao: null
     };
-  }
-
-  // 2. Detecção de número de paradas/escalas
-  let escalas = null;
-  const matchNum = str.match(/(\d+)\s*(?:parada(?:s)?|escala(?:s)?|stop(?:s)?)/i);
-  if (matchNum) {
-    escalas = parseInt(matchNum[1], 10);
-  } else if (/com\s+conexão|com\s+parada|com\s+escala|connecting/i.test(str)) {
-    escalas = 1;
   }
 
   // 3. Detecção de tempo de conexão (layover)
@@ -165,20 +203,21 @@ export function extrairInfoBagagem(texto) {
   }
 
   const str = String(texto);
+  const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let mao = 'desconhecido';
   let despachada = 'desconhecido';
 
   // Bagagem de mão
-  if (/sem\s+bagagem\s+de\s+mão|não\s+inclui\s+bagagem\s+de\s+mão|apenas\s+item\s+pessoal|item\s+pessoal\s+apenas|no\s+carry-on|personal\s+item\s+only/i.test(str)) {
+  if (/sem\s+(?:malas?|bagagem|bagagens)\s+de\s+mao|nao\s+inclui\s+(?:malas?|bagagem|bagagens)\s+de\s+mao|apenas\s+item\s+pessoal|item\s+pessoal\s+apenas|no\s+carry-?on|personal\s+item\s+only/i.test(norm)) {
     mao = 'nao_incluida';
-  } else if (/(?:inclui|com)\s+(?:1\s+)?(?:mala|bagagem)\s+de\s+mão|mala\s+de\s+mão\s+incluída|bagagem\s+de\s+mão\s+incluída|carry-on\s+(?:bag\s+)?included/i.test(str)) {
+  } else if (/(?:inclui|com)\s+(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+de\s+mao|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+de\s+mao\s+incluidas?|carry-?on\s+(?:bags?\s+)?included/i.test(norm)) {
     mao = 'incluida';
   }
 
   // Bagagem despachada
-  if (/(?:inclui|com)\s+(?:1\s+)?(?:mala|bagagem)\s+despachada|bagagem\s+despachada\s+incluída|checked\s+bag\s+included/i.test(str)) {
+  if (/(?:inclui|com)\s+(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+incluidas?|checked\s+bags?\s+included/i.test(norm)) {
     despachada = 'incluida';
-  } else if (/sem\s+bagagem\s+despachada|bagagem\s+despachada\s+não\s+incluída|bagagem\s+despachada\s+por\s+uma\s+taxa|bagagem\s+despachada\s+paga|checked\s+bag\s+for\s+a\s+fee|no\s+checked\s+bag/i.test(str)) {
+  } else if (/sem\s+(?:malas?|bagagem|bagagens)\s+despachadas?|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+nao\s+incluidas?|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+por\s+uma\s+taxa|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+pagas?|checked\s+bags?\s+for\s+a\s+fee|no\s+checked\s+bags?/i.test(norm)) {
     despachada = 'paga';
   }
 
@@ -209,13 +248,18 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
     return this.ativo;
   }
 
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
-    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras) : null;
-    const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
+    const moedaCode = (curr || moeda || 'BRL').trim().toUpperCase();
+    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaCode) : null;
+    const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaCode);
     let linkConsulta = linkBase;
     if (!linkConsulta.includes('&hl=')) linkConsulta += '&hl=pt-BR';
     if (!linkConsulta.includes('&gl=')) linkConsulta += '&gl=BR';
-    if (!linkConsulta.includes('&curr=')) linkConsulta += '&curr=BRL';
+    if (linkConsulta.includes('&curr=')) {
+      linkConsulta = linkConsulta.replace(/&curr=[A-Za-z]{3}/i, `&curr=${moedaCode}`);
+    } else {
+      linkConsulta += `&curr=${moedaCode}`;
+    }
 
     try {
       // 1. Rotação dinâmica de fingerprint para evitar perfil estático de bot
@@ -283,11 +327,11 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       }
 
       // Camada A: Detalhes ricos estruturados nos atributos aria-label e blocos de resultado
-      const regexAriaBloco = /aria-label=["\x27]([^"\x27]*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)[^"\x27]*?)["\x27]/gi;
+      const regexAriaBloco = /aria-label=["\x27]([^"\x27]*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)[^"\x27]*?)["\x27]/gi;
       let matchBloco;
       while ((matchBloco = regexAriaBloco.exec(html)) !== null) {
         const ariaTexto = matchBloco[1];
-        const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)/i);
+        const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
         const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
         if (!preco || preco < 120 || preco > 45000) continue;
 
@@ -476,6 +520,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         encontrouVoos: true,
         oferta: {
           preco: melhorOferta.preco,
+          moeda: moedaCode,
           precoOriginal: melhorOferta.precoOriginal,
           duracaoHoras: melhorOferta.duracaoHoras,
           destinoReal: destinoCod,

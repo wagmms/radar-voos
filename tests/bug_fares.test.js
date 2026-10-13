@@ -1,8 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { classificarItemFeed, identificarRegiaoDestino, detectarBugFareEstatistico } from '../src/domain/bug_fares.js';
 import { BugFareFeedWatcher } from '../src/services/bug_fare_feed_watcher.js';
-import { BugFareHunter, CORREDORES_GLOBAIS_SWEET_SPOT } from '../src/services/bug_fare_hunter.js';
+import { BugFareHunter, CORREDORES_GLOBAIS_SWEET_SPOT, ARQUIVO_WORKING_BUFFER_PADRAO } from '../src/services/bug_fare_hunter.js';
 import { rotasRepo, getDb } from '../src/db.js';
 
 describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
@@ -28,6 +31,30 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(bugFareIngles.ehBugFare, true);
   });
 
+  it('deve blindar classificarItemFeed contra falsos negativos em bug fares com desconto/executiva e permitir super desconto em megapromoções', () => {
+    // 1. Bug Fare real com termos de desconto ou cabine não deve ser descartado
+    const bugFareComDesconto = classificarItemFeed('URGENTE: Erro de tarifa para Roma com 70% de desconto em classe executiva!', 'https://exemplo.com/roma-bug');
+    assert.strictEqual(bugFareComDesconto.valido, true);
+    assert.strictEqual(bugFareComDesconto.ehBugFare, true);
+    assert.match(bugFareComDesconto.tipo, /BUG FARE/);
+
+    // 2. Produto não-aéreo (hotel/resort) continua sumariamente descartado mesmo se alegar erro de tarifa
+    const bugHotelComErro = classificarItemFeed('Erro de tarifa imperdível em resort e hotel em Cancun', 'https://exemplo.com/hotel-erro');
+    assert.strictEqual(bugHotelComErro.valido, false);
+    assert.strictEqual(bugHotelComErro.ehBugFare, false);
+
+    // 3. Megapromoção com "super desconto" deve ser reconhecida sem ser bloqueada pelo termo genérico "desconto"
+    const promoSuperDesconto = classificarItemFeed('Super desconto em passagens para Lisboa', 'https://exemplo.com/promo-lisboa');
+    assert.strictEqual(promoSuperDesconto.valido, true);
+    assert.strictEqual(promoSuperDesconto.ehBugFare, false);
+    assert.match(promoSuperDesconto.tipo, /MEGAPROMOÇÃO/);
+
+    // 4. Entradas nulas, indefinidas ou vazias tratadas defensivamente sem exceções
+    assert.strictEqual(classificarItemFeed(null, null).valido, false);
+    assert.strictEqual(classificarItemFeed('', '').valido, false);
+    assert.strictEqual(classificarItemFeed('   ', '   ').valido, false);
+  });
+
   it('deve identificar corretamente a região do destino para checagem de piso estrutural', () => {
     assert.strictEqual(identificarRegiaoDestino('LIS'), 'EUROPA');
     assert.strictEqual(identificarRegiaoDestino('CDG'), 'EUROPA');
@@ -46,6 +73,52 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(identificarRegiaoDestino('DOH'), 'ORIENTE_MEDIO');
     assert.strictEqual(identificarRegiaoDestino('JNB'), 'AFRICA');
     assert.strictEqual(identificarRegiaoDestino('CPT'), 'AFRICA');
+  });
+
+  it('deve blindar identificarRegiaoDestino contra falsos positivos de substring adversarial (Chile, Santiago, Parnaíba e listas IATA)', () => {
+    // 1. "Chile" não deve casar falsamente em "CHI" (Chicago / América do Norte)
+    assert.strictEqual(identificarRegiaoDestino('Chile'), 'AMERICA_SUL');
+    assert.strictEqual(identificarRegiaoDestino('chile'), 'AMERICA_SUL');
+
+    // 2. "Santiago" não deve casar falsamente em "SAN" (San Diego / América do Norte)
+    assert.strictEqual(identificarRegiaoDestino('Santiago'), 'AMERICA_SUL');
+
+    // 3. "Parnaíba" não deve casar falsamente em "PAR" (Paris / Europa)
+    assert.notStrictEqual(identificarRegiaoDestino('Parnaiba'), 'EUROPA');
+
+    // 4. Listas IATA e aeroportos múltiplos continuam funcionando com precisão
+    assert.strictEqual(identificarRegiaoDestino('JFK,EWR'), 'AMERICA_NORTE');
+    assert.strictEqual(identificarRegiaoDestino('GRU,CGH'), 'DOMESTICO');
+    assert.strictEqual(identificarRegiaoDestino('MAD,BCN'), 'EUROPA');
+
+    // 5. Casos de borda nulos, vazios ou numéricos
+    assert.strictEqual(identificarRegiaoDestino(null), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(''), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(undefined), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino('   '), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino('\t\n  '), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino({}), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino([]), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(true), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(false), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(Object.create(null)), 'OUTRO');
+  });
+
+  it('identificarRegiaoDestino: deve suportar defensivamente objetos estruturados e novos termos semânticos (Brasil, Alemanha, Canadá)', () => {
+    // 1. Objetos estruturados com propriedades iata, codigo, destino ou cidade
+    assert.strictEqual(identificarRegiaoDestino({ iata: 'LIS' }), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino({ destino: 'Santiago' }), 'AMERICA_SUL');
+    assert.strictEqual(identificarRegiaoDestino({ cidade: 'Recife' }), 'DOMESTICO');
+
+    // 2. Destinos com menção semântica a Brasil / Nacional / Doméstico
+    assert.strictEqual(identificarRegiaoDestino('Brasil'), 'DOMESTICO');
+    assert.strictEqual(identificarRegiaoDestino('voos no brasil'), 'DOMESTICO');
+    assert.strictEqual(identificarRegiaoDestino('viagem nacional'), 'DOMESTICO');
+
+    // 3. Destinos com menção a Alemanha, Reino Unido e Canadá
+    assert.strictEqual(identificarRegiaoDestino('Alemanha'), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino('Reino Unido'), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino('Canadá'), 'AMERICA_NORTE');
   });
 
   it('deve detectar Bug Fares estruturais e por anomalia estatística (Z-Score)', () => {
@@ -96,6 +169,110 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
       dataVolta: '2026-11-20'
     });
     assert.strictEqual(vooNormal.ehBugFare, false);
+  });
+
+  it('deve lidar defensivamente com casos de borda adversariais em detectarBugFareEstatistico', () => {
+    // 1. Entradas nulas, indefinidas ou parâmetros ausentes
+    assert.deepStrictEqual(detectarBugFareEstatistico(null), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico(undefined), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico(), { ehBugFare: false });
+
+    // 2. Preços e médias informados como strings numéricas (não deve quebrar .toFixed e deve detectar)
+    const bugString = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: '1450',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugString.ehBugFare, true);
+    assert.strictEqual(bugString.severidade, 'CRITICA');
+
+    const bugZScoreString = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: '1850',
+      precoMedioHistorico: '4200',
+      desvioPadrao: '800',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugZScoreString.ehBugFare, true);
+    assert.strictEqual(bugZScoreString.severidade, 'ALTA');
+
+    // 3. Entradas adversariais com NaN, Infinity, strings não numéricas ou valores negativos
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: NaN }), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: Infinity }), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: 'gratis' }), { ehBugFare: false });
+  });
+
+  it('deve blindar detectarBugFareEstatistico contra formatos de moeda brasileira e separadores de milhar', () => {
+    // 1. Preço formatado com prefixo monetário R$, ponto de milhar e centavos
+    const bugMoedaBrl = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: 'R$ 1.450,00',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugMoedaBrl.ehBugFare, true);
+    assert.strictEqual(bugMoedaBrl.severidade, 'CRITICA');
+
+    // 2. Anomalia estatística (Z-score) com precoMedioHistorico e desvioPadrao formatados como moeda
+    const bugZScoreMoeda = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: 'R$ 1.850',
+      precoMedioHistorico: 'R$ 4.200,00',
+      desvioPadrao: 'R$ 800',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugZScoreMoeda.ehBugFare, true);
+    assert.strictEqual(bugZScoreMoeda.severidade, 'ALTA');
+
+    // 3. Queda percentual extrema com precoMedioHistorico e ponto de milhar
+    const bugQuedaExtrema = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: '1.200',
+      precoMedioHistorico: 'R$ 3.000',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugQuedaExtrema.ehBugFare, true);
+    assert.strictEqual(bugQuedaExtrema.descontoEstimadoPct >= 50, true);
+  });
+
+  it('deve blindar detectarBugFareEstatistico contra cabine nula, não-string, case mismatch e aliases', () => {
+    // 1. cabine: null ou tipo inesperado não deve lançar TypeError (.toUpperCase) e assume economy
+    const resCabineNull = detectarBugFareEstatistico({
+      origemCod: 'SAO',
+      destinoCod: 'MAD',
+      preco: 1450,
+      cabine: null,
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(resCabineNull.ehBugFare, true);
+    assert.strictEqual(resCabineNull.severidade, 'CRITICA');
+    assert.doesNotMatch(resCabineNull.motivo, /null/i);
+
+    // 2. cabine em maiúsculo ou com espaços (ex: '  BUSINESS  ') aplica multiplicador 2.8
+    const resBusinessUpper = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: 4500,
+      cabine: '  BUSINESS  ',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(resBusinessUpper.ehBugFare, true);
+    assert.match(resBusinessUpper.motivo, /BUSINESS/);
+
+    // 3. alias em português (ex: 'executiva') resolve para business corretamente
+    const resAliasExecutiva = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: 4500,
+      cabine: 'executiva',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(resAliasExecutiva.ehBugFare, true);
+    assert.match(resAliasExecutiva.motivo, /BUSINESS/);
   });
 
   it('deve extrair itens válidos de XML RSS e Atom no BugFareFeedWatcher', () => {
@@ -338,5 +515,169 @@ describe('BugFareHunter: Working Buffer + Z-Score + Deduplicação 24h', () => {
     const res = await hunter.executarVarreduraProativa({ limiteRotas: 2 });
     assert.strictEqual(chamado, true);
     assert.strictEqual(res.sucesso, true);
+  });
+});
+
+describe('BugFareHunter: Persistência Atômica do Working Buffer em Disco', () => {
+  const criarCaminhoTemp = () => path.join(os.tmpdir(), `test_working_buffer_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.json`);
+
+  it('deve salvar Working Buffer em disco de forma atômica com envelope e estrutura sanitizada', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const hunter = new BugFareHunter({ arquivoBuffer: tempFile });
+      hunter._registrarLeitura('SAO:LIS', 3800);
+      hunter._registrarLeitura('SAO:LIS', 3900);
+      hunter._registrarAlertaDisparado('SAO:LIS', 'BUG_FARE', 1750);
+      hunter._registrarLeitura('RIO:MIA', 2800);
+
+      const salvo = hunter.salvarWorkingBufferDisco(tempFile, { forcar: true });
+      assert.strictEqual(salvo, true);
+      assert(fs.existsSync(tempFile));
+
+      const conteudo = JSON.parse(fs.readFileSync(tempFile, 'utf-8'));
+      assert.strictEqual(conteudo.versao, 1);
+      assert.strictEqual(conteudo.totalCorredores, 2);
+      assert(conteudo.atualizadoEm);
+      assert(conteudo.corredores['SAO:LIS']);
+      assert.deepStrictEqual(conteudo.corredores['SAO:LIS'].leituras, [3800, 3900]);
+      assert.strictEqual(conteudo.corredores['SAO:LIS'].ultimoAlerta.tipo, 'BUG_FARE');
+      assert.strictEqual(conteudo.corredores['SAO:LIS'].ultimoAlerta.preco, 1750);
+      assert.deepStrictEqual(conteudo.corredores['RIO:MIA'].leituras, [2800]);
+      assert.strictEqual(conteudo.corredores['RIO:MIA'].ultimoAlerta, null);
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve restaurar Working Buffer do disco no boot da classe quando configurado', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const payload = {
+        versao: 1,
+        atualizadoEm: new Date().toISOString(),
+        totalCorredores: 1,
+        corredores: {
+          'SAO:PAR': {
+            leituras: [4200, 4100, 4050],
+            ultimoAlerta: { tipo: 'OPORTUNIDADE', preco: 2700, ts: 1728800000000 }
+          }
+        }
+      };
+      fs.writeFileSync(tempFile, JSON.stringify(payload, null, 2), 'utf-8');
+
+      // Boot com arquivo configurado
+      const hunter = new BugFareHunter({ arquivoBuffer: tempFile, carregarNoBoot: true });
+      assert(hunter._workingBuffer.has('SAO:PAR'));
+
+      const buffer = hunter._obterBufferCorreder('SAO:PAR');
+      assert.deepStrictEqual(buffer.leituras, [4200, 4100, 4050]);
+      assert.strictEqual(buffer.ultimoAlerta.tipo, 'OPORTUNIDADE');
+      assert.strictEqual(buffer.ultimoAlerta.preco, 2700);
+      assert.strictEqual(buffer.ultimoAlerta.ts, 1728800000000);
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve carregar formato plano (sem envelope de versão) com sanitização de leituras', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const payloadPlano = {
+        'BSB:CUN': {
+          leituras: [3000, 'invalido', -200, null, 3100, 2950],
+          ultimoAlerta: { tipo: 'BUG_FARE', preco: 1200, ts: 1728700000000 }
+        }
+      };
+      fs.writeFileSync(tempFile, JSON.stringify(payloadPlano), 'utf-8');
+
+      const hunter = new BugFareHunter();
+      const carregou = hunter.carregarWorkingBufferDisco(tempFile);
+      assert.strictEqual(carregou, true);
+      assert(hunter._workingBuffer.has('BSB:CUN'));
+
+      const buffer = hunter._obterBufferCorreder('BSB:CUN');
+      // Filtrou strings, nulos e negativos: apenas [3000, 3100, 2950]
+      assert.deepStrictEqual(buffer.leituras, [3000, 3100, 2950]);
+      assert.strictEqual(buffer.ultimoAlerta.tipo, 'BUG_FARE');
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve limitar leituras carregadas a BUFFER_MAX_LEITURAS (últimas 5)', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const payloadExcesso = {
+        corredores: {
+          'SAO:NYC': {
+            leituras: [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000],
+            ultimoAlerta: null
+          }
+        }
+      };
+      fs.writeFileSync(tempFile, JSON.stringify(payloadExcesso), 'utf-8');
+
+      const hunter = new BugFareHunter();
+      hunter.carregarWorkingBufferDisco(tempFile);
+
+      const buffer = hunter._obterBufferCorreder('SAO:NYC');
+      assert.strictEqual(buffer.leituras.length, 5);
+      assert.deepStrictEqual(buffer.leituras, [4000, 5000, 6000, 7000, 8000]);
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve lidar defensivamente com arquivo inexistente, corrompido ou vazio sem lançar erro', () => {
+    const hunter = new BugFareHunter();
+
+    // Arquivo inexistente
+    const resInexistente = hunter.carregarWorkingBufferDisco('/tmp/nao_existe_working_buffer_12345.json');
+    assert.strictEqual(resInexistente, false);
+
+    // Arquivo vazio
+    const tempVazio = criarCaminhoTemp();
+    fs.writeFileSync(tempVazio, '', 'utf-8');
+    const resVazio = hunter.carregarWorkingBufferDisco(tempVazio);
+    assert.strictEqual(resVazio, false);
+    fs.unlinkSync(tempVazio);
+
+    // Arquivo corrompido (JSON inválido)
+    const tempCorrompido = criarCaminhoTemp();
+    fs.writeFileSync(tempCorrompido, '{ "invalido": true, ...corrompido', 'utf-8');
+    const resCorrompido = hunter.carregarWorkingBufferDisco(tempCorrompido);
+    assert.strictEqual(resCorrompido, false);
+    fs.unlinkSync(tempCorrompido);
+  });
+
+  it('deve limpar estado em memória via limparWorkingBuffer', () => {
+    const hunter = new BugFareHunter();
+    hunter._registrarLeitura('SAO:LIS', 3500);
+    assert.strictEqual(hunter._workingBuffer.size, 1);
+
+    hunter.limparWorkingBuffer();
+    assert.strictEqual(hunter._workingBuffer.size, 0);
+  });
+
+  it('deve invocar salvarWorkingBufferDisco ao término de escanearCorredoresProativos', async () => {
+    const hunter = new BugFareHunter();
+    let salvarChamado = false;
+    hunter.salvarWorkingBufferDisco = () => {
+      salvarChamado = true;
+      return true;
+    };
+
+    // Mock do provedorDirect para responder imediatamente sem rede
+    hunter.provedorDirect = {
+      buscarOfertas: async () => ({
+        ok: true,
+        encontrouVoos: true,
+        oferta: { preco: 4500, destinoReal: 'Lisboa' }
+      })
+    };
+
+    const res = await hunter.escanearCorredoresProativos({ limiteRotas: 1, notificar: false });
+    assert.strictEqual(res.sucesso, true);
+    assert.strictEqual(salvarChamado, true);
   });
 });
