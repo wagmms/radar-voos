@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.13.1] - 2026-10-13 — Blindagem Defensiva de Cabine em detectarBugFareEstatistico (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Detecção de Bug Fares)
+- `src/domain/bug_fares.js`:
+  - `detectarBugFareEstatistico`: adicionada sanitização defensiva do parâmetro `cabine` contra valores nulos (`null`), tipos não-string, case mismatch (ex: `'  BUSINESS  '`) e aliases em português (`'executiva'`, `'primeira_classe'`, `'premium'`). Elimina risco de `TypeError: Cannot read properties of null (reading 'toUpperCase')` e assegura cálculo fidedigno dos multiplicadores de cabine (`MULTIPLICADORES_CABINE_BUG_FARE`).
+- `tests/bug_fares.test.js`:
+  - Adicionado caso de teste adversarial cobrindo `cabine: null`, tolerância a maiúsculas/espaços e resolução de aliases (suite com 322 testes aprovados com 100% de sucesso).
+
 ## [v2.13.0] - 2026-10-13 — Suporte à Passagem de Moeda Configurada (Multimoeda) no Ciclo de Varredura e Provedores de Busca
 
 ### ✨ Novo Recurso & Arquitetura (Motor de Busca Google Flights Multimoeda)

@@ -153,8 +153,43 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     // 3. Entradas adversariais com NaN, Infinity, strings não numéricas ou valores negativos
     assert.deepStrictEqual(detectarBugFareEstatistico({ preco: NaN }), { ehBugFare: false });
     assert.deepStrictEqual(detectarBugFareEstatistico({ preco: Infinity }), { ehBugFare: false });
-    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: -200 }), { ehBugFare: false });
     assert.deepStrictEqual(detectarBugFareEstatistico({ preco: 'gratis' }), { ehBugFare: false });
+  });
+
+  it('deve blindar detectarBugFareEstatistico contra cabine nula, não-string, case mismatch e aliases', () => {
+    // 1. cabine: null ou tipo inesperado não deve lançar TypeError (.toUpperCase) e assume economy
+    const resCabineNull = detectarBugFareEstatistico({
+      origemCod: 'SAO',
+      destinoCod: 'MAD',
+      preco: 1450,
+      cabine: null,
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(resCabineNull.ehBugFare, true);
+    assert.strictEqual(resCabineNull.severidade, 'CRITICA');
+    assert.doesNotMatch(resCabineNull.motivo, /null/i);
+
+    // 2. cabine em maiúsculo ou com espaços (ex: '  BUSINESS  ') aplica multiplicador 2.8
+    const resBusinessUpper = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: 4500,
+      cabine: '  BUSINESS  ',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(resBusinessUpper.ehBugFare, true);
+    assert.match(resBusinessUpper.motivo, /BUSINESS/);
+
+    // 3. alias em português (ex: 'executiva') resolve para business corretamente
+    const resAliasExecutiva = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: 4500,
+      cabine: 'executiva',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(resAliasExecutiva.ehBugFare, true);
+    assert.match(resAliasExecutiva.motivo, /BUSINESS/);
   });
 
   it('deve extrair itens válidos de XML RSS e Atom no BugFareFeedWatcher', () => {

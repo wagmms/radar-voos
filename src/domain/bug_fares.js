@@ -204,7 +204,16 @@ export function detectarBugFareEstatistico(params = {}) {
   const ehIdaEVolta = Boolean(dataVolta) && !ehSoIda(dataVolta);
   const regiao = identificarRegiaoDestino(destinoCod);
   const pisoBase = PISOS_ESTRUTURAIS_BUG_FARE[regiao];
-  const multCabine = MULTIPLICADORES_CABINE_BUG_FARE[cabine] || 1.0;
+
+  const cabineRaw = typeof cabine === 'string' ? cabine.trim().toLowerCase() : 'economy';
+  const ALIASES_CABINE = {
+    executiva: 'business',
+    primeira_classe: 'first',
+    primeira: 'first',
+    premium: 'premium_economy'
+  };
+  const cabineNormalizada = ALIASES_CABINE[cabineRaw] || (MULTIPLICADORES_CABINE_BUG_FARE[cabineRaw] ? cabineRaw : 'economy');
+  const multCabine = MULTIPLICADORES_CABINE_BUG_FARE[cabineNormalizada] || 1.0;
 
   // Filtro de Inviabilidade e Tarifa Espúria:
   // Se o preço for inferior ao piso mínimo plausível de segurança da região (ajustado por cabine),
@@ -223,7 +232,7 @@ export function detectarBugFareEstatistico(params = {}) {
   if (pisoBase) {
     const valorPiso = Math.round((ehIdaEVolta ? pisoBase.idaEVolta : pisoBase.soIda) * multCabine);
     if (precoNum <= valorPiso) {
-      const labelCabine = cabine !== 'economy' ? ` em ${cabine.toUpperCase()}` : '';
+      const labelCabine = cabineNormalizada !== 'economy' ? ` em ${cabineNormalizada.toUpperCase()}` : '';
       const descontoEstimado = Math.round(((valorPiso * 1.8 - precoNum) / (valorPiso * 1.8)) * 100);
       return {
         ehBugFare: true,
