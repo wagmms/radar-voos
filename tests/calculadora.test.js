@@ -74,6 +74,17 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco('Preço: 1.500'), 1500);
   });
 
+  it('deve rejeitar defensivamente tipos não-textuais e espúrios em parsePreco (Date, Array, Function, Error, RegExp, Object)', () => {
+    assert.strictEqual(parsePreco(new Date(2026, 9, 13)), 0);
+    assert.strictEqual(parsePreco([123, 456]), 0);
+    assert.strictEqual(parsePreco(() => 100), 0);
+    assert.strictEqual(parsePreco(new Error('Erro 404')), 0);
+    assert.strictEqual(parsePreco(/123/), 0);
+    assert.strictEqual(parsePreco({ preco: 500 }), 0);
+    assert.strictEqual(parsePreco(new String('R$ 1.500')), 1500);
+    assert.strictEqual(parsePreco(new Number(2300)), 2300);
+  });
+
   it('deve calcular variações percentuais e sinalizar quedas relâmpago', () => {
     // Queda de 20% (supera o gatilho de 15%)
     const resQueda = calcularVariacao(1600, 2000, 15);

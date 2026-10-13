@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.16] - 2026-10-13 — Blindagem Adversarial em parsePreco contra Tipos Espúrios (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido comportamento anômalo onde tipos de dados complexos ou não-textuais (instâncias de `Date`, `Error`, `Array`, `Function`, `RegExp` e objetos arbitrários) tinham seus métodos `toString()` convertidos cegamente, extraindo números internos (ex: data `new Date()` virando preço `13202600`, `new Error('Erro 404')` virando `404` e array `[123, 456]` virando float `123.456`).
+  - Implementada validação defensiva estrita para aceitar exclusivamente strings e números (primitivos ou instâncias wrapper de `String`/`Number`), retornando `0` de forma resiliente para qualquer outro tipo.
+- **`tests/calculadora.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando a rejeição imediata de objetos espúrios (`Date`, `Array`, `Function`, `Error`, `RegExp`, `Object`) e a correta aceitação de wrappers `String`/`Number`.
+
 ## [v2.18.15] - 2026-10-13 — Blindagem Adversarial em parsePreco (Domínio Calculadora)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

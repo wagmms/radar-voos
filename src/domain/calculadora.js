@@ -140,7 +140,17 @@ export function parsePreco(valor) {
     if (!Number.isFinite(valor) || valor < 0) return 0;
     return valor;
   }
-  if (valor === null || valor === undefined || typeof valor === 'symbol') return 0;
+  if (typeof valor !== 'string') {
+    if (valor instanceof Number) {
+      const n = Number(valor);
+      return (!Number.isFinite(n) || n < 0) ? 0 : n;
+    }
+    if (valor instanceof String) {
+      valor = String(valor);
+    } else {
+      return 0;
+    }
+  }
   let s = String(valor)
     .replace(/[\u00A0\u202F]/g, ' ')
     .trim();
