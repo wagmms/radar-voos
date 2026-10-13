@@ -160,7 +160,8 @@ export function parsePreco(valor) {
  * Calcula a variação percentual e textual entre preços
  */
 export function calcularVariacao(precoAtual, precoAnterior, gatilhoQuedaPct = 15) {
-  if (!precoAnterior || precoAnterior <= 0) {
+  const pAnterior = parsePreco(precoAnterior);
+  if (!pAnterior || pAnterior <= 0) {
     return {
       texto: 'Primeira Checagem',
       pct: 0,
@@ -169,13 +170,26 @@ export function calcularVariacao(precoAtual, precoAnterior, gatilhoQuedaPct = 15
     };
   }
 
-  const diff = precoAtual - precoAnterior;
-  const pct = (diff / precoAnterior) * 100;
+  const pAtual = parsePreco(precoAtual);
+  if (!pAtual || pAtual <= 0) {
+    return {
+      texto: 'Indisponível',
+      pct: 0,
+      diff: 0,
+      ehQuedaRelampago: false
+    };
+  }
+
+  const diff = pAtual - pAnterior;
+  const pct = (diff / pAnterior) * 100;
+  const gatilho = (Number.isFinite(Number(gatilhoQuedaPct)) && Number(gatilhoQuedaPct) > 0)
+    ? Number(gatilhoQuedaPct)
+    : 15;
 
   let texto = 'Estável';
   let ehQuedaRelampago = false;
 
-  if (pct <= -gatilhoQuedaPct) {
+  if (pct <= -gatilho) {
     texto = `🟢 ${pct.toFixed(1)}% (Caiu R$ ${Math.abs(diff).toFixed(0)})`;
     ehQuedaRelampago = true;
   } else if (pct < 0) {

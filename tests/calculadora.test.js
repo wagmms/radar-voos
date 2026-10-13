@@ -53,6 +53,26 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.match(resAlta.texto, /Subiu/);
   });
 
+  it('deve lidar defensivamente com casos de borda adversariais em calcularVariacao (nulos, strings formatadas, zeros e NaNs)', () => {
+    // 1. Preço atual nulo, zero ou inválido não deve disparar falsa queda relâmpago (-100%)
+    const resNulo = calcularVariacao(null, 2000);
+    assert.strictEqual(resNulo.ehQuedaRelampago, false);
+    assert.strictEqual(resNulo.pct, 0);
+    assert.strictEqual(resNulo.diff, 0);
+    assert.strictEqual(resNulo.texto, 'Indisponível');
+
+    // 2. Preço anterior nulo, inválido ou zero retorna Primeira Checagem segura
+    const resSemAnterior = calcularVariacao(1500, 'invalido');
+    assert.strictEqual(resSemAnterior.ehQuedaRelampago, false);
+    assert.strictEqual(resSemAnterior.texto, 'Primeira Checagem');
+
+    // 3. Suporte resiliente a strings monetárias formatadas (ex: 'R$ 1.600,00' vs 'R$ 2.000,00')
+    const resFormatado = calcularVariacao('R$ 1.600,00', 'R$ 2.000,00', 15);
+    assert.strictEqual(resFormatado.pct, -20);
+    assert.strictEqual(resFormatado.ehQuedaRelampago, true);
+    assert.strictEqual(resFormatado.diff, -400);
+  });
+
   it('deve calcular o Custo Total da Viagem (Voo + Diária x Dias)', () => {
     // Buenos Aires: R$ 180/dia. 10 dias = R$ 1.800 de estadia + R$ 1.200 voo = R$ 3.000 total
     const custo = avaliarCustoDestinoComTotal('Buenos Aires', 'Buenos Aires', 1200, '2026-10-10', '2026-10-20');

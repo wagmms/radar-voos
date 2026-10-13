@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.8] - 2026-10-13 — QA & Blindagem Adversarial em `calcularVariacao` (calculadora)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `calcularVariacao`:
+  - Blindado contra valores nulos, zero ou inválidos em `precoAtual`, evitando falsos alertas de queda relâmpago de -100% e retornando `{ texto: 'Indisponível', pct: 0, diff: 0, ehQuedaRelampago: false }`.
+  - Integrado parsing resiliente via `parsePreco` para `precoAtual` e `precoAnterior`, permitindo suporte transparente a strings monetárias formatadas (ex: `'R$ 1.600,00'`) e strings numéricas.
+  - Sanitizado `gatilhoQuedaPct` contra valores não finitos ou negativos, garantindo fallback padrão de 15%.
+- `tests/calculadora.test.js`:
+  - Adicionado caso de testes adversariais para casos de borda com nulos, strings monetárias formatadas, NaNs e zeros (100% aprovado).
+
+---
+
 ## [v2.10.7] - 2026-10-13 — QA & Blindagem Adversarial em `detectarBugFareEstatistico` (bug_fares)
 
 ### 🛡️ Blindagem de QA Adversarial
