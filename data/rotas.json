@@ -35,7 +35,7 @@
     "origem": "São Paulo",
     "destino": "América do Sul",
     "codigo_origem": "SAO",
-    "codigo_destino": "/m/06_1",
+    "codigo_destino": "BUE",
     "data_ida": "2027-03-09",
     "data_volta": "2027-03-19",
     "duracao_max_horas": 8,
@@ -51,7 +51,7 @@
     "origem": "São Paulo",
     "destino": "Europa",
     "codigo_origem": "SAO",
-    "codigo_destino": "/m/02j9z",
+    "codigo_destino": "MAD",
     "data_ida": "2027-02-09",
     "data_volta": "2027-02-19",
     "duracao_max_horas": 20,
@@ -75,7 +75,7 @@
     "cabine": "economy",
     "flexibilidade_dias": 0,
     "sem_data": 0,
-    "dias_estadia": 2026,
+    "dias_estadia": 14,
     "tipo_viagem": "round_trip",
     "ativa": 1
   }
