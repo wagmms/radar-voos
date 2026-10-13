@@ -381,5 +381,60 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(resSoIda.diasViagem, 0);
     assert.match(resSoIda.textoResumo, /Só Ida/);
   });
+
+  it('deve identificar oportunidades de conexão longa e stopover com resiliência adversarial em analisarLayoversEStopover', () => {
+    // 1. Parsing correto de durações textuais em horas e minutos ("8h 30m", "9h") e detecção de stopover
+    const vooComHoras = {
+      layovers: [
+        { id: 'LIS', name: 'Aeroporto Humberto Delgado', duration: '8h 30m', overnight: true },
+        { id: 'OPO', name: 'Aeroporto Francisco Sá Carneiro', duration: '45m' }
+      ]
+    };
+    const resHoras = analisarLayoversEStopover(vooComHoras);
+    assert.strictEqual(resHoras.layoversValidos.length, 2);
+    assert.strictEqual(resHoras.layoversValidos[0].minutos, 510);
+    assert.strictEqual(resHoras.layoversValidos[0].overnight, true);
+    assert.strictEqual(resHoras.layoversValidos[1].minutos, 45);
+    assert.match(resHoras.dicaStopover, /conexão noturna de 8h em LIS/);
+
+    // 2. Casos de borda adversariais: entrada nula, indefinida, tipos primitivos e itens de layover corrompidos
+    assert.deepStrictEqual(analisarLayoversEStopover(null), { layoversValidos: [], dicaStopover: '-' });
+    assert.deepStrictEqual(analisarLayoversEStopover(undefined), { layoversValidos: [], dicaStopover: '-' });
+    assert.deepStrictEqual(analisarLayoversEStopover('voo_invalido'), { layoversValidos: [], dicaStopover: '-' });
+    assert.deepStrictEqual(analisarLayoversEStopover({ layovers: null }), { layoversValidos: [], dicaStopover: '-' });
+
+    const vooCorrompido = {
+      layovers: [
+        null,
+        undefined,
+        {},
+        { duration: -180 },
+        { duration: 'invalido_sem_numero' },
+        { id: 'MAD', duration: 0 }
+      ]
+    };
+    const resCorrompido = analisarLayoversEStopover(vooCorrompido);
+    assert.strictEqual(resCorrompido.layoversValidos.length, 0);
+    assert.strictEqual(resCorrompido.dicaStopover, '-');
+
+    // 3. Suporte defensivo a campos alternativos de provedores (iata, airport, duration_minutes, nome)
+    const vooProvedorAlternativo = {
+      layovers: [
+        {
+          airport: 'PTY',
+          nome: 'Aeroporto Internacional Tocumen',
+          duration_minutes: 600,
+          pernoite: false
+        }
+      ]
+    };
+    const resAlternativo = analisarLayoversEStopover(vooProvedorAlternativo);
+    assert.strictEqual(resAlternativo.layoversValidos.length, 1);
+    assert.strictEqual(resAlternativo.layoversValidos[0].aeroporto, 'PTY');
+    assert.strictEqual(resAlternativo.layoversValidos[0].nome, 'Aeroporto Internacional Tocumen');
+    assert.strictEqual(resAlternativo.layoversValidos[0].minutos, 600);
+    assert.match(resAlternativo.dicaStopover, /conexão longa de 10h em PTY/);
+  });
 });
+
 

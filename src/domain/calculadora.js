@@ -438,12 +438,34 @@ export function analisarLayoversEStopover(voo) {
   const layoversValidos = layovers
     .filter(l => l && typeof l === 'object')
     .map(l => {
-      const dur = typeof l.duration === 'number' ? l.duration : parseFloat(l.duration);
+      let dur = 0;
+      const durRaw = l.duration !== undefined ? l.duration : (l.duration_minutes !== undefined ? l.duration_minutes : l.minutos);
+      if (typeof durRaw === 'number') {
+        dur = Number.isFinite(durRaw) && durRaw > 0 ? durRaw : 0;
+      } else if (typeof durRaw === 'string') {
+        const s = durRaw.trim();
+        const matchHoras = s.match(/(\d+)\s*(?:h|hr|hrs|hora|horas)/i);
+        const matchMin = s.match(/(\d+)\s*(?:m|min|mins|minuto|minutos)/i);
+        if (matchHoras || matchMin) {
+          const horas = matchHoras ? parseInt(matchHoras[1], 10) : 0;
+          const minutos = matchMin ? parseInt(matchMin[1], 10) : 0;
+          dur = (horas * 60) + minutos;
+        } else {
+          const num = parseFloat(s);
+          dur = (Number.isFinite(num) && num > 0) ? num : 0;
+        }
+      }
+
+      const rawAero = l.id || l.iata || l.airport || l.code || '';
+      const aeroporto = (typeof rawAero === 'string' && rawAero.trim()) ? rawAero.trim() : 'N/A';
+      const rawNome = l.name || l.nome || '';
+      const nome = (typeof rawNome === 'string' && rawNome.trim()) ? rawNome.trim() : 'Aeroporto não informado';
+
       return {
-        aeroporto: (l.id && typeof l.id === 'string') ? l.id.trim() : 'N/A',
-        nome: (l.name && typeof l.name === 'string') ? l.name.trim() : 'Aeroporto não informado',
+        aeroporto,
+        nome,
         minutos: dur,
-        overnight: Boolean(l.overnight)
+        overnight: Boolean(l.overnight || l.pernoite)
       };
     })
     .filter(l => Number.isFinite(l.minutos) && l.minutos > 0);

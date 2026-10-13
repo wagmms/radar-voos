@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.3] - 2026-10-13 — Blindagem Adversarial de analisarLayoversEStopover (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Conexões e Stopover)
+- `src/domain/calculadora.js` · `analisarLayoversEStopover`:
+  - Corrigido bug de parsing onde durações de escalas em strings compostas (ex: `"8h 30m"`, `"9h"`, `"8h"`) eram truncadas para apenas as horas (ex: 8 minutos em vez de 510 minutos) pelo uso ingênuo de `parseFloat`, inviabilizando a identificação de stopovers (>= 480 min).
+  - Adicionado suporte a propriedades alternativas de provedores (`duration_minutes`, `minutos`, `airport`, `iata`, `nome`, `pernoite`).
+  - Blindagem adversarial contra entradas nulas/indefinidas, objetos vazios, strings não numéricas e números negativos.
+- `tests/calculadora.test.js`:
+  - Adicionado caso de teste adversarial com 3 cenários de borda validando parsing de formato textual de duração, resiliência a entradas corrompidas e compatibilidade com provedores variados.
+  - Suite total: **345/345 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.2] - 2026-10-13 — Blindagem Adversarial de classificarDeltaPreco (Domínio / Calculadora)
 
 ### 🛡️ Correção Defensiva & Robustez (Módulo de Preços e Estatísticas)
