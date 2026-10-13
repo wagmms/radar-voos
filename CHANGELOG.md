@@ -4,6 +4,19 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.6] - 2026-10-13 — QA & Blindagem Adversarial em `classificarDeltaPreco`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `classificarDeltaPreco`:
+  - Correção na classificação de oportunidades: garante que quedas $\ge 30\%$ frente à média recente sejam categorizadas como `OPORTUNIDADE` mesmo sob desvios padrão amplos ($DP \ge 30$) onde o Z-Score ficaria entre os limiares.
+  - Blindagem defensiva com coerção numérica (`Number.isFinite`), prevenindo `NaN`, `Infinity` e strings mal formatadas em `preco`, `media` e `desvioPadrao`.
+- `tests/calculadora.test.js`:
+  - 3 novos casos de teste de borda cobrindo desvios padrão amplos com queda $\ge 30\%$, entradas malformadas/infinitas e coerção de strings numéricas (212/212 testes aprovados).
+- `tests/flight_scanner.test.js`:
+  - Mock determinístico defensivo de `FlightScanner.buscarOfertas` para isolamento estrito sem requisições de rede.
+
+---
+
 ## [v2.9.5] - 2026-10-13 — Detecção de Deltas com Z-Score no FlightScanner & ExecutarCicloVarredura
 
 ### 🚀 Novas Funcionalidades & Arquitetura Proativa

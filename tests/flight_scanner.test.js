@@ -1,9 +1,35 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { FlightScanner } from '../src/services/flight_scanner.js';
 import { rotasRepo, getDb } from '../src/db.js';
 
 describe('Serviço FlightScanner & Ciclo de Varredura (executarCicloVarredura)', () => {
+  const originalBuscarOfertas = FlightScanner.buscarOfertas;
+
+  beforeEach(() => {
+    FlightScanner.buscarOfertas = async () => ({
+      ok: true,
+      encontrouVoos: true,
+      oferta: {
+        preco: 1200,
+        nivelPreco: 'NORMAL',
+        duracaoHoras: 6.0,
+        duracaoMinutos: 360,
+        detalhes: 'Voo Simulado de Teste',
+        dicaStopover: '-',
+        termometro: '⚪ Preço Normal',
+        origemReal: 'SAO',
+        destinoReal: 'MIA',
+        codigoDestinoReal: 'MIA',
+        link: 'https://flights.google.com/teste'
+      }
+    });
+  });
+
+  afterEach(() => {
+    FlightScanner.buscarOfertas = originalBuscarOfertas;
+  });
+
   it('1. executarCicloVarredura: deve lidar graciosamente com fila vazia de rotas ativas', async () => {
     const db = getDb();
     // Temporariamente desativa todas as rotas para testar fila vazia

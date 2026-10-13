@@ -127,4 +127,30 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(nuloDelta.categoria, 'INFO');
     assert.strictEqual(nuloDelta.zScore, null);
   });
+
+  it('deve lidar com casos de borda e entradas adversariais em classificarDeltaPreco', () => {
+    // Caso 1: Queda >= 30% com desvio padrão amplo onde zScore é > -1.5 (ex: -1.17)
+    // Média = 1000, DP = 300, Preço = 650 -> Queda = 35%, Z-Score = (650-1000)/300 = -1.17
+    const quedaComDPAmplo = classificarDeltaPreco({ preco: 650, media: 1000, desvioPadrao: 300 });
+    assert.strictEqual(quedaComDPAmplo.categoria, 'OPORTUNIDADE');
+    assert.strictEqual(quedaComDPAmplo.zScore, -1.17);
+    assert.strictEqual(quedaComDPAmplo.quedaPct, 35);
+
+    // Caso 2: Entradas malformadas, NaN e infinitos
+    const entradaInvalida = classificarDeltaPreco({ preco: 'preco_invalido', media: 1000 });
+    assert.strictEqual(entradaInvalida.categoria, 'INFO');
+    assert.strictEqual(entradaInvalida.zScore, null);
+    assert.strictEqual(entradaInvalida.quedaPct, 0);
+
+    const entradaInfinita = classificarDeltaPreco({ preco: Infinity, media: 1000 });
+    assert.strictEqual(entradaInfinita.categoria, 'INFO');
+    assert.strictEqual(entradaInfinita.zScore, null);
+
+    // Caso 3: Coerção resiliente de strings numéricas válidas
+    const stringNumerica = classificarDeltaPreco({ preco: '650.00', media: '1000.00', desvioPadrao: '300.00' });
+    assert.strictEqual(stringNumerica.categoria, 'OPORTUNIDADE');
+    assert.strictEqual(stringNumerica.zScore, -1.17);
+    assert.strictEqual(stringNumerica.quedaPct, 35);
+  });
 });
+

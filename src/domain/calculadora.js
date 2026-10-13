@@ -182,31 +182,36 @@ export const QUEDA_PCT_OPORTUNIDADE = 30; // 30%
  * @returns {{ categoria: 'INFO'|'OPORTUNIDADE'|'BUG_FARE', zScore: number|null, quedaPct: number, media: number|null, desvioPadrao: number|null }}
  */
 export function classificarDeltaPreco({ preco, media = null, desvioPadrao = null } = {}) {
-  if (!preco || preco <= 0 || !media || media <= 0) {
+  const p = typeof preco === 'number' ? preco : parseFloat(preco);
+  const m = typeof media === 'number' ? media : parseFloat(media);
+  const dp = typeof desvioPadrao === 'number' ? desvioPadrao : parseFloat(desvioPadrao);
+
+  if (!Number.isFinite(p) || p <= 0 || !Number.isFinite(m) || m <= 0) {
     return {
       categoria: 'INFO',
       zScore: null,
       quedaPct: 0,
-      media: media || null,
-      desvioPadrao: desvioPadrao || null
+      media: Number.isFinite(m) ? m : (media || null),
+      desvioPadrao: Number.isFinite(dp) ? dp : (desvioPadrao || null)
     };
   }
 
-  const quedaPct = ((media - preco) / media) * 100;
+  const quedaPct = ((m - p) / m) * 100;
+  const quedaPctArredondada = Number(quedaPct.toFixed(1));
   let zScore = null;
 
-  if (desvioPadrao && desvioPadrao >= 30) {
-    zScore = Number(((preco - media) / desvioPadrao).toFixed(2));
+  if (Number.isFinite(dp) && dp >= 30) {
+    zScore = Number(((p - m) / dp).toFixed(2));
     if (zScore <= ZSCORE_LIMIAR_BUG_FARE) {
-      return { categoria: 'BUG_FARE', zScore, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+      return { categoria: 'BUG_FARE', zScore, quedaPct: quedaPctArredondada, media: m, desvioPadrao: dp };
     }
-    if (zScore <= ZSCORE_LIMIAR_OPORTUNIDADE) {
-      return { categoria: 'OPORTUNIDADE', zScore, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+    if (zScore <= ZSCORE_LIMIAR_OPORTUNIDADE || quedaPctArredondada >= QUEDA_PCT_OPORTUNIDADE) {
+      return { categoria: 'OPORTUNIDADE', zScore, quedaPct: quedaPctArredondada, media: m, desvioPadrao: dp };
     }
-  } else if (quedaPct >= QUEDA_PCT_OPORTUNIDADE) {
+  } else if (quedaPctArredondada >= QUEDA_PCT_OPORTUNIDADE) {
     // Sem desvio padrão robusto: queda >= 30% em relação à média recente
-    return { categoria: 'OPORTUNIDADE', zScore: null, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+    return { categoria: 'OPORTUNIDADE', zScore: null, quedaPct: quedaPctArredondada, media: m, desvioPadrao: Number.isFinite(dp) ? dp : (desvioPadrao || null) };
   }
 
-  return { categoria: 'INFO', zScore, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+  return { categoria: 'INFO', zScore, quedaPct: quedaPctArredondada, media: m, desvioPadrao: Number.isFinite(dp) ? dp : (desvioPadrao || null) };
 }
