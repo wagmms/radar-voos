@@ -47,7 +47,15 @@ export const DICIONARIO_CIDADES = {
   "los angeles": "LAX", "san francisco": "SFO"
 };
 
-// Mapeamento de Cidades Metropolitanas para Aeroportos Físicos exigidos pela SerpAPI
+// Destinos Canônicos por Continente / Macrorregião (busca abrangente e representativa)
+export const DESTINOS_CONTINENTES = Object.freeze({
+  AMERICA_SUL: Object.freeze(['EZE', 'AEP', 'SCL', 'MVD', 'LIM', 'BOG', 'ASU', 'MDZ', 'BRC']),
+  EUROPA: Object.freeze(['LIS', 'OPO', 'MAD', 'BCN', 'CDG', 'FCO', 'MXP', 'LHR', 'AMS', 'FRA']),
+  AMERICA_NORTE: Object.freeze(['MIA', 'MCO', 'JFK', 'EWR', 'LAX', 'ORD', 'BOS']),
+  ASIA: Object.freeze(['TYO', 'NRT', 'HND', 'BKK', 'SIN', 'DXB', 'DOH'])
+});
+
+// Mapeamento de Cidades Metropolitanas e Continentes para Aeroportos Físicos exigidos pela SerpAPI/Provedores
 export const MAPA_AEROPORTOS_SERPAPI = {
   "SAO": "GRU,CGH",
   "RIO": "GIG,SDU",
@@ -60,7 +68,23 @@ export const MAPA_AEROPORTOS_SERPAPI = {
   "TYO": "HND,NRT",
   "WAS": "IAD,DCA",
   "CHI": "ORD,MDW",
-  "BHZ": "CNF"
+  "BHZ": "CNF",
+
+  // Continentes e Macrorregiões (varredura de múltiplos aeroportos para todo o continente)
+  "/M/06_1": DESTINOS_CONTINENTES.AMERICA_SUL.join(','),
+  "AMERICA DO SUL": DESTINOS_CONTINENTES.AMERICA_SUL.join(','),
+  "SOUTH AMERICA": DESTINOS_CONTINENTES.AMERICA_SUL.join(','),
+
+  "/M/02J9Z": DESTINOS_CONTINENTES.EUROPA.join(','),
+  "EUROPA": DESTINOS_CONTINENTES.EUROPA.join(','),
+  "EUROPE": DESTINOS_CONTINENTES.EUROPA.join(','),
+
+  "/M/09C7W0": DESTINOS_CONTINENTES.AMERICA_NORTE.join(','),
+  "ESTADOS UNIDOS": DESTINOS_CONTINENTES.AMERICA_NORTE.join(','),
+  "USA": DESTINOS_CONTINENTES.AMERICA_NORTE.join(','),
+
+  "/M/02J1X": DESTINOS_CONTINENTES.ASIA.join(','),
+  "ASIA": DESTINOS_CONTINENTES.ASIA.join(',')
 };
 
 // Regiões e Países (IDs KGMID/Freebase para busca abrangente no Google Flights)

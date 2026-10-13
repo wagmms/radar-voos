@@ -226,5 +226,34 @@ describe('gerarLinkGoogleFlightsCheapest: retrocompatibilidade e novos parâmetr
     const linkUsd = gerarLinkGoogleFlightsCheapest('GRU', 'LIS', '2026-11-10', '2026-11-24', null, 1, 0, 'economy', 'usd');
     assert.ok(linkUsd.includes('curr=USD'), 'Moeda string minúscula deve ser convertida para maiúscula');
   });
+
+  it('gerarTfs: deve codificar enum Trip como ROUND_TRIP (1) para ida e volta e ONE_WAY (2) para só ida', () => {
+    // 1. Ida e Volta
+    const tfsRT = gerarTfs({
+      origens: ['GRU'],
+      destinos: ['MIA'],
+      dataIda: '2026-11-10',
+      dataVolta: '2026-11-20'
+    });
+    const bufRT = Buffer.from(tfsRT, 'base64url');
+    // Campo 19 (0x98, 0x01) com valor 0x01 (ROUND_TRIP) no final
+    assert.strictEqual(bufRT[bufRT.length - 3], 0x98);
+    assert.strictEqual(bufRT[bufRT.length - 2], 0x01);
+    assert.strictEqual(bufRT[bufRT.length - 1], 0x01, 'Ida e Volta deve terminar com enum Trip = 1 (ROUND_TRIP)');
+
+    // 2. Só Ida
+    const tfsOW = gerarTfs({
+      origens: ['GRU'],
+      destinos: ['MIA'],
+      dataIda: '2026-11-10',
+      dataVolta: null
+    });
+    const bufOW = Buffer.from(tfsOW, 'base64url');
+    // Campo 19 (0x98, 0x01) com valor 0x02 (ONE_WAY) no final
+    assert.strictEqual(bufOW[bufOW.length - 3], 0x98);
+    assert.strictEqual(bufOW[bufOW.length - 2], 0x01);
+    assert.strictEqual(bufOW[bufOW.length - 1], 0x02, 'Só Ida deve terminar com enum Trip = 2 (ONE_WAY)');
+  });
 });
+
 

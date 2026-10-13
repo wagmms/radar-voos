@@ -494,8 +494,9 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     leg1Parts.push(Buffer.concat([Buffer.from([0x72]), encodeVarint(sub.length), sub]));
   }
 
-  // Trip type: 0x01 para Só Ida (One-Way), 0x02 para Ida e Volta (Round-Trip)
-  const tripType = voltaEfetiva ? 0x02 : 0x01;
+  // Trip type: 0x01 para Ida e Volta (Round-Trip), 0x02 para Só Ida (One-Way)
+  // Conforme especificação canônica do enum Trip do Google Flights (ROUND_TRIP = 1, ONE_WAY = 2)
+  const tripType = voltaEfetiva ? 0x01 : 0x02;
   const rootParts = [
     Buffer.from([0x08, 0x1c, 0x10, tripType]),
     encodeLengthDelimited(3, Buffer.concat(leg1Parts))
@@ -530,7 +531,7 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     rootParts.push(encodeLengthDelimited(3, Buffer.concat(leg2Parts)));
   }
 
-  rootParts.push(Buffer.from([0x40, 0x01, 0x48, 0x01, 0x70, 0x01, 0x98, 0x01, 0x02]));
+  rootParts.push(Buffer.from([0x40, 0x01, 0x48, 0x01, 0x70, 0x01, 0x98, 0x01, tripType]));
   return Buffer.concat(rootParts).toString('base64url');
 }
 

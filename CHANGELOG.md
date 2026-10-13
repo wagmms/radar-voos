@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.19.1] - 2026-10-13 — Correção Canônica do Enum Trip (ROUND_TRIP=1 vs ONE_WAY=2) e Links de Ida e Volta no Google Flights (Domínio Rotas)
+
+### 🐛 Correção Crítica & Alinhamento com Protocol Buffers Canônico:
+- **`src/domain/rotas.js`** (`gerarTfs`):
+  - Corrigida a codificação do enum `Trip` (Field 19): alinhado com o schema oficial `flights.proto` do Google Flights (`ROUND_TRIP = 1`, `ONE_WAY = 2`), corrigindo a inversão antiga e removendo o byte hardcoded `0x02` (`ONE_WAY`) que forçava todas as pesquisas a abrirem como Só de Ida no Google Flights.
+  - Quando a data de volta está presente e válida, a pesquisa agora é codificada estritamente como `ROUND_TRIP` (1), gerando links com ambos os trechos preservados e eliminando a cotação punitiva de bilhete só de ida avulso.
+- **`tests/construir_tfu_passageiros.test.js`**:
+  - Adicionado teste unitário cobrindo a terminação dos bytes de `tfs`: validação de `[0x98, 0x01, 0x01]` para Ida e Volta e `[0x98, 0x01, 0x02]` para Só Ida.
+
+
 ## [v2.18.41] - 2026-10-13 — Blindagem Adversarial em extrairInfoBagagem contra Textos sem Acento e Suporte a Plurais/Múltiplos (Provedor Google Flights Direct)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
