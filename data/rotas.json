@@ -30,5 +30,21 @@
     "dias_estadia": 15,
     "tipo_viagem": "round_trip",
     "ativa": 1
+  },
+  {
+    "origem": "São Paulo",
+    "destino": "Miami",
+    "codigo_origem": "SAO",
+    "codigo_destino": "MIA",
+    "data_ida": "2026-11-10",
+    "data_volta": "2026-11-20",
+    "duracao_max_horas": 999,
+    "preco_alvo": 3200,
+    "cabine": "economy",
+    "flexibilidade_dias": 0,
+    "sem_data": 1,
+    "dias_estadia": 10,
+    "tipo_viagem": "round_trip",
+    "ativa": 1
   }
 ]
