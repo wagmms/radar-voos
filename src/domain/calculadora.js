@@ -1,5 +1,5 @@
 import { DICIONARIO_CUSTO_DESTINO, DICIONARIO_CIDADES } from './dicionarios.js';
-import { normalizarTexto, ehSoIda } from './rotas.js';
+import { normalizarTexto, ehSoIda, formatarDataParaBusca, calcularDataVolta } from './rotas.js';
 import { obterInfoAeroporto } from './aeroportos.js';
 
 export const COTACOES_PADRAO = {
@@ -356,13 +356,32 @@ export function avaliarCustoDestinoComTotal(
   }
 
   let diasViagem = 0;
-  if (dataIdaStr && dataVoltaStr) {
-    const [anoI, mesI, diaI] = String(dataIdaStr).split('-').map(Number);
-    const [anoV, mesV, diaV] = String(dataVoltaStr).split('-').map(Number);
-    const dIda = new Date(Date.UTC(anoI, mesI - 1, diaI));
-    const dVolta = new Date(Date.UTC(anoV, mesV - 1, diaV));
-    if (!isNaN(dIda.getTime()) && !isNaN(dVolta.getTime()) && dVolta >= dIda) {
-      diasViagem = Math.round((dVolta.getTime() - dIda.getTime()) / (1000 * 60 * 60 * 24));
+  const idaNorm = formatarDataParaBusca(dataIdaStr);
+
+  if (opts.diasEstadia !== undefined && opts.diasEstadia !== null && Number(opts.diasEstadia) > 0) {
+    const dNum = Number(opts.diasEstadia);
+    diasViagem = Number.isFinite(dNum) && dNum > 0 ? Math.min(Math.round(dNum), 3650) : 0;
+  } else if (dataIdaStr && dataVoltaStr && !ehSoIda(dataVoltaStr)) {
+    const voltaNorm = calcularDataVolta(idaNorm || dataIdaStr, dataVoltaStr) || formatarDataParaBusca(dataVoltaStr);
+    if (idaNorm && voltaNorm) {
+      const [anoI, mesI, diaI] = idaNorm.split('-').map(Number);
+      const [anoV, mesV, diaV] = voltaNorm.split('-').map(Number);
+      const dIda = new Date(Date.UTC(anoI, mesI - 1, diaI));
+      const dVolta = new Date(Date.UTC(anoV, mesV - 1, diaV));
+      if (!isNaN(dIda.getTime()) && !isNaN(dVolta.getTime()) && dVolta >= dIda) {
+        diasViagem = Math.round((dVolta.getTime() - dIda.getTime()) / (1000 * 60 * 60 * 24));
+      }
+    } else if (typeof dataVoltaStr === 'number' && Number.isFinite(dataVoltaStr) && dataVoltaStr > 0) {
+      diasViagem = Math.min(Math.round(dataVoltaStr), 3650);
+    } else {
+      const strVolta = String(dataVoltaStr).trim();
+      const matchDias = strVolta.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)|noites?|n))?$/i);
+      if (matchDias) {
+        const n = parseInt(matchDias[1], 10);
+        if (Number.isFinite(n) && n > 0) {
+          diasViagem = Math.min(n, 3650);
+        }
+      }
     }
   }
 

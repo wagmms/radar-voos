@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.10] - 2026-10-13 — Blindagem Adversarial em avaliarCustoDestinoComTotal (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`avaliarCustoDestinoComTotal`):
+  - Corrigido o cálculo de dias de permanência e custo terrestre quando o campo de volta é informado como duração textual (ex: `"10 dias"`, `"7 noites"`, `"14d"`), que antes falhava ao tentar realizar `split('-')` ingênuo, resultando em `diasViagem = 0` e omitindo as diárias do custo total da viagem.
+  - Integradas as funções canônicas `formatarDataParaBusca` e `calcularDataVolta` do domínio de rotas para normalizar datas de ida e volta, suportando datas no padrão brasileiro (`DD/MM/AAAA`) e timestamps ISO sem quebras.
+  - Adicionado suporte à opção explícita `diasEstadia` em `opcoes` e estabelecido teto de segurança defensivo (`Math.min(dias, 3650)`) contra números astronômicos ou maliciosos.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes de borda adversariais cobrindo durações textuais em dias e noites, formato de data brasileiro e opção explícita `diasEstadia` com teto de segurança.
+
+
 ## [v2.18.9] - 2026-10-13 — Blindagem Adversarial em extrairPrecoNumerico (Google Flights Direct)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

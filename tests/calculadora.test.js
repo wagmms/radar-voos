@@ -392,6 +392,30 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     const resSoIda = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 1500, '2026-10-10', 'SO_IDA');
     assert.strictEqual(resSoIda.diasViagem, 0);
     assert.match(resSoIda.textoResumo, /Só Ida/);
+
+    // 5. QA Adversarial: Duração em dias como string textual ("10 dias", "7 noites", "14d")
+    const resDuracaoTexto = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 2000, '2026-10-10', '10 dias');
+    assert.strictEqual(resDuracaoTexto.diasViagem, 10);
+    assert.strictEqual(resDuracaoTexto.custoTerrestre, 10 * 380);
+    assert.strictEqual(resDuracaoTexto.custoTotalEstimado, 2000 + (10 * 380));
+    assert.match(resDuracaoTexto.textoResumo, /Total 10d: ~R\$ 5800/);
+
+    const resNoites = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 2000, '2026-10-10', '7 noites');
+    assert.strictEqual(resNoites.diasViagem, 7);
+    assert.strictEqual(resNoites.custoTerrestre, 7 * 380);
+
+    // 6. QA Adversarial: Datas no formato brasileiro DD/MM/YYYY e ISO com timestamp
+    const resFormatoBR = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 2000, '10/10/2026', '20/10/2026');
+    assert.strictEqual(resFormatoBR.diasViagem, 10);
+    assert.strictEqual(resFormatoBR.custoTotalEstimado, 2000 + (10 * 380));
+
+    // 7. QA Adversarial: Opção explícita diasEstadia e teto defensivo contra números astronômicos
+    const resDiasEstadia = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 2000, null, null, { diasEstadia: 5 });
+    assert.strictEqual(resDiasEstadia.diasViagem, 5);
+    assert.strictEqual(resDiasEstadia.custoTerrestre, 5 * 380);
+
+    const resEstadiaAstronomica = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 2000, null, null, { diasEstadia: 99999999 });
+    assert.strictEqual(resEstadiaAstronomica.diasViagem, 3650);
   });
 
   it('deve identificar oportunidades de conexão longa e stopover com resiliência adversarial em analisarLayoversEStopover', () => {
