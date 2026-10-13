@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.13] - 2026-10-13 — Blindagem Adversarial em parsearTempoMinutos (Cockpit PWA / Conexões)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/public/js/conexao_badges.js`** (`parsearTempoMinutos`):
+  - Corrigido comportamento anômalo onde durações negativas em formato de texto (ex: `"-2h"`, `"-45min"`, `"-01:30"`, `" - 90m"`) ignoravam o sinal negativo e retornavam valores inteiros positivos (ex: `120`, `45`, `90`), divergindo da regra defensiva já aplicada para números negativos (`tempoStr = -60` -> `null`).
+  - Adicionado suporte a strings puramente numéricas representando minutos (ex: `"120"`, `"45"`, `"0"`), convertendo-as defensivamente para inteiros válidos.
+- **`tests/conexao_badges.test.js`**:
+  - Adicionados testes de borda adversariais validando rejeição de strings negativas e conversão de strings numéricas puras.
+
 ## [v2.18.12] - 2026-10-13 — Blindagem Adversarial em extrairInfoConexoes (Google Flights Direct)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

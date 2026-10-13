@@ -36,6 +36,17 @@ export function parsearTempoMinutos(tempoStr) {
   const limpo = tempoStr.trim().toLowerCase();
   if (!limpo) return null;
 
+  // Rejeita valores negativos em formato string (ex: "-2h", "-45min", "-01:30")
+  if (/(?:^|\s)-+\s*\d/.test(limpo)) {
+    return null;
+  }
+
+  // Minutos inteiros passados como string numérica pura (ex: "120", "45", "0")
+  if (/^\d+$/.test(limpo)) {
+    const num = parseInt(limpo, 10);
+    return Number.isFinite(num) && num >= 0 ? num : null;
+  }
+
   // 1. Formato relógio militar / Google Flights HH:MM (ex: "2:30", "01:45", "10:15")
   const matchRelogio = limpo.match(/\b(\d{1,2}):(\d{2})\b/);
   if (matchRelogio) {

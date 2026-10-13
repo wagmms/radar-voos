@@ -47,12 +47,20 @@ describe('Cockpit PWA: Badges Visuais de Conexões e Stopover (conexao_badges)',
       assert.equal(parsearTempoMinutos('   '), null);
       assert.equal(parsearTempoMinutos('sem tempo informado'), null);
 
-      // 3. Tipos adversariais (NaN, Infinity, negativos, objetos e arrays)
+      // 3. Tipos adversariais (NaN, Infinity, negativos numéricos e em string, objetos e arrays)
       assert.equal(parsearTempoMinutos(NaN), null);
       assert.equal(parsearTempoMinutos(Infinity), null);
       assert.equal(parsearTempoMinutos(-60), null);
+      assert.equal(parsearTempoMinutos('-2h'), null);
+      assert.equal(parsearTempoMinutos('-45min'), null);
+      assert.equal(parsearTempoMinutos('-01:30'), null);
+      assert.equal(parsearTempoMinutos(' - 90m'), null);
       assert.equal(parsearTempoMinutos({}), null);
       assert.equal(parsearTempoMinutos(['10h']), null);
+
+      // 4. Minutos passados como string puramente numérica
+      assert.equal(parsearTempoMinutos('120'), 120);
+      assert.equal(parsearTempoMinutos('0'), 0);
     });
   });
 
