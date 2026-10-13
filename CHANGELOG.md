@@ -4,6 +4,24 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.2] - 2026-10-13 — Badges de Conexões e Stopover Noturno em Cards Móveis (Cockpit PWA)
+
+### 🎨 Cockpit PWA & Anti-UI-Slop
+- `src/public/js/conexao_badges.js`:
+  - Módulo ES nativo para extração e renderização de dados de escalas e conexões com precisão:
+    - `parsearTempoMinutos`: parser defensivo de durações de conexão com suporte a horas inteiras/decimais, minutos e formatos variados (`9h 30m`, `1h 45min`, `45 min`).
+    - `extrairInfoConexao`: detecção estruturada de 5 tipos de conexões (`direto`, `curta` <= 3h, `moderada` 3h a 8h, `longa` > 8h, `noturna` / pernoite / overnight) inspecionando `detalhes_voo`, `dica_stopover` e `melhor_opcao_flexivel`.
+    - `renderizarBadgeConexao`: geração de badges compactas estilo pill para o cabeçalho do card de voo com paleta intencional (`tag-conexao-direto`, `tag-conexao-curta`, `tag-conexao-moderada`, `tag-conexao-longa`, `tag-conexao-noturna`).
+    - `renderizarBannerStopover`: callout visual enriquecido para escalas prolongadas (`stopover-longo` com tema âmbar) e escalas noturnas (`stopover-noturno` com tema violeta/índigo estelar), destacando oportunidades de stopover 2-em-1 sem bilhete adicional.
+- `src/public/app.js` · `renderizarRotas`:
+  - Integração da badge de conexão no cabeçalho do card (`card-header-tags`) e renderização do banner refinado de stopover no corpo do card.
+- `src/public/styles.css`:
+  - Adicionadas regras de estilo para as badges de conexão e banners de stopover, com tipografia mono, efeitos de brilho sutis em dark mode e refinamento responsivo para dispositivos móveis (`@media (max-width: 640px)`).
+- `tests/conexao_badges.test.js`:
+  - Nova suíte com 19 testes automatizados cobrindo parsing de durações, voos diretos, conexões rápidas, escalas prolongadas, pernoites noturnos, compatibilidade com opções flexíveis, badges HTML e banners de stopover (266/266 testes aprovados).
+
+---
+
 ## [v2.10.1] - 2026-10-13 — QA & Blindagem Adversarial em `calcularDataVolta`
 
 ### 🛡️ Blindagem de QA Adversarial

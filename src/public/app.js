@@ -15,6 +15,11 @@ import {
   filtrarPorFaixaClima,
   renderizarWeatherBadge
 } from './js/clima_filtro.js';
+import {
+  extrairInfoConexao,
+  renderizarBadgeConexao,
+  renderizarBannerStopover
+} from './js/conexao_badges.js';
 
 // Registrar Service Worker PWA
 if ('serviceWorker' in navigator) {
@@ -391,6 +396,10 @@ function renderizarRotas() {
     const tagTarifaHtml = renderizarTagTarifaEspecial(infoTarifa);
     const bannerTarifaHtml = renderizarBannerTarifaEspecial(infoTarifa);
 
+    const infoConexao = extrairInfoConexao(rota);
+    const badgeConexaoHtml = renderizarBadgeConexao(infoConexao);
+    const bannerStopoverHtml = renderizarBannerStopover(infoConexao, rota.dica_stopover);
+
     let melhorOpcaoFlexivel = null;
     if (rota.melhor_opcao_flexivel) {
       try {
@@ -414,6 +423,7 @@ function renderizarRotas() {
           </div>
           <div class="card-header-tags">
             <span class="trip-type-tag ${rota.sem_data === 1 ? 'tag-flexivel' : ''}">${tipoViagem}${flexTag}${cabineTag}</span>
+            ${badgeConexaoHtml}
             ${tagTarifaHtml}
           </div>
         </div>
@@ -485,11 +495,7 @@ function renderizarRotas() {
           </div>
         ` : ''}
 
-        ${rota.dica_stopover && rota.dica_stopover !== '-' ? `
-          <div class="stopover-callout">
-            💡 ${escapeHtml(rota.dica_stopover)}
-          </div>
-        ` : ''}
+        ${bannerStopoverHtml}
 
         <div class="card-actions">
           <a href="${rota.link_google_flights}" target="_blank" rel="noopener noreferrer" class="btn-flights-external">
