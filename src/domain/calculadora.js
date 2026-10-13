@@ -416,13 +416,25 @@ export function avaliarTermometro(priceInsights) {
   let nivelPreco = 'NORMAL';
   let termometro = '⚪ Preço Normal';
 
-  if (priceInsights && priceInsights.price_level) {
-    nivelPreco = priceInsights.price_level;
-    if (nivelPreco === 'LOW') {
+  const rawLevel = typeof priceInsights === 'string'
+    ? priceInsights
+    : (priceInsights && typeof priceInsights === 'object'
+        ? (priceInsights.price_level || priceInsights.priceLevel)
+        : null);
+
+  if (rawLevel && typeof rawLevel === 'string') {
+    const limpo = rawLevel.trim().toUpperCase();
+    if (limpo === 'LOW') {
+      nivelPreco = 'LOW';
       termometro = '🟢 Super Barato (Promoção!)';
-    } else if (nivelPreco === 'HIGH') {
+    } else if (limpo === 'HIGH') {
+      nivelPreco = 'HIGH';
       termometro = '🔴 Caro (Acima da média)';
+    } else if (limpo === 'TYPICAL' || limpo === 'NORMAL') {
+      nivelPreco = 'TYPICAL';
+      termometro = '⚪ Preço Normal / Típico';
     } else {
+      nivelPreco = limpo;
       termometro = '⚪ Preço Normal / Típico';
     }
   }

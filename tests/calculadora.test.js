@@ -435,6 +435,46 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(resAlternativo.layoversValidos[0].minutos, 600);
     assert.match(resAlternativo.dicaStopover, /conexão longa de 10h em PTY/);
   });
+
+  it('deve lidar defensivamente com casos de borda e variações de formato em avaliarTermometro', () => {
+    // 1. Normalização case-insensitive e limpeza de espaços
+    const caseLow = avaliarTermometro({ price_level: '  low  ' });
+    assert.strictEqual(caseLow.nivelPreco, 'LOW');
+    assert.match(caseLow.termometro, /Super Barato/);
+
+    const caseHigh = avaliarTermometro({ price_level: 'high' });
+    assert.strictEqual(caseHigh.nivelPreco, 'HIGH');
+    assert.match(caseHigh.termometro, /Caro/);
+
+    const caseTypical = avaliarTermometro({ price_level: ' typical ' });
+    assert.strictEqual(caseTypical.nivelPreco, 'TYPICAL');
+    assert.match(caseTypical.termometro, /Preço Normal \/ Típico/);
+
+    // 2. Suporte a chave alternativa camelCase (priceLevel) e string direta
+    const camelLow = avaliarTermometro({ priceLevel: 'low' });
+    assert.strictEqual(camelLow.nivelPreco, 'LOW');
+    assert.match(camelLow.termometro, /Super Barato/);
+
+    const stringDireta = avaliarTermometro('HIGH');
+    assert.strictEqual(stringDireta.nivelPreco, 'HIGH');
+    assert.match(stringDireta.termometro, /Caro/);
+
+    // 3. Casos de borda adversariais: nulo, indefinido, primitivos e objetos sem chave válida
+    const nulo = avaliarTermometro(null);
+    assert.deepStrictEqual(nulo, { nivelPreco: 'NORMAL', termometro: '⚪ Preço Normal' });
+
+    const indef = avaliarTermometro(undefined);
+    assert.deepStrictEqual(indef, { nivelPreco: 'NORMAL', termometro: '⚪ Preço Normal' });
+
+    const numero = avaliarTermometro(9999);
+    assert.deepStrictEqual(numero, { nivelPreco: 'NORMAL', termometro: '⚪ Preço Normal' });
+
+    const objVazio = avaliarTermometro({});
+    assert.deepStrictEqual(objVazio, { nivelPreco: 'NORMAL', termometro: '⚪ Preço Normal' });
+
+    const nivelCorrompido = avaliarTermometro({ price_level: 12345 });
+    assert.deepStrictEqual(nivelCorrompido, { nivelPreco: 'NORMAL', termometro: '⚪ Preço Normal' });
+  });
 });
 
 

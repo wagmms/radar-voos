@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.4] - 2026-10-13 — Blindagem Adversarial de avaliarTermometro (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Termômetro de Tarifas do Google Flights)
+- `src/domain/calculadora.js` · `avaliarTermometro`:
+  - Corrigido bug de case-sensitivity onde níveis de preço em minúsculas retornados pelo Google Flights / SerpAPI (ex: `'low'`, `'high'`) caíam incorretamente no `else` e eram classificados como "Preço Normal / Típico", perdendo sinalização de tarifas super baratas e caras.
+  - Adicionado suporte a propriedades camelCase (`priceLevel`), strings diretas de nível (ex: `'LOW'`, `'HIGH'`) e sanitização de espaços com `trim().toUpperCase()`.
+  - Blindagem adversarial contra entradas nulas, indefinidas, tipos primitivos numéricos e objetos mal formatados com degradação graciosa para `NORMAL`.
+- `tests/calculadora.test.js`:
+  - Adicionado caso de teste adversarial com validação de case-insensitivity, propriedades alternativas (camelCase / string direta) e resiliência a entradas nulas/corrompidas.
+  - Suite total: **346/346 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.3] - 2026-10-13 — Blindagem Adversarial de analisarLayoversEStopover (Domínio / Calculadora)
 
 ### 🛡️ Correção Defensiva & Robustez (Módulo de Conexões e Stopover)
