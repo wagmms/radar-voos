@@ -156,6 +156,41 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.deepStrictEqual(detectarBugFareEstatistico({ preco: 'gratis' }), { ehBugFare: false });
   });
 
+  it('deve blindar detectarBugFareEstatistico contra formatos de moeda brasileira e separadores de milhar', () => {
+    // 1. Preço formatado com prefixo monetário R$, ponto de milhar e centavos
+    const bugMoedaBrl = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: 'R$ 1.450,00',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugMoedaBrl.ehBugFare, true);
+    assert.strictEqual(bugMoedaBrl.severidade, 'CRITICA');
+
+    // 2. Anomalia estatística (Z-score) com precoMedioHistorico e desvioPadrao formatados como moeda
+    const bugZScoreMoeda = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: 'R$ 1.850',
+      precoMedioHistorico: 'R$ 4.200,00',
+      desvioPadrao: 'R$ 800',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugZScoreMoeda.ehBugFare, true);
+    assert.strictEqual(bugZScoreMoeda.severidade, 'ALTA');
+
+    // 3. Queda percentual extrema com precoMedioHistorico e ponto de milhar
+    const bugQuedaExtrema = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: '1.200',
+      precoMedioHistorico: 'R$ 3.000',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugQuedaExtrema.ehBugFare, true);
+    assert.strictEqual(bugQuedaExtrema.descontoEstimadoPct >= 50, true);
+  });
+
   it('deve blindar detectarBugFareEstatistico contra cabine nula, não-string, case mismatch e aliases', () => {
     // 1. cabine: null ou tipo inesperado não deve lançar TypeError (.toUpperCase) e assume economy
     const resCabineNull = detectarBugFareEstatistico({

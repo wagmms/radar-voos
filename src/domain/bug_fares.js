@@ -1,5 +1,6 @@
 import { TERMOS_BUG_FARE, TERMOS_MARKETING_BANIDOS } from './dicionarios.js';
 import { ehSoIda, resolverDestino } from './rotas.js';
+import { parsePreco } from './calculadora.js';
 
 /**
  * Classifica um item do feed RSS como Bug Fare autêntico, promoção comercial ou lixo de marketing
@@ -197,7 +198,7 @@ export function detectarBugFareEstatistico(params = {}) {
     dataVolta = null
   } = params;
 
-  const precoNum = typeof preco === 'number' ? preco : Number(preco);
+  const precoNum = typeof preco === 'number' ? preco : parsePreco(preco);
   // Filtro de ruído: valores inferiores a R$ 40 geralmente são taxas isoladas ou erros de parsing de centavos
   if (!Number.isFinite(precoNum) || precoNum < 40) return { ehBugFare: false };
 
@@ -246,8 +247,12 @@ export function detectarBugFareEstatistico(params = {}) {
     }
   }
 
-  const numMedio = precoMedioHistorico !== null && precoMedioHistorico !== undefined ? Number(precoMedioHistorico) : null;
-  const numDesvio = desvioPadrao !== null && desvioPadrao !== undefined ? Number(desvioPadrao) : null;
+  const numMedio = typeof precoMedioHistorico === 'number'
+    ? precoMedioHistorico
+    : (precoMedioHistorico !== null && precoMedioHistorico !== undefined ? parsePreco(precoMedioHistorico) : null);
+  const numDesvio = typeof desvioPadrao === 'number'
+    ? desvioPadrao
+    : (desvioPadrao !== null && desvioPadrao !== undefined ? parsePreco(desvioPadrao) : null);
 
   // 2. Anomalia estatística baseada em Z-Score (quando há desvio padrão amostral robusto)
   if (Number.isFinite(numMedio) && numMedio > 0 && Number.isFinite(numDesvio) && numDesvio >= 50) {

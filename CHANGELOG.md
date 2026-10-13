@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.18] - 2026-10-13 — Blindagem Adversarial em detectarBugFareEstatistico contra Formatos Monetários e Milhar (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`detectarBugFareEstatistico`):
+  - Corrigido descarte silencioso de tarifas de Bug Fare e anomalias de Z-Score quando `preco`, `precoMedioHistorico` ou `desvioPadrao` eram fornecidos em formatos monetários comuns (ex: `"R$ 1.450,00"`, `"1.450"`, `"R$ 4.200,00"`, `"R$ 800"`). A conversão ingênua `Number(preco)` resultava em `NaN` ou interpretava `"1.450"` como float `1.45`, acionando indevidamente o filtro de descarte de ruído (< R$ 40).
+  - Integrado parsing resiliente com `parsePreco` de `src/domain/calculadora.js` para normalização precisa de strings de preço, média histórica e desvio padrão.
+- **`tests/bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo formatos monetários brasileiros (`R$ 1.450,00`), cálculo de Z-Score com média e desvio monetários e queda percentual extrema com pontos de milhar.
+
 ## [v2.18.17] - 2026-10-13 — Blindagem Adversarial em classificarDeltaPreco contra Moedas em Desvio Padrão (Domínio Calculadora)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
