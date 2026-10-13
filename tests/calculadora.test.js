@@ -68,4 +68,29 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     const resCurto = analisarLayoversEStopover(vooCurto);
     assert.strictEqual(resCurto.dicaStopover, '-');
   });
+
+  it('deve lidar defensivamente com entradas nulas, indefinidas e layovers corrompidos', () => {
+    // 1. Entradas nulas e indefinidas
+    const resNulo = analisarLayoversEStopover(null);
+    assert.deepStrictEqual(resNulo.layoversValidos, []);
+    assert.strictEqual(resNulo.dicaStopover, '-');
+
+    const resUndefined = analisarLayoversEStopover(undefined);
+    assert.deepStrictEqual(resUndefined.layoversValidos, []);
+    assert.strictEqual(resUndefined.dicaStopover, '-');
+
+    // 2. Elementos corrompidos, duração zerada ou negativa
+    const resCorrompido = analisarLayoversEStopover({
+      layovers: [null, undefined, {}, { id: 'MAD', duration: 0 }, { duration: -30 }, { duration: 'abc' }]
+    });
+    assert.deepStrictEqual(resCorrompido.layoversValidos, []);
+    assert.strictEqual(resCorrompido.dicaStopover, '-');
+
+    // 3. String numérica válida com conexão >= 8h
+    const resStringValida = analisarLayoversEStopover({
+      layovers: [{ id: 'PTY', name: 'Tocumen', duration: '540', overnight: false }]
+    });
+    assert.strictEqual(resStringValida.layoversValidos.length, 1);
+    assert.match(resStringValida.dicaStopover, /9h em PTY/);
+  });
 });

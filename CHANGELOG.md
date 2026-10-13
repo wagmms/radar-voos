@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.4] - 2026-10-13 — QA & Blindagem Defensiva em `analisarLayoversEStopover`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `analisarLayoversEStopover`:
+  - Proteção estrita contra entradas `null`, `undefined` e não-objeto, eliminando riscos de `TypeError` não tratado (`voo.layovers`).
+  - Higienização e descarte de layovers nulos ou corrompidos (`duration <= 0`, NaN, itens indefinidos ou não-objeto).
+  - Coerção resiliente para strings numéricas em durações de conexões longas/Stopover.
+- `tests/calculadora.test.js`:
+  - Novos casos de teste de borda cobrindo payloads corrompidos, nulos e strings numéricas válidas (205/205 testes passando).
+
+---
+
 ## [v2.9.3] - 2026-10-13 — Alertas de Nova Queda no Mesmo Dia & Deduplicação Inteligente
 
 ### ✅ Entregue

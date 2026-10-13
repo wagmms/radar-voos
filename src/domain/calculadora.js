@@ -136,15 +136,19 @@ export function avaliarTermometro(priceInsights) {
  * Identifica oportunidades de conexão longa / Stopover (2 destinos em 1 viagem)
  */
 export function analisarLayoversEStopover(voo) {
-  const layovers = Array.isArray(voo.layovers) ? voo.layovers : [];
+  const layovers = (voo && typeof voo === 'object' && Array.isArray(voo.layovers)) ? voo.layovers : [];
   const layoversValidos = layovers
-    .map(l => ({
-      aeroporto: (l && l.id) ? l.id : 'N/A',
-      nome: (l && l.name) ? l.name : 'Aeroporto não informado',
-      minutos: Number(l && l.duration),
-      overnight: Boolean(l && l.overnight)
-    }))
-    .filter(l => Number.isFinite(l.minutos));
+    .filter(l => l && typeof l === 'object')
+    .map(l => {
+      const dur = typeof l.duration === 'number' ? l.duration : parseFloat(l.duration);
+      return {
+        aeroporto: (l.id && typeof l.id === 'string') ? l.id.trim() : 'N/A',
+        nome: (l.name && typeof l.name === 'string') ? l.name.trim() : 'Aeroporto não informado',
+        minutos: dur,
+        overnight: Boolean(l.overnight)
+      };
+    })
+    .filter(l => Number.isFinite(l.minutos) && l.minutos > 0);
 
   let dicaStopover = '-';
   if (layoversValidos.length > 0) {
