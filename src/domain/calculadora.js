@@ -600,11 +600,12 @@ export function classificarDeltaPreco(params = {}) {
     dp = dpRaw;
   } else if (typeof dpRaw === 'string') {
     const sClean = dpRaw.trim();
-    if (/^-?\d/.test(sClean)) {
-      dp = parsePreco(sClean);
-      if (sClean.startsWith('-')) dp = -dp;
-    } else {
+    if (!/\d/.test(sClean)) {
       dp = NaN;
+    } else if (sClean.startsWith('-') || /-\s*(?:R\$|BRL|\$|\d)/i.test(sClean)) {
+      dp = -1;
+    } else {
+      dp = parsePreco(sClean);
     }
   } else {
     dp = parseFloat(dpRaw);

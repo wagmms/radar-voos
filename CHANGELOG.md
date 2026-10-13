@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.17] - 2026-10-13 — Blindagem Adversarial em classificarDeltaPreco contra Moedas em Desvio Padrão (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`classificarDeltaPreco`):
+  - Corrigido comportamento anômalo onde `desvioPadrao` passado como string formatada com símbolo ou código monetário (ex: `"R$ 500"`, `"BRL 500"`, `"$ 500"`) falhava na asserção `/^-?\d/`, resultando indevidamente em `NaN` e `desvioPadrao: null`. Esse descarte silencioso rebaixava anomalias estatísticas severas (`BUG_FARE`, Z-Score <= -2.5) para meras `OPORTUNIDADE` ou `INFO`.
+  - Implementada validação defensiva que rejeita strings sem dígitos (`!/\d/.test`), descarta valores explicitamente negativos (inclusive com moeda, ex: `"-R$ 80"`) e processa strings com símbolos monetários de forma resiliente via `parsePreco`.
+- **`tests/calculadora.test.js`**:
+  - Adicionados casos de teste de borda adversariais (Casos 8, 9 e 10) cobrindo prefixos monetários em `desvioPadrao`, desvio com moeda negativo e strings em branco.
+
 ## [v2.18.16] - 2026-10-13 — Blindagem Adversarial em parsePreco contra Tipos Espúrios (Domínio Calculadora)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

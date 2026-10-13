@@ -266,6 +266,20 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(formatoPontoMilhar.categoria, 'OPORTUNIDADE');
     assert.strictEqual(formatoPontoMilhar.quedaPct, 50);
     assert.strictEqual(formatoPontoMilhar.zScore, null);
+
+    // Caso 8 (Adversarial): desvioPadrao formatado com prefixo monetário ('R$ 500' ou 'BRL 500') não deve ser descartado
+    const desvioComMoeda = classificarDeltaPreco({ preco: 'R$ 2.600', media: 'R$ 4.000', desvioPadrao: 'R$ 500' });
+    assert.strictEqual(desvioComMoeda.categoria, 'BUG_FARE');
+    assert.strictEqual(desvioComMoeda.zScore, -2.8);
+    assert.strictEqual(desvioComMoeda.desvioPadrao, 500);
+
+    // Caso 9 (Adversarial): desvioPadrao negativo com moeda ('-R$ 80') deve ser descartado defensivamente como null
+    const desvioNegativoMoeda = classificarDeltaPreco({ preco: 500, media: 1000, desvioPadrao: '-R$ 80' });
+    assert.strictEqual(desvioNegativoMoeda.desvioPadrao, null);
+
+    // Caso 10 (Adversarial): desvioPadrao com espaços em branco ('   ') não lança erro e resulta em null
+    const desvioEspacos = classificarDeltaPreco({ preco: 500, media: 1000, desvioPadrao: '   ' });
+    assert.strictEqual(desvioEspacos.desvioPadrao, null);
   });
 
   it('deve converter valores entre moedas com precisão e fallback defensivo', () => {
