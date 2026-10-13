@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.37] - 2026-10-13 — Blindagem Adversarial em extrairDiasEstadia contra Datas de Calendário e Prefixos Textuais (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`extrairDiasEstadia`):
+  - Corrigida anomalia crítica onde datas absolutas de calendário (como `'2026-11-20'` ou `'20/11/2026'`) passadas no campo de estadia tinham seu ano (`2026`) ou dia (`20`) indevidamente capturados como quantidade de dias de estadia, agora retornando defensivamente o valor padrão seguro (`padraoValido`).
+  - Suporte resiliente a prefixos descritivos e aproximados de estadia (ex: `'~14 dias'`, `'aprox. 12 dias'`, `'estadia de 7 dias'`, `'cerca de 15 dias'`), garantindo extração robusta da contagem correta.
+  - Rejeição defensiva imediata de strings negativas (`'-10 dias'`) e sanitização de strings mal formatadas.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo: datas absolutas ISO/BR/timestamp, prefixos aproximados e strings mal formatadas ou negativas.
+
 ## [v2.18.36] - 2026-10-13 — Blindagem Adversarial em gerarCombinacoesFlexibilidade contra Datas Nulas/Inválidas e Deltas Fantasmas (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

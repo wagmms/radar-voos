@@ -176,7 +176,18 @@ export function extrairDiasEstadia(valor, padrao = 10) {
   }
 
   const str = String(valor).trim();
-  const match = str.match(/^(\d+)/);
+  if (!str) return padraoValido;
+
+  // Rejeita valores negativos em formato textual (ex: "-10", "-5 dias")
+  if (/^\s*-/.test(str)) return padraoValido;
+
+  // Se for uma data absoluta de calendário (YYYY-MM-DD ou DD/MM/YYYY), não representa quantidade de dias
+  if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}/.test(str) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}/.test(str)) {
+    return padraoValido;
+  }
+
+  // Extrai o número de dias (suporta início direto como "14 dias" ou prefixos como "~14 dias", "aprox. 14 dias", "estadia de 14 dias")
+  const match = str.match(/^(?:[~≈\s]|aprox\.?|cerca\s+de|estadia(?:\s+de)?)*(\d+)/i) || str.match(/(?:^|[~≈\s])(\d+)\s*(?:dias?|d|\(dias?\)|noites?|n)\b/i);
   if (match) {
     const n = parseInt(match[1], 10);
     if (n > 0 && Number.isFinite(n)) {

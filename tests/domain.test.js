@@ -153,6 +153,23 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(extrairDiasEstadia(0, 14), 14);
   });
 
+  it('extrairDiasEstadia: deve rejeitar datas absolutas de calendário e suportar prefixos aproximados', () => {
+    // 1. Datas absolutas (ISO ou formato BR) não devem vazar como anos astronômicos ou dias do mês
+    assert.strictEqual(extrairDiasEstadia('2026-11-20', 10), 10);
+    assert.strictEqual(extrairDiasEstadia('2026-11-20T00:00:00Z', 10), 10);
+    assert.strictEqual(extrairDiasEstadia('20/11/2026', 10), 10);
+
+    // 2. Prefixos descritivos e aproximados (~, aprox, cerca de, estadia de)
+    assert.strictEqual(extrairDiasEstadia('~14 dias', 10), 14);
+    assert.strictEqual(extrairDiasEstadia('aprox. 12 dias', 10), 12);
+    assert.strictEqual(extrairDiasEstadia('estadia de 7 dias', 10), 7);
+    assert.strictEqual(extrairDiasEstadia('cerca de 15 dias', 10), 15);
+
+    // 3. Strings mal formatadas ou negativas devem retornar padrão seguro
+    assert.strictEqual(extrairDiasEstadia('-5 dias', 10), 10);
+    assert.strictEqual(extrairDiasEstadia('---', 10), 10);
+  });
+
   it('deve calcular data de volta com número de dias de estadia e sufixos de texto', () => {
     assert.strictEqual(calcularDataVolta('2026-11-10', '14'), '2026-11-24');
     assert.strictEqual(calcularDataVolta('2026-11-10', '10 dias'), '2026-11-20');
