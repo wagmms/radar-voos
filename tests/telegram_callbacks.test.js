@@ -184,4 +184,106 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
       notifierTelegram.responderCallbackQuery = backupCb;
     }
   });
+
+  it('enviarAlertaBugFare: deve incluir botão inline "🧳 Ver Regras de Bagagem" quando IATAs da rota estão presentes', async () => {
+    let botoesEnviados = null;
+    let mensagemEnviada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto, link, btnTexto, isSilent, inlineKeyboard) => {
+      mensagemEnviada = texto;
+      botoesEnviados = inlineKeyboard;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaBugFare({
+        titulo: '🚨 BUG FARE: São Paulo ➔ Paris (CDG) por R$ 890!',
+        link: 'https://google.com/flights',
+        tipo: '🚨 BUG FARE ESTRUTURAL',
+        aeroporto_chegada: 'CDG - Aeroporto Charles de Gaulle',
+        pais_destino: 'França',
+        periodo_texto: '10 dez a 24 dez (14 dias)',
+        preco: 890,
+        motivo: 'Tarifa anômala confirmada por Z-Score',
+        iata_origem: 'GRU',
+        iata_destino: 'CDG'
+      });
+
+      // Card deve conter o texto de Bug Fare
+      assert.ok(mensagemEnviada);
+      assert.ok(mensagemEnviada.includes('BUG FARE ESTRUTURAL'));
+      assert.ok(mensagemEnviada.includes('Paris'));
+
+      // Deve haver inline keyboard com 2 linhas
+      assert.ok(botoesEnviados, 'Inline keyboard deve estar presente');
+      assert.equal(botoesEnviados.length, 2, 'Deve ter 2 linhas no teclado inline');
+
+      // Linha 0: botão principal do Google Flights
+      const botaoFlights = botoesEnviados[0][0];
+      assert.equal(botaoFlights.text, '⚡ Ver no Google Flights');
+      assert.ok(botaoFlights.url.includes('google.com'), 'URL principal deve ser Google');
+
+      // Linha 1: botão de bagagem com IATAs da rota
+      const botaoBagagem = botoesEnviados[1][0];
+      assert.equal(botaoBagagem.text, '🧳 Ver Regras de Bagagem');
+      assert.ok(botaoBagagem.url.includes('GRU'), 'URL de bagagem deve conter IATA de origem');
+      assert.ok(botaoBagagem.url.includes('CDG'), 'URL de bagagem deve conter IATA de destino');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('enviarAlertaBugFare: não deve incluir botão de bagagem quando IATAs não estão disponíveis (degradação graciosa)', async () => {
+    let botoesEnviados = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto, link, btnTexto, isSilent, inlineKeyboard) => {
+      botoesEnviados = inlineKeyboard;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaBugFare({
+        titulo: '🚨 BUG FARE: São Paulo ➔ Buenos Aires por R$ 490!',
+        link: 'https://google.com/flights',
+        tipo: '🚨 BUG FARE',
+        preco: 490,
+        // iata_origem e iata_destino ausentes — simula card antigo sem os campos
+      });
+
+      // Deve ter apenas 1 linha de botão (somente o principal, sem bagagem)
+      assert.ok(botoesEnviados, 'Inline keyboard deve estar presente com link');
+      assert.equal(botoesEnviados.length, 1, 'Deve ter apenas 1 linha sem IATAs');
+      assert.equal(botoesEnviados[0][0].text, '⚡ Ver no Google Flights');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('enviarAlertaBugFare: compatibilidade retroativa com chamada via string simples — link incluído no botão inline', async () => {
+    let inlineRecebido = null;
+    let mensagemRecebida = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto, link, btnTexto, isSilent, inlineKeyboard) => {
+      mensagemRecebida = texto;
+      inlineRecebido = inlineKeyboard;
+      return { ok: true };
+    };
+
+    try {
+      // Chamada no formato legado: string + link avulso
+      await notifierTelegram.enviarAlertaBugFare(
+        'Tarifa Absurda para Roma!',
+        'https://google.com/flights/roma'
+      );
+
+      // Com URL presente, o botão principal é incorporado no inline keyboard (1 linha, sem bagagem)
+      assert.ok(mensagemRecebida, 'Mensagem deve ser enviada');
+      assert.ok(inlineRecebido, 'Inline keyboard deve estar presente');
+      assert.equal(inlineRecebido.length, 1, 'Deve ter 1 linha com botão principal');
+      assert.equal(inlineRecebido[0][0].text, '⚡ Ver no Google Flights');
+      assert.equal(inlineRecebido[0][0].url, 'https://google.com/flights/roma', 'URL do botão deve ser o link passado');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
 });

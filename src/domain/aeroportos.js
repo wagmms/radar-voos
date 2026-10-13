@@ -357,6 +357,8 @@ export function montarCardBugFare({
     cidade_destino: destinoInfo.cidade,
     data_ida: dataIda,
     data_volta: voltaEfetiva,
-    periodo_texto: periodoTexto
+    periodo_texto: periodoTexto,
+    iata_origem: origemLink,
+    iata_destino: destinoLink
   };
 }

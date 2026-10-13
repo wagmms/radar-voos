@@ -204,6 +204,8 @@ class NotifierTelegram {
     let periodo = null;
     let preco = null;
     let motivo = null;
+    let iataOrigem = null;
+    let iataDestino = null;
 
     if (typeof tituloOuObjeto === 'object' && tituloOuObjeto !== null) {
       titulo = tituloOuObjeto.titulo;
@@ -214,6 +216,8 @@ class NotifierTelegram {
       periodo = tituloOuObjeto.periodo_texto;
       preco = tituloOuObjeto.preco;
       motivo = tituloOuObjeto.motivo;
+      iataOrigem = tituloOuObjeto.iata_origem || null;
+      iataDestino = tituloOuObjeto.iata_destino || null;
     }
 
     let msg = `<b>${escapeHtml(tipoBug)}</b>\n\n`;
@@ -228,6 +232,24 @@ class NotifierTelegram {
     }
 
     msg += `⚡ <i>ATENÇÃO: Erros de tarifa esgotam em questão de minutos! Verifique a disponibilidade imediatamente no Google Flights.</i>`;
+
+    // Monta o inline keyboard com botão principal e, se disponível, atalho de regras de bagagem
+    const inlineKeyboard = [];
+
+    // Linha 1: botão principal de compra
+    if (urlLink) {
+      inlineKeyboard.push([{ text: '⚡ Ver no Google Flights', url: urlLink }]);
+    }
+
+    // Linha 2: botão de regras de bagagem (apenas quando IATAs da rota estão disponíveis)
+    if (iataOrigem && iataDestino) {
+      const urlBagagem = `https://www.google.com/travel/flights/search?tfs=CBwQAhooagcIARIDGRUdSBNaG5BMACIAKAASAhAAOgAMAVAAWAAYAQ%3D%3D&hl=pt-BR#flt=${encodeURIComponent(iataOrigem)}.${encodeURIComponent(iataDestino)}.;c:BRL;e:1;s:0*1;sd:1`;
+      inlineKeyboard.push([{ text: '🧳 Ver Regras de Bagagem', url: urlBagagem }]);
+    }
+
+    if (inlineKeyboard.length > 0) {
+      return this.enviarMensagem(msg, null, '', false, inlineKeyboard);
+    }
 
     return this.enviarMensagem(msg, urlLink, '⚡ Ver no Google Flights');
   }
