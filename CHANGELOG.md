@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.28] - 2026-10-13 — Blindagem Adversarial em classificarItemFeed contra Falsos Negativos em Bug Fares com Desconto/Cabine e Megapromoções (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`classificarItemFeed`):
+  - Corrigido falso negativo crítico onde Bug Fares reais que continham termos descritivos de voo e economia (`"desconto"`, `"off"`, `"executiva"`, `"business"`) eram sumariamente descartados pelo filtro de marketing antes do reconhecimento de erro de tarifa.
+  - Implementada segregação defensiva entre termos de produtos não-aéreos banidos (`hotel`, `resort`, `pacote`, `cruzeiro`, `milhas`, `carro`, `seguro`) e termos descritivos de tarifas, preservando a prioridade máxima para erros de tarifa autênticos de aviação.
+  - Corrigido conflito estrutural que impedia o reconhecimento de megapromoções com `"super desconto"` devido ao bloqueio prévio pela palavra genérica `"desconto"`.
+  - Tratadas entradas nulas, indefinidas ou com strings em branco com retorno gracioso de descarte sem exceções.
+- **`tests/bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo Bug Fares legítimos com menção a desconto/cabine executiva, persistência de descarte para produtos não-aéreos (hotel/resort) mesmo que aleguem erro de tarifa, reconhecimento de megapromoção com "super desconto" e resiliência com entradas nulas/vazias.
+
 ## [v2.18.27] - 2026-10-13 — Blindagem Adversarial em extrairInfoTarifaEspecial contra Links Não-String, Preços Monetários e Tipos Anômalos (PWA Cockpit)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

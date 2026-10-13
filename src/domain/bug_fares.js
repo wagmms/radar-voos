@@ -6,15 +6,35 @@ import { parsePreco } from './calculadora.js';
  * Classifica um item do feed RSS como Bug Fare autêntico, promoção comercial ou lixo de marketing
  */
 export function classificarItemFeed(titulo, link) {
-  const tituloLower = String(titulo || '').toLowerCase();
-  const linkLower = String(link || '').toLowerCase();
+  const tituloLower = String(titulo || '').toLowerCase().trim();
+  const linkLower = String(link || '').toLowerCase().trim();
 
-  // 1. Filtro implacável contra lixo de marketing, pacotes, hotéis, cupons e afiliados
-  const ehMarketing = TERMOS_MARKETING_BANIDOS.some(
+  if (!tituloLower) {
+    return {
+      valido: false,
+      ehBugFare: false,
+      tipo: 'Descartado',
+      motivo: 'Título vazio ou ausente'
+    };
+  }
+
+  // 1. Detecta positivamente se o título anuncia erro de tarifa legítimo
+  const ehBugFare = TERMOS_BUG_FARE.some(t => tituloLower.includes(t));
+
+  // Produtos não-aéreos e serviços que JAMAIS devem ser anunciados, mesmo se alegarem "bug fare"
+  const TERMOS_PRODUTOS_BANIDOS = [
+    'pacote', 'pacotes', 'hotel', 'hotéis', 'hoteis', 'resort', 'resorts',
+    'pousada', 'pousadas', 'fazenda', 'cupom', 'cupons', 'seguro', 'seguro viagem',
+    'carro', 'aluguel', 'locação', 'rent a car', 'cartão', 'cartao', 'cartões', 'cartoes',
+    'milhas', 'pontos', 'pontuação', 'clube', 'livelo', 'esfera', 'smiles', 'latam pass', 'tudoazul',
+    'cruzeiro', 'navio', 'ingressos', 'disney'
+  ];
+
+  const contemProdutoBanido = TERMOS_PRODUTOS_BANIDOS.some(
     t => tituloLower.includes(t) || linkLower.includes(t)
   );
 
-  if (ehMarketing) {
+  if (contemProdutoBanido) {
     return {
       valido: false,
       ehBugFare: false,
@@ -22,14 +42,29 @@ export function classificarItemFeed(titulo, link) {
     };
   }
 
-  // 2. Filtro estrito: exige positivamente termos de erro de tarifa
-  const ehBugFare = TERMOS_BUG_FARE.some(t => tituloLower.includes(t));
-
+  // Se for erro de tarifa autêntico para passagens aéreas (mesmo que cite desconto, off ou executiva)
   if (ehBugFare) {
     return {
       valido: true,
       ehBugFare: true,
       tipo: '🚨 BUG FARE (ERRO DE TARIFA!)'
+    };
+  }
+
+  // 2. Filtro estrito de marketing comercial para posts que NÃO são Bug Fares
+  const ehMarketing = TERMOS_MARKETING_BANIDOS.some(t => {
+    // Permite "super desconto" sem que seja barrado pelo termo genérico "desconto"
+    if (t === 'desconto' && tituloLower.includes('super desconto')) {
+      return false;
+    }
+    return tituloLower.includes(t) || linkLower.includes(t);
+  });
+
+  if (ehMarketing) {
+    return {
+      valido: false,
+      ehBugFare: false,
+      motivo: 'Conteúdo de marketing ou publieditorial banido'
     };
   }
 

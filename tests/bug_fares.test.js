@@ -31,6 +31,30 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(bugFareIngles.ehBugFare, true);
   });
 
+  it('deve blindar classificarItemFeed contra falsos negativos em bug fares com desconto/executiva e permitir super desconto em megapromoções', () => {
+    // 1. Bug Fare real com termos de desconto ou cabine não deve ser descartado
+    const bugFareComDesconto = classificarItemFeed('URGENTE: Erro de tarifa para Roma com 70% de desconto em classe executiva!', 'https://exemplo.com/roma-bug');
+    assert.strictEqual(bugFareComDesconto.valido, true);
+    assert.strictEqual(bugFareComDesconto.ehBugFare, true);
+    assert.match(bugFareComDesconto.tipo, /BUG FARE/);
+
+    // 2. Produto não-aéreo (hotel/resort) continua sumariamente descartado mesmo se alegar erro de tarifa
+    const bugHotelComErro = classificarItemFeed('Erro de tarifa imperdível em resort e hotel em Cancun', 'https://exemplo.com/hotel-erro');
+    assert.strictEqual(bugHotelComErro.valido, false);
+    assert.strictEqual(bugHotelComErro.ehBugFare, false);
+
+    // 3. Megapromoção com "super desconto" deve ser reconhecida sem ser bloqueada pelo termo genérico "desconto"
+    const promoSuperDesconto = classificarItemFeed('Super desconto em passagens para Lisboa', 'https://exemplo.com/promo-lisboa');
+    assert.strictEqual(promoSuperDesconto.valido, true);
+    assert.strictEqual(promoSuperDesconto.ehBugFare, false);
+    assert.match(promoSuperDesconto.tipo, /MEGAPROMOÇÃO/);
+
+    // 4. Entradas nulas, indefinidas ou vazias tratadas defensivamente sem exceções
+    assert.strictEqual(classificarItemFeed(null, null).valido, false);
+    assert.strictEqual(classificarItemFeed('', '').valido, false);
+    assert.strictEqual(classificarItemFeed('   ', '   ').valido, false);
+  });
+
   it('deve identificar corretamente a região do destino para checagem de piso estrutural', () => {
     assert.strictEqual(identificarRegiaoDestino('LIS'), 'EUROPA');
     assert.strictEqual(identificarRegiaoDestino('CDG'), 'EUROPA');
