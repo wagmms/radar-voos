@@ -203,20 +203,21 @@ export function extrairInfoBagagem(texto) {
   }
 
   const str = String(texto);
+  const norm = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   let mao = 'desconhecido';
   let despachada = 'desconhecido';
 
   // Bagagem de mão
-  if (/sem\s+bagagem\s+de\s+mão|não\s+inclui\s+bagagem\s+de\s+mão|apenas\s+item\s+pessoal|item\s+pessoal\s+apenas|no\s+carry-on|personal\s+item\s+only/i.test(str)) {
+  if (/sem\s+(?:malas?|bagagem|bagagens)\s+de\s+mao|nao\s+inclui\s+(?:malas?|bagagem|bagagens)\s+de\s+mao|apenas\s+item\s+pessoal|item\s+pessoal\s+apenas|no\s+carry-?on|personal\s+item\s+only/i.test(norm)) {
     mao = 'nao_incluida';
-  } else if (/(?:inclui|com)\s+(?:1\s+)?(?:mala|bagagem)\s+de\s+mão|mala\s+de\s+mão\s+incluída|bagagem\s+de\s+mão\s+incluída|carry-on\s+(?:bag\s+)?included/i.test(str)) {
+  } else if (/(?:inclui|com)\s+(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+de\s+mao|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+de\s+mao\s+incluidas?|carry-?on\s+(?:bags?\s+)?included/i.test(norm)) {
     mao = 'incluida';
   }
 
   // Bagagem despachada
-  if (/(?:inclui|com)\s+(?:1\s+)?(?:mala|bagagem)\s+despachada|bagagem\s+despachada\s+incluída|checked\s+bag\s+included/i.test(str)) {
+  if (/(?:inclui|com)\s+(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+incluidas?|checked\s+bags?\s+included/i.test(norm)) {
     despachada = 'incluida';
-  } else if (/sem\s+bagagem\s+despachada|bagagem\s+despachada\s+não\s+incluída|bagagem\s+despachada\s+por\s+uma\s+taxa|bagagem\s+despachada\s+paga|checked\s+bag\s+for\s+a\s+fee|no\s+checked\s+bag/i.test(str)) {
+  } else if (/sem\s+(?:malas?|bagagem|bagagens)\s+despachadas?|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+nao\s+incluidas?|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+por\s+uma\s+taxa|(?:\d+\s+)?(?:malas?|bagagem|bagagens)\s+despachadas?\s+pagas?|checked\s+bags?\s+for\s+a\s+fee|no\s+checked\s+bags?/i.test(norm)) {
     despachada = 'paga';
   }
 

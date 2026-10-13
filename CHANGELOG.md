@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.41] - 2026-10-13 — Blindagem Adversarial em extrairInfoBagagem contra Textos sem Acento e Suporte a Plurais/Múltiplos (Provedor Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`extrairInfoBagagem`):
+  - Normalização prévia de texto via NFD (`normalize('NFD').replace(/[\u0300-\u036f]/g, '')`), eliminando falhas de extração causadas por strip accents ou strings sem acento (`mão`/`mao`, `não`/`nao`, `incluída`/`incluida`).
+  - Suporte completo a plurais e quantificadores numéricos (`malas?`, `bagagem|bagagens`, `despachadas?`, `incluidas?`, `(?:\d+\s+)?`) tanto para bagagem de mão quanto para bagagem despachada.
+  - Preservada degradação graciosa para entradas vazias, nulas, indefinidas ou numéricas sem menção de regras de bagagem.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) strings sem acentos ("sem bagagem de mao", "2 malas despachadas incluidas"), (2) plurais e múltiplos ("Inclui 2 malas despachadas", "Inclui 2 malas de mao", "Bagagens despachadas pagas"), e (3) degradação graciosa para nulos, números e strings vazias.
+
 ## [v2.18.40] - 2026-10-13 — Blindagem Adversarial em identificarRegiaoDestino contra Objetos Estruturados e Expansão Semântica (Domínio Bug Fares)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

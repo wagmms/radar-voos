@@ -14,7 +14,8 @@ import {
   extrairPrecoNumerico,
   converterDuracaoParaHoras,
   limparNomeCompanhia,
-  extrairInfoConexoes
+  extrairInfoConexoes,
+  extrairInfoBagagem
 } from '../src/services/providers/google_flights_direct_provider.js';
 
 import {
@@ -276,6 +277,40 @@ describe('QA Adversarial: extrairInfoConexoes — casos de borda e negação de 
     const res = extrairInfoConexoes('Voo indireto pela KLM');
     assert.equal(res.escalas, 1);
     assert.equal(res.detalhesEscalas, '1 parada');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('QA Adversarial: extrairInfoBagagem — casos de borda e acentuação', () => {
+  it('deve extrair regras sem acento (strip accents / fontes normalizadas)', () => {
+    const resMao = extrairInfoBagagem('sem bagagem de mao');
+    assert.equal(resMao.mao, 'nao_incluida');
+    assert.equal(resMao.texto, 'Apenas item pessoal (sem mala de mão)');
+
+    const resAmbos = extrairInfoBagagem('2 malas despachadas incluidas. Sem bagagem de mao.');
+    assert.equal(resAmbos.mao, 'nao_incluida');
+    assert.equal(resAmbos.despachada, 'incluida');
+    assert.equal(resAmbos.texto, 'Inclui bagagem despachada');
+  });
+
+  it('deve suportar plurais e múltiplos quantificadores numéricos ("2 malas despachadas", "malas de mão")', () => {
+    const res2Desp = extrairInfoBagagem('Inclui 2 malas despachadas');
+    assert.equal(res2Desp.despachada, 'incluida');
+    assert.equal(res2Desp.texto, 'Inclui bagagem despachada');
+
+    const res2Mao = extrairInfoBagagem('Inclui 2 malas de mao');
+    assert.equal(res2Mao.mao, 'incluida');
+    assert.equal(res2Mao.texto, 'Mala de mão incluída');
+
+    const resDespPagas = extrairInfoBagagem('Bagagens despachadas pagas');
+    assert.equal(resDespPagas.despachada, 'paga');
+  });
+
+  it('deve degradar graciosamente para entradas nulas, vazias, numéricas ou sem menção', () => {
+    assert.deepEqual(extrairInfoBagagem(null), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+    assert.deepEqual(extrairInfoBagagem(undefined), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+    assert.deepEqual(extrairInfoBagagem(''), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
+    assert.deepEqual(extrairInfoBagagem(12345), { mao: 'desconhecido', despachada: 'desconhecido', texto: null });
   });
 });
 
