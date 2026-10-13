@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.15] - 2026-10-13 — Blindagem Adversarial em parsePreco (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido comportamento anômalo onde valores monetários precedidos por prefixos contextuais ou rótulos (ex: `"A partir de R$ 1.250"`, `"Voo 123 por R$ 890"`, `"Preço: 1.500"`) resultavam indevidamente em `0` devido ao início alfabético que induzia `parseFloat` a retornar `NaN`.
+  - Implementada extração prioritária de blocos numéricos vinculados a moedas e eliminação cirúrgica de prefixos alfabéticos não numéricos.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes de borda adversariais validando extração precisa de preços quando precedidos por expressões contextuais e rótulos.
+
 ## [v2.18.14] - 2026-10-13 — Blindagem Adversarial em encodeVarint (Domínio Rotas / Protobuf)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

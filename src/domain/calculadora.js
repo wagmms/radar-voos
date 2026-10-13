@@ -143,8 +143,20 @@ export function parsePreco(valor) {
   if (valor === null || valor === undefined || typeof valor === 'symbol') return 0;
   let s = String(valor)
     .replace(/[\u00A0\u202F]/g, ' ')
-    .replace(/(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)/gi, '')
     .trim();
+  if (!s) return 0;
+
+  // Se contiver símbolo de moeda explícito, prioriza o bloco numérico adjacente à moeda
+  const regexMoeda = /(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)\s*(-?(?:\d|[.,]\d)[\d.,\s]*)/i;
+  const matchMoeda = s.match(regexMoeda);
+  if (matchMoeda) {
+    s = matchMoeda[1];
+  } else {
+    // Remove qualquer símbolo de moeda residual e prefixo textual que anteceda o primeiro dígito ou sinal
+    s = s.replace(/(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)/gi, '');
+    s = s.replace(/^[^\d-]+/, '');
+  }
+  s = s.trim();
   if (!s) return 0;
 
   // Normaliza espaços entre dígitos (ex: "1 500,50", "1 234 567")

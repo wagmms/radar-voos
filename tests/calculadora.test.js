@@ -68,6 +68,12 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco(Symbol('invalido')), 0);
   });
 
+  it('deve extrair preços com precisão quando precedidos por prefixos contextuais ou rótulos', () => {
+    assert.strictEqual(parsePreco('A partir de R$ 1.250'), 1250);
+    assert.strictEqual(parsePreco('Voo 123 por R$ 890'), 890);
+    assert.strictEqual(parsePreco('Preço: 1.500'), 1500);
+  });
+
   it('deve calcular variações percentuais e sinalizar quedas relâmpago', () => {
     // Queda de 20% (supera o gatilho de 15%)
     const resQueda = calcularVariacao(1600, 2000, 15);
