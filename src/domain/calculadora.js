@@ -484,9 +484,23 @@ export function classificarDeltaPreco(params = {}) {
   const mRaw = params && typeof params === 'object' ? params.media : undefined;
   const dpRaw = params && typeof params === 'object' ? params.desvioPadrao : undefined;
 
-  const p = typeof pRaw === 'number' ? pRaw : parseFloat(pRaw);
-  const m = typeof mRaw === 'number' ? mRaw : parseFloat(mRaw);
-  const dp = typeof dpRaw === 'number' ? dpRaw : parseFloat(dpRaw);
+  const p = typeof pRaw === 'number' ? pRaw : (typeof pRaw === 'string' ? parsePreco(pRaw) : parseFloat(pRaw));
+  const m = typeof mRaw === 'number' ? mRaw : (typeof mRaw === 'string' ? parsePreco(mRaw) : parseFloat(mRaw));
+
+  let dp = null;
+  if (typeof dpRaw === 'number') {
+    dp = dpRaw;
+  } else if (typeof dpRaw === 'string') {
+    const sClean = dpRaw.trim();
+    if (/^-?\d/.test(sClean)) {
+      dp = parsePreco(sClean);
+      if (sClean.startsWith('-')) dp = -dp;
+    } else {
+      dp = NaN;
+    }
+  } else {
+    dp = parseFloat(dpRaw);
+  }
 
   const mediaFinal = (Number.isFinite(m) && m > 0) ? m : null;
   const desvioFinal = (Number.isFinite(dp) && dp >= 0) ? dp : null;

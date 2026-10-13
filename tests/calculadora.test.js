@@ -228,6 +228,20 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
 
     const desvioNegativo = classificarDeltaPreco({ preco: 500, media: 1000, desvioPadrao: -80 });
     assert.strictEqual(desvioNegativo.desvioPadrao, null);
+
+    // Caso 6 (Adversarial): Suporte a formatos monetários com símbolos e separadores brasileiros ('R$ 2.600', '4.000,00')
+    const formatoMonetarioBugFare = classificarDeltaPreco({ preco: 'R$ 2.600', media: 'R$ 4.000', desvioPadrao: '500,00' });
+    assert.strictEqual(formatoMonetarioBugFare.categoria, 'BUG_FARE');
+    assert.strictEqual(formatoMonetarioBugFare.zScore, -2.8);
+    assert.strictEqual(formatoMonetarioBugFare.quedaPct, 35);
+    assert.strictEqual(formatoMonetarioBugFare.media, 4000);
+    assert.strictEqual(formatoMonetarioBugFare.desvioPadrao, 500);
+
+    // Caso 7 (Adversarial): Formato com ponto de milhar e prefixo BRL sem desvio padrão robusto
+    const formatoPontoMilhar = classificarDeltaPreco({ preco: 'BRL 1.500', media: '3.000', desvioPadrao: null });
+    assert.strictEqual(formatoPontoMilhar.categoria, 'OPORTUNIDADE');
+    assert.strictEqual(formatoPontoMilhar.quedaPct, 50);
+    assert.strictEqual(formatoPontoMilhar.zScore, null);
   });
 
   it('deve converter valores entre moedas com precisão e fallback defensivo', () => {

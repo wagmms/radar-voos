@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.2] - 2026-10-13 — Blindagem Adversarial de classificarDeltaPreco (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Preços e Estatísticas)
+- `src/domain/calculadora.js` · `classificarDeltaPreco`:
+  - Corrigido bug de parsing onde strings com símbolos monetários ou formatação brasileira (ex: `"R$ 2.600"`, `"4.000,00"`, `"BRL 1.500"`) retornavam `NaN` ou valores truncados pelo uso de `parseFloat` cru em vez de `parsePreco`.
+  - Blindagem adversarial do tratamento de desvio padrão em strings (`dpRaw`) contra valores corrompidos ou mal formatados, preservando sanitização rigorosa.
+- `tests/calculadora.test.js`:
+  - Adicionados casos de teste adversariais cobrindo strings monetárias formatadas em BRL, pontos de milhar e cálculo preciso de Z-Score e queda percentual.
+  - Suite total: **344/344 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.1] - 2026-10-13 — Blindagem Adversarial de parsearTempoMinutos (Cockpit PWA)
 
 ### 🛡️ Correção Defensiva & Robustez (Módulo de Badges de Conexão)
