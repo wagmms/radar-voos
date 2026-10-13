@@ -175,6 +175,30 @@ class NotifierTelegram {
       msg += `\n💡 <i>${escapeHtml(dicaStopover)}</i>\n`;
     }
 
+    // Mini-tabela de histórico recente — exibida somente quando há registros disponíveis
+    if (rotaId) {
+      try {
+        const historico = rotasRepo.obterHistoricoRecente(rotaId, 3);
+        if (Array.isArray(historico) && historico.length > 0) {
+          msg += `\n📈 <b>Histórico Recente:</b>\n`;
+          for (const entrada of historico) {
+            const dataFormatada = entrada.data_checagem
+              ? new Date(entrada.data_checagem).toLocaleDateString('pt-BR', {
+                  day: '2-digit', month: '2-digit', year: '2-digit', timeZone: 'America/Sao_Paulo'
+                })
+              : '—';
+            const precoFormatado = typeof entrada.preco === 'number' && entrada.preco > 0
+              ? `R$ ${entrada.preco.toFixed(0)}`
+              : '—';
+            const termometro = entrada.termometro ? ` ${escapeHtml(entrada.termometro)}` : '';
+            msg += `  • ${dataFormatada}: <b>${precoFormatado}</b>${termometro}\n`;
+          }
+        }
+      } catch (_) {
+        // Falha silenciosa — histórico é informação complementar, não bloqueia o alerta
+      }
+    }
+
     msg += `\n⚠️ <i>Tarifas dinâmicas sujeitas a alteração pelas companhias.</i>`;
 
     const inlineKeyboard = [

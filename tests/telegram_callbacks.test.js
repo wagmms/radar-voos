@@ -286,4 +286,114 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
       notifierTelegram.enviarMensagem = backupEnviar;
     }
   });
+
+  it('enviarAlertaOportunidade: deve incluir mini-tabela de histórico recente quando a rota tem registros de preço', async () => {
+    // Cria uma rota temporária e injeta 3 registros históricos no banco
+    const rota = rotasRepo.criar({
+      origem: 'Campinas',
+      destino: 'Buenos Aires',
+      data_ida: '2027-01-10',
+      data_volta: '2027-01-20',
+      preco_alvo: 2500
+    });
+
+    // Injeta histórico via rotasRepo.atualizarResultadoChecagem (atualiza preco_atual e grava historico)
+    rotasRepo.atualizarResultadoChecagem(rota.id, { preco: 2100, termometro: '🟡 Médio' });
+    rotasRepo.atualizarResultadoChecagem(rota.id, { preco: 1980, termometro: '🟢 Baixo' });
+    rotasRepo.atualizarResultadoChecagem(rota.id, { preco: 1850, termometro: '🟢 Mínimo' });
+
+    let mensagemEnviada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      mensagemEnviada = texto;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: rota.id,
+        origem: 'Campinas',
+        destinoReal: 'Buenos Aires',
+        dataIda: '10/01/2027',
+        dataVolta: '20/01/2027',
+        preco: 1850,
+        duracaoHoras: 3.5,
+        detalhes: 'Voo direto Azul',
+        link: 'https://google.com/flights'
+      });
+
+      assert.ok(mensagemEnviada, 'Mensagem deve ser enviada');
+      assert.ok(mensagemEnviada.includes('Histórico Recente'), 'Deve conter seção de histórico');
+      assert.ok(mensagemEnviada.includes('R$ 2100') || mensagemEnviada.includes('R$ 1980') || mensagemEnviada.includes('R$ 1850'),
+        'Deve conter ao menos um dos preços registrados no histórico');
+    } finally {
+      rotasRepo.excluir(rota.id);
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('enviarAlertaOportunidade: deve omitir seção de histórico silenciosamente quando não há registros', async () => {
+    // Rota nova sem nenhum histórico registrado
+    const rota = rotasRepo.criar({
+      origem: 'Recife',
+      destino: 'Miami',
+      data_ida: '2027-06-01'
+    });
+
+    let mensagemEnviada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      mensagemEnviada = texto;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: rota.id,
+        origem: 'Recife',
+        destinoReal: 'Miami',
+        dataIda: '01/06/2027',
+        dataVolta: null,
+        preco: 3200,
+        duracaoHoras: 9,
+        detalhes: 'LATAM direto',
+        link: 'https://google.com/flights'
+      });
+
+      assert.ok(mensagemEnviada, 'Mensagem deve ser enviada mesmo sem histórico');
+      assert.ok(!mensagemEnviada.includes('Histórico Recente'), 'Não deve conter seção de histórico quando banco está vazio');
+      assert.ok(mensagemEnviada.includes('Tarifas dinâmicas'), 'Deve conter o aviso padrão de tarifas dinâmicas');
+    } finally {
+      rotasRepo.excluir(rota.id);
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('enviarAlertaOportunidade: deve omitir seção de histórico quando rotaId não é fornecido', async () => {
+    let mensagemEnviada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      mensagemEnviada = texto;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: null, // sem ID — alerta avulso / programático
+        origem: 'São Paulo',
+        destinoReal: 'Tokyo',
+        dataIda: '15/04/2027',
+        dataVolta: null,
+        preco: 4800,
+        duracaoHoras: 24,
+        detalhes: '1 escala ANA',
+        link: 'https://google.com/flights'
+      });
+
+      assert.ok(mensagemEnviada, 'Mensagem deve ser enviada');
+      assert.ok(!mensagemEnviada.includes('Histórico Recente'), 'Não deve tentar buscar histórico sem rotaId');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
 });
