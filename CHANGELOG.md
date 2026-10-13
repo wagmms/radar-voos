@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.10] - 2026-10-13 — Blindagem Adversarial de analisarLayoversEStopover (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Análise de Conexões e Stopover)
+- `src/domain/calculadora.js` · `analisarLayoversEStopover`:
+  - Corrigido bug de parsing de durações em formatos compactos sem 'm' (ex: `'8h30'`) e formatos de relógio militar (ex: `'08:30'`, `'09:15'`), que anteriormente perdiam os minutos residuais ou eram convertidos indevidamente em durações diminutas via fallback `parseFloat`.
+  - Adicionada blindagem contra valores textuais de duração negativos (ex: `'-8h'`, `'-30m'`), prevenindo que fossem parseados como durações positivas espúrias e ativassem dicas de stopover incorretas.
+  - Implementado desempacotamento resiliente de aeroportos fornecidos como objetos aninhados (ex: `airport: { code: 'MIA', name: 'Miami International' }`), extraindo o código IATA e nome do aeroporto em vez de atribuir o fallback `'N/A'`.
+  - Tratamento defensivo de flags booleanas passadas como strings (`'false'`, `'0'`, `'sim'`) para a indicação de pernoite/overnight.
+- `tests/calculadora.test.js`:
+  - Adicionados testes de borda adversariais validando formatos compactos e relógio, objetos aninhados de aeroportos, descarte de durações negativas e parsing correto de strings booleanas.
+  - Suíte total: **353/353 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.9] - 2026-10-13 — Blindagem Adversarial de gerarLinkGoogleFlights (Domínio / Rotas)
 
 ### 🛡️ Correção Defensiva & Robustez (Geração de Links Estruturados do Google Flights)

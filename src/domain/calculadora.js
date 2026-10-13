@@ -458,28 +458,59 @@ export function analisarLayoversEStopover(voo) {
         dur = Number.isFinite(durRaw) && durRaw > 0 ? durRaw : 0;
       } else if (typeof durRaw === 'string') {
         const s = durRaw.trim();
-        const matchHoras = s.match(/(\d+)\s*(?:h|hr|hrs|hora|horas)/i);
-        const matchMin = s.match(/(\d+)\s*(?:m|min|mins|minuto|minutos)/i);
-        if (matchHoras || matchMin) {
-          const horas = matchHoras ? parseInt(matchHoras[1], 10) : 0;
-          const minutos = matchMin ? parseInt(matchMin[1], 10) : 0;
-          dur = (horas * 60) + minutos;
+        if (s.startsWith('-') || /^-/.test(s)) {
+          dur = 0;
         } else {
-          const num = parseFloat(s);
-          dur = (Number.isFinite(num) && num > 0) ? num : 0;
+          const matchRelogio = s.match(/^(\d{1,2}):(\d{2})$/);
+          if (matchRelogio) {
+            const horas = parseInt(matchRelogio[1], 10);
+            const minutos = parseInt(matchRelogio[2], 10);
+            dur = (horas * 60) + minutos;
+          } else {
+            const matchHorasMinCompacto = s.match(/(\d+)\s*(?:h|hr|hrs|hora|horas)\s*(\d{1,2})(?:\s*(?:m|min|mins|minuto|minutos))?/i);
+            const matchHoras = s.match(/(\d+)\s*(?:h|hr|hrs|hora|horas)/i);
+            const matchMin = s.match(/(\d+)\s*(?:m|min|mins|minuto|minutos)/i);
+            if (matchHorasMinCompacto) {
+              const horas = parseInt(matchHorasMinCompacto[1], 10);
+              const minutos = parseInt(matchHorasMinCompacto[2], 10);
+              dur = (horas * 60) + minutos;
+            } else if (matchHoras || matchMin) {
+              const horas = matchHoras ? parseInt(matchHoras[1], 10) : 0;
+              const minutos = matchMin ? parseInt(matchMin[1], 10) : 0;
+              dur = (horas * 60) + minutos;
+            } else {
+              const num = parseFloat(s);
+              dur = (Number.isFinite(num) && num > 0) ? num : 0;
+            }
+          }
         }
       }
 
-      const rawAero = l.id || l.iata || l.airport || l.code || '';
-      const aeroporto = (typeof rawAero === 'string' && rawAero.trim()) ? rawAero.trim() : 'N/A';
-      const rawNome = l.name || l.nome || '';
+      let rawAero = l.id || l.iata || l.airport || l.code || '';
+      let rawNome = l.name || l.nome || '';
+      if (rawAero && typeof rawAero === 'object') {
+        rawNome = rawNome || rawAero.name || rawAero.nome || '';
+        rawAero = rawAero.id || rawAero.iata || rawAero.code || rawAero.airport || '';
+      }
+
+      const aeroporto = (typeof rawAero === 'string' && rawAero.trim()) ? rawAero.trim().toUpperCase() : 'N/A';
       const nome = (typeof rawNome === 'string' && rawNome.trim()) ? rawNome.trim() : 'Aeroporto não informado';
+
+      const parseBooleanFlag = (val) => {
+        if (typeof val === 'boolean') return val;
+        if (typeof val === 'string') {
+          const v = val.trim().toLowerCase();
+          return v === 'true' || v === '1' || v === 'sim' || v === 'yes';
+        }
+        if (typeof val === 'number') return val === 1;
+        return Boolean(val);
+      };
 
       return {
         aeroporto,
         nome,
         minutos: dur,
-        overnight: Boolean(l.overnight || l.pernoite)
+        overnight: parseBooleanFlag(l.overnight) || parseBooleanFlag(l.pernoite)
       };
     })
     .filter(l => Number.isFinite(l.minutos) && l.minutos > 0);

@@ -439,6 +439,27 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(resAlternativo.layoversValidos[0].nome, 'Aeroporto Internacional Tocumen');
     assert.strictEqual(resAlternativo.layoversValidos[0].minutos, 600);
     assert.match(resAlternativo.dicaStopover, /conexão longa de 10h em PTY/);
+
+    // 4. Testes adversariais: formatos compactos/relógio ("8h30", "09:15"), objetos de aeroporto aninhados e descarte de duração negativa
+    const vooAdversarial = {
+      layovers: [
+        { airport: { code: 'mia', name: 'Miami International' }, duration: '8h30', overnight: 'false' },
+        { id: 'LIS', duration: '09:15', pernoite: 'sim' },
+        { id: 'FRA', duration: '-8h' } // Duração negativa deve ser ignorada (0 min)
+      ]
+    };
+    const resAdv = analisarLayoversEStopover(vooAdversarial);
+    assert.strictEqual(resAdv.layoversValidos.length, 2);
+    // MIA: aeroporto maiúsculo normalizado, nome extraído do objeto, 8h30 = 510m, overnight string "false" = false
+    assert.strictEqual(resAdv.layoversValidos[0].aeroporto, 'MIA');
+    assert.strictEqual(resAdv.layoversValidos[0].nome, 'Miami International');
+    assert.strictEqual(resAdv.layoversValidos[0].minutos, 510);
+    assert.strictEqual(resAdv.layoversValidos[0].overnight, false);
+    // LIS: formato HH:MM "09:15" = 555m, pernoite string "sim" = true
+    assert.strictEqual(resAdv.layoversValidos[1].aeroporto, 'LIS');
+    assert.strictEqual(resAdv.layoversValidos[1].minutos, 555);
+    assert.strictEqual(resAdv.layoversValidos[1].overnight, true);
+    assert.match(resAdv.dicaStopover, /Possível conexão longa de 8h em MIA/);
   });
 
   it('deve lidar defensivamente com casos de borda e variações de formato em avaliarTermometro', () => {
