@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.6] - 2026-10-13 — Blindagem Adversarial de ordenarRotasPorEconomia (Cockpit PWA / Sparklines)
+
+### 🛡️ Correção Defensiva & Robustez (Cockpit PWA / Ordenação de Rotas)
+- `src/public/js/sparkline.js` · `ordenarRotasPorEconomia`:
+  - Corrigido bug crítico de `TypeError: Cannot read properties of null (reading 'preco_atual')` quando a lista de rotas continha elementos nulos, indefinidos ou objetos corrompidos ao ordenar por `economia` ou `preco`.
+  - Implementado helper defensivo interno `extrairPreco` com validação de tipo objeto, conversão segura de strings numéricas e fallback consistente para `999999` em entradas não-finitas ou inválidas.
+  - Prevenção de quebra silenciosa no `.sort()` do frontend ao interagir com filtros do Cockpit PWA.
+- `tests/geo_routes.test.js`:
+  - Adicionados 3 casos de teste de borda adversariais cobrindo listas com `null`, `undefined`, objetos vazios, strings numéricas mal formatadas e entradas não-array.
+  - Suíte total: **350/350 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.5] - 2026-10-13 — Blindagem Adversarial de extrairDiasEstadia (Domínio / Rotas)
 
 ### 🛡️ Correção Defensiva & Robustez (Módulo de Rotas e Estadia)

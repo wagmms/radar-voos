@@ -116,6 +116,12 @@ export function ordenarRotasPorEconomia(rotas, criterio = 'padrao') {
   if (!Array.isArray(rotas)) return [];
   const lista = [...rotas];
 
+  const extrairPreco = (item) => {
+    if (!item || typeof item !== 'object') return 999999;
+    const p = typeof item.preco_atual === 'number' ? item.preco_atual : parseFloat(item.preco_atual);
+    return Number.isFinite(p) && p > 0 ? p : 999999;
+  };
+
   if (criterio === 'economia') {
     return lista.sort((a, b) => {
       const econA = calcularEconomiaPercentualTeto(a);
@@ -124,7 +130,7 @@ export function ordenarRotasPorEconomia(rotas, criterio = 'padrao') {
       // 1. Ambas possuem meta calculada: maior economia % primeiro
       if (econA !== null && econB !== null) {
         if (econB !== econA) return econB - econA;
-        return (a.preco_atual || 0) - (b.preco_atual || 0);
+        return extrairPreco(a) - extrairPreco(b);
       }
 
       // 2. Apenas uma possui meta: priorizar quem tem meta
@@ -132,18 +138,12 @@ export function ordenarRotasPorEconomia(rotas, criterio = 'padrao') {
       if (econB !== null) return 1;
 
       // 3. Nenhuma possui meta: ordenar por menor preço absoluto
-      const precoA = a.preco_atual && a.preco_atual > 0 ? a.preco_atual : 999999;
-      const precoB = b.preco_atual && b.preco_atual > 0 ? b.preco_atual : 999999;
-      return precoA - precoB;
+      return extrairPreco(a) - extrairPreco(b);
     });
   }
 
   if (criterio === 'preco') {
-    return lista.sort((a, b) => {
-      const precoA = a.preco_atual && a.preco_atual > 0 ? a.preco_atual : 999999;
-      const precoB = b.preco_atual && b.preco_atual > 0 ? b.preco_atual : 999999;
-      return precoA - precoB;
-    });
+    return lista.sort((a, b) => extrairPreco(a) - extrairPreco(b));
   }
 
   // 'padrao': preserva a ordem original
