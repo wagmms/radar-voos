@@ -208,6 +208,9 @@ export class FlightScanner {
     });
 
     if (analiseBug.ehBugFare) {
+      const chaveBugAlerta = `BUG_FARE:${rota.codigo_origem}_${rota.codigo_destino}_${dataIdaEfetiva}_${dataVoltaEfetiva || 'SO_IDA'}`;
+      const decisaoBug = alertasRepo.deveDispararBugFare(chaveBugAlerta, oferta.preco);
+
       const bugCard = montarCardBugFare({
         origem: rota.origem,
         codigoOrigem: rota.codigo_origem,
@@ -230,8 +233,15 @@ export class FlightScanner {
         rotaId: rota.id
       });
 
-      // Alerta de urgência máxima no Telegram com cartão completo (quebra modo noturno)
-      await notifierTelegram.enviarAlertaBugFare(bugCard);
+      // Alerta de urgência máxima no Telegram com deduplicação inteligente:
+      // - Não repete se for o mesmo preço a cada minuto (zero spam)
+      // - Dispara imediatamente se for o primeiro alerta ou se o preço cair ainda mais no mesmo dia!
+      if (decisaoBug.deve) {
+        await notifierTelegram.enviarAlertaBugFare(bugCard);
+        alertasRepo.registrarDisparo(chaveBugAlerta, oferta.preco, 'BUG_FARE');
+      } else {
+        console.log(`🔇 [SUPRIMIDO/DEDUPLICAÇÃO] Bug Fare para ${chaveBugAlerta} já alertado recentemente (R$ ${decisaoBug.ultimoPreco}). Motivo: ${decisaoBug.motivo}`);
+      }
     }
 
     const destinoInfoRota = resolverDestinoConcreto({

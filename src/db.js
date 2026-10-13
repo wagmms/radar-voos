@@ -594,9 +594,10 @@ export const alertasRepo = {
       if (melhoriaPct < 5) {
         return { deve: false, motivo: 'variacao_insignificante' };
       }
-      // Respeitar cooldown de no mínimo 48 horas entre alertas sucessivos
-      if (horasDesdeUltimo < 48) {
-        return { deve: false, motivo: 'cooldown_48h' };
+      // Cooldown protetor mínimo anti-rajada imediata (5 minutos)
+      const minutosDesdeUltimo = horasDesdeUltimo * 60;
+      if (minutosDesdeUltimo < 5) {
+        return { deve: false, motivo: 'cooldown_anti_rajada' };
       }
     }
 
@@ -627,6 +628,60 @@ export const alertasRepo = {
     `).run(chaveAlerta, precoAtual, tipoAlerta, agora.toISOString());
 
     return { deve: true, tipo: tipoAlerta };
+  },
+
+  obterUltimo: (chaveAlerta) => {
+    const db = getDb();
+    return db.prepare(`
+      SELECT * FROM alertas_disparados
+      WHERE chave_alerta = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(chaveAlerta);
+  },
+
+  registrarDisparo: (chaveAlerta, preco, tipo = 'OPORTUNIDADE') => {
+    const db = getDb();
+    const agora = new Date().toISOString();
+    return db.prepare(`
+      INSERT INTO alertas_disparados (chave_alerta, preco, tipo, disparado_em)
+      VALUES (?, ?, ?, ?)
+    `).run(chaveAlerta, preco, tipo, agora);
+  },
+
+  deveDispararBugFare: (chaveAlerta, precoAtual) => {
+    const db = getDb();
+    const ultimo = db.prepare(`
+      SELECT * FROM alertas_disparados
+      WHERE chave_alerta = ?
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(chaveAlerta);
+
+    if (!ultimo) {
+      return { deve: true, motivo: 'primeiro_disparo_bug_fare' };
+    }
+
+    const agora = new Date();
+    const horasDesdeUltimo = (agora.getTime() - new Date(ultimo.disparado_em).getTime()) / (1000 * 60 * 60);
+
+    // Se o preço for igual ou maior que o último alertado:
+    // Suprime se estiver dentro da janela de 24h para não floodar
+    if (precoAtual >= ultimo.preco) {
+      if (horasDesdeUltimo < 24) {
+        return { deve: false, motivo: 'mesmo_preco_em_cooldown_24h', ultimoPreco: ultimo.preco };
+      }
+      return { deve: true, motivo: 'lembrete_diario_bug_ativo', ultimoPreco: ultimo.preco };
+    }
+
+    // Se o preço for MENOR que o último alerta (nova queda no mesmo dia!):
+    const melhoriaPct = ((ultimo.preco - precoAtual) / ultimo.preco) * 100;
+    if (melhoriaPct < 5) {
+      return { deve: false, motivo: 'variacao_insignificante_bug', ultimoPreco: ultimo.preco };
+    }
+
+    // Queda real comprovada no mesmo dia: DEVE disparar!
+    return { deve: true, motivo: 'nova_queda_mesmo_dia', precoAnteriorAlertado: ultimo.preco, melhoriaPct };
   }
 };
 

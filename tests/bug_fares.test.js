@@ -277,8 +277,12 @@ describe('BugFareHunter: Working Buffer + Z-Score + Deduplicação 24h', () => {
     // Registrar alerta agora
     hunter._registrarAlertaDisparado(chave, 'BUG_FARE', 1500);
 
-    // Mesmo tipo dentro de 24h → deve suprimir
+    // Mesmo tipo dentro de 24h com mesmo preço → deve suprimir
     assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'BUG_FARE'), true);
+    assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'BUG_FARE', 1500), true);
+
+    // Nova queda relevante no mesmo dia (de 1500 para 1200, queda de 20%) → NÃO deve suprimir (libera novo alerta)
+    assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'BUG_FARE', 1200), false);
 
     // Tipo diferente dentro de 24h → não deve suprimir
     assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'OPORTUNIDADE'), false);

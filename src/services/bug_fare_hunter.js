@@ -202,7 +202,7 @@ export class BugFareHunter {
    * @param {string} tipo - Categoria do alerta ('OPORTUNIDADE' | 'BUG_FARE')
    * @returns {boolean} true se deve suprimir (alerta recente ainda válido)
    */
-  _ehAlertaDuplicado(chave, tipo) {
+  _ehAlertaDuplicado(chave, tipo, preco = null) {
     const buffer = this._obterBufferCorreder(chave);
     const ultimo = buffer.ultimoAlerta;
     if (!ultimo) return false;
@@ -211,7 +211,18 @@ export class BugFareHunter {
     const dentroJanela = (agora - ultimo.ts) < JANELA_DEDUPLICACAO_MS;
     const mesmoTipo = ultimo.tipo === tipo;
 
-    return dentroJanela && mesmoTipo;
+    if (!dentroJanela || !mesmoTipo) return false;
+
+    // Se o preço atual for informado e representar uma nova queda relevante (queda >= 5%)
+    // NÃO é duplicata: permite notificar uma nova queda no mesmo dia!
+    if (preco && ultimo.preco && preco < ultimo.preco) {
+      const melhoriaPct = ((ultimo.preco - preco) / ultimo.preco) * 100;
+      if (melhoriaPct >= 5) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
@@ -334,9 +345,9 @@ export class BugFareHunter {
         }
 
         // === CLASSIFICAÇÃO BUG_FARE ===
-        // Deduplicação defensiva: suprimir se mesmo tipo já foi alertado nas últimas 24h
-        if (this._ehAlertaDuplicado(chaveCorreder, 'BUG_FARE')) {
-          console.log(`🔇 [SUPRIMIDO] Alerta BUG_FARE duplicado dentro de 24h para ${corredor.origem} ➔ ${corredor.labelDestino}`);
+        // Deduplicação defensiva: suprimir se mesmo tipo já foi alertado nas últimas 24h sem melhora
+        if (this._ehAlertaDuplicado(chaveCorreder, 'BUG_FARE', preco)) {
+          console.log(`🔇 [SUPRIMIDO] Alerta BUG_FARE duplicado sem queda relevante dentro de 24h para ${corredor.origem} ➔ ${corredor.labelDestino}`);
           continue;
         }
 

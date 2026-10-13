@@ -74,4 +74,44 @@ describe('Inteligência de Alertas e Critérios Estritos (alertasRepo.deveDispar
     assert.strictEqual(resMinima.deve, false);
     assert.strictEqual(resMinima.motivo, 'variacao_insignificante');
   });
+
+  it('5. DEVE alertar se o preço cair significativamente no mesmo dia (nova queda > 5%)', () => {
+    // Primeiro alerta registrado a 3200
+    const res1 = alertasRepo.deveDisparar(chaveTeste, 3200, 3600, 3500, true, 'LOW', -11.1);
+    assert.strictEqual(res1.deve, true);
+
+    // Algumas horas depois no mesmo dia, preço cai para 2800 (queda de 12.5% em relação aos 3200)
+    // Cooldown de anti-rajada expirado (simulamos ajustando timestamp do alerta anterior)
+    const db = getDb();
+    db.prepare(`
+      UPDATE alertas_disparados
+      SET disparado_em = ?
+      WHERE chave_alerta = ?
+    `).run(new Date(Date.now() - 2 * 3600 * 1000).toISOString(), chaveTeste);
+
+    const resNovaQueda = alertasRepo.deveDisparar(chaveTeste, 2800, 3200, 3500, true, 'LOW', -12.5);
+    assert.strictEqual(resNovaQueda.deve, true);
+    assert.strictEqual(resNovaQueda.tipo, 'NOVO_RECORDE');
+  });
+
+  it('6. deveDispararBugFare: suprime repetição do mesmo preço mas dispara nova queda no mesmo dia', () => {
+    const chaveBug = 'BUG_SAO_MAD_2026-12-15_2026-12-27';
+    const db = getDb();
+    db.prepare('DELETE FROM alertas_disparados WHERE chave_alerta = ?').run(chaveBug);
+
+    // Primeiro disparo de bug fare a R$ 1500
+    const d1 = alertasRepo.deveDispararBugFare(chaveBug, 1500);
+    assert.strictEqual(d1.deve, true);
+    alertasRepo.registrarDisparo(chaveBug, 1500, 'BUG_FARE');
+
+    // Minuto seguinte: mesmo preço R$ 1500 -> suprime com sucesso (zero spam)
+    const dRepetido = alertasRepo.deveDispararBugFare(chaveBug, 1500);
+    assert.strictEqual(dRepetido.deve, false);
+    assert.strictEqual(dRepetido.motivo, 'mesmo_preco_em_cooldown_24h');
+
+    // Horas depois no mesmo dia: preço cai ainda mais para R$ 1100 (queda de 26.6%)
+    const dNovaQueda = alertasRepo.deveDispararBugFare(chaveBug, 1100);
+    assert.strictEqual(dNovaQueda.deve, true);
+    assert.strictEqual(dNovaQueda.motivo, 'nova_queda_mesmo_dia');
+  });
 });
