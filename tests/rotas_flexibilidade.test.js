@@ -98,6 +98,38 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     assert.strictEqual(combsNan[0].dataIda, '2026-11-10');
   });
 
+  it('gerarCombinacoesFlexibilidade: deve suportar duracao relativa de estadia, degradar volta no passado e sanitizar strings corrompidas', () => {
+    // 1. Duração relativa ("10 dias", 14 ou "7 noites") deve manter a duração constante em todas as combinações flexíveis
+    const combsDuracao = gerarCombinacoesFlexibilidade('2026-11-10', '10 dias', 2);
+    assert.strictEqual(combsDuracao.length, 5);
+    assert.strictEqual(combsDuracao[0].dataIda, '2026-11-10');
+    assert.strictEqual(combsDuracao[0].dataVolta, '2026-11-20');
+    assert.strictEqual(combsDuracao[1].dataIda, '2026-11-09');
+    assert.strictEqual(combsDuracao[1].dataVolta, '2026-11-19'); // -1d preserva 10 dias
+    assert.strictEqual(combsDuracao[2].dataIda, '2026-11-11');
+    assert.strictEqual(combsDuracao[2].dataVolta, '2026-11-21'); // +1d preserva 10 dias
+
+    // Suporte a número direto de dias como número puro
+    const combsNum = gerarCombinacoesFlexibilidade('2026-11-10', 7, 1);
+    assert.strictEqual(combsNum[0].dataVolta, '2026-11-17');
+    assert.strictEqual(combsNum[1].dataVolta, '2026-11-16');
+    assert.strictEqual(combsNum[2].dataVolta, '2026-11-18');
+
+    // 2. Data de volta cronologicamente anterior à ida deve degradar defensivamente para Só Ida (null)
+    const combsPassado = gerarCombinacoesFlexibilidade('2026-11-10', '2026-11-05', 2);
+    assert.strictEqual(combsPassado.length, 5);
+    combsPassado.forEach(c => {
+      assert.strictEqual(c.dataVolta, null);
+    });
+
+    // 3. String corrompida / não-data no campo volta deve resultar uniformemente em null
+    const combsCorrompida = gerarCombinacoesFlexibilidade('2026-11-10', 'texto_aleatorio_invalido', 1);
+    assert.strictEqual(combsCorrompida.length, 3);
+    combsCorrompida.forEach(c => {
+      assert.strictEqual(c.dataVolta, null);
+    });
+  });
+
   it('deve persistir e recuperar rota com flexibilidade_dias e melhor_opcao_flexivel no SQLite', () => {
     const rota = rotasRepo.criar({
       origem: 'São Paulo',

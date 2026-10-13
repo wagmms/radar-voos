@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.26] - 2026-10-13 — Blindagem Adversarial em gerarCombinacoesFlexibilidade para Duração Relativa, Volta no Passado e Tipos Corrompidos (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarCombinacoesFlexibilidade`):
+  - Blindada a resolução de `dataVolta` contra durações relativas (`"10 dias"`, `14`, `"7 noites"`) via `calcularDataVolta(idaNorm, dataVolta)`, eliminando o bug que gerava `dataVolta: null` em todas as combinações de flexibilidade (±1d a ±7d) quando a rota monitorada possuía duração de estadia em dias.
+  - Adicionada salvaguarda cronológica que detecta e degrada graciosamente datas de volta anteriores à ida para `null` (Só Ida), prevenindo buscas com intervalos temporais invertidos.
+  - Sanitizado o parâmetro `flexibilidadeDias` contra valores não finitos (`NaN`, `Infinity`, strings inválidas) e strings corrompidas no campo de volta.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionado conjunto de testes de borda adversariais cobrindo durações relativas de estadia (string e número puro), degradação defensiva para datas no passado e descarte de strings corrompidas.
+
 ## [v2.18.25] - 2026-10-13 — Blindagem Adversarial em gerarDataPadraoInicial contra Coerção de Strings, Valores Nulos e Extremos (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

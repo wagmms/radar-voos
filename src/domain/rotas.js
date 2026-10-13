@@ -700,10 +700,20 @@ export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 1
  * Gera as combinações de datas na janela de flexibilidade (±0 a ±7 dias)
  */
 export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeDias = 0) {
-  const idaNorm = formatarDataParaBusca(dataIda) || (dataIda ? String(dataIda).trim() : null);
-  const voltaEfetiva = (ehSoIda(dataVolta) || !dataVolta) ? null : (formatarDataParaBusca(dataVolta) || String(dataVolta).trim());
+  const idaNorm = formatarDataParaBusca(dataIda) || (dataIda && typeof dataIda === 'string' ? dataIda.trim() : (dataIda ? String(dataIda).trim() : null));
 
-  const flex = Math.min(7, Math.max(0, parseInt(flexibilidadeDias, 10) || 0));
+  let voltaEfetiva = null;
+  if (!ehSoIda(dataVolta) && dataVolta !== null && dataVolta !== undefined) {
+    const voltaCalculada = calcularDataVolta(idaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaCalculada) {
+      if (!idaNorm || voltaCalculada >= idaNorm) {
+        voltaEfetiva = voltaCalculada;
+      }
+    }
+  }
+
+  const flexRaw = typeof flexibilidadeDias === 'number' ? flexibilidadeDias : parseInt(flexibilidadeDias, 10);
+  const flex = Number.isFinite(flexRaw) ? Math.min(7, Math.max(0, flexRaw)) : 0;
   if (flex === 0) {
     return [{ dataIda: idaNorm, dataVolta: voltaEfetiva, deltaDias: 0, label: 'Data Base' }];
   }
