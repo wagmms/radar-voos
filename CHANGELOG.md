@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.15.0] - 2026-10-13 — Mini-Tabela de Histórico de Preços nos Alertas Telegram
+
+### ✨ Nova Funcionalidade (Telegram Notifier)
+- `src/services/notifier_telegram.js` · `enviarAlertaOportunidade`:
+  - Adicionada mini-tabela HTML de histórico recente com os últimos 3 preços registrados da rota (data BR + preço + termômetro) imediatamente antes do aviso de tarifas dinâmicas.
+  - Seção renderizada somente quando `rotasRepo.obterHistoricoRecente(rotaId, 3)` retorna ao menos 1 entrada — zero ruído para rotas sem histórico.
+  - Quando `rotaId` é nulo (alertas avulsos programáticos), bloco inteiramente omitido sem query ao banco.
+  - Falha de leitura do SQLite capturada por `try/catch` silencioso — nunca bloqueia o envio do alerta principal.
+- `tests/telegram_callbacks.test.js`:
+  - 3 novos testes cobrindo: exibição com histórico real, omissão silenciosa sem histórico e omissão quando rotaId é nulo.
+  - Suite total: **338/338 testes aprovados** (era 331 JS → 338 JS + 10 Py).
+
 ## [v2.14.5] - 2026-10-13 — Blindagem Defensiva de gerarCombinacoesFlexibilidade (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Domínio Rotas e Matriz de Flexibilidade)
