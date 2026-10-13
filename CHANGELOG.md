@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.14.1] - 2026-10-13 — Blindagem Defensiva de parsePreco (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Calculadora de Preços)
+- `src/domain/calculadora.js`:
+  - `parsePreco`: corrigido bug em que valores formatados com ponto único de milhar sem centavos no padrão brasileiro (ex: `'1.500'`, `'R$ 1.950'`, `'2.350'`) eram incorretamente interpretados como decimais (`1.5`, `1.95`, `2.35`). Implementada detecção de ponto único seguido de 3 dígitos sem vírgula (`/^\d{1,3}\.\d{3}$/`) para remoção segura do separador de milhar. Normalizado também o tratamento de múltiplos espaços sequenciais entre agrupamentos de dígitos (`'1 234 567'`).
+- `tests/calculadora.test.js`:
+  - Adicionadas asserções adversariais cobrindo ponto único de milhar brasileiro sem centavos (`'1.500'`, `'R$ 1.950'`, `'2.350'`) e múltiplos agrupamentos por espaço (`'1 234 567'`) com 100% de aprovação (331 testes passando).
+
 ## [v2.14.0] - 2026-10-13 — Badge de Milhas Estimadas no Cockpit PWA
 
 ### ✈️🏆 Novo Recurso (Cockpit PWA · Card de Rota)

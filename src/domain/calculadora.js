@@ -145,8 +145,10 @@ export function parsePreco(valor) {
     .trim();
   if (!s) return 0;
 
-  // Normaliza espaços entre dígitos (ex: "1 500,50")
-  s = s.replace(/(\d)\s+(\d)/g, '$1$2');
+  // Normaliza espaços entre dígitos (ex: "1 500,50", "1 234 567")
+  while (/(\d)\s+(\d)/.test(s)) {
+    s = s.replace(/(\d)\s+(\d)/g, '$1$2');
+  }
 
   if (s.includes('.') && s.includes(',')) {
     if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
@@ -164,6 +166,9 @@ export function parsePreco(valor) {
   } else if (s.includes('.')) {
     const pontos = (s.match(/\./g) || []).length;
     if (pontos > 1) {
+      s = s.replace(/\./g, '');
+    } else if (/^\d{1,3}\.\d{3}$/.test(s)) {
+      // Ponto único usado como separador de milhar (ex: "1.500", "2.350", "R$ 1.950")
       s = s.replace(/\./g, '');
     }
   }

@@ -47,14 +47,18 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco('€ 85'), 85);
     assert.strictEqual(parsePreco('£ 120.50'), 120.50);
 
-    // 2. Múltiplos separadores de milhar (formato brasileiro e americano)
+    // 2. Múltiplos separadores de milhar (formato brasileiro e americano) e ponto único de milhar
     assert.strictEqual(parsePreco('1.500.000'), 1500000);
     assert.strictEqual(parsePreco('1,200,000'), 1200000);
     assert.strictEqual(parsePreco('2.350.000,50'), 2350000.50);
+    assert.strictEqual(parsePreco('1.500'), 1500);
+    assert.strictEqual(parsePreco('R$ 1.950'), 1950);
+    assert.strictEqual(parsePreco('2.350'), 2350);
 
-    // 3. Espaços non-breaking e separadores por espaço
+    // 3. Espaços non-breaking e separadores por espaço múltiplos
     assert.strictEqual(parsePreco('R$\u00A03.450,00'), 3450.00);
     assert.strictEqual(parsePreco('1 500,50'), 1500.50);
+    assert.strictEqual(parsePreco('1 234 567'), 1234567);
   });
 
   it('deve calcular variações percentuais e sinalizar quedas relâmpago', () => {
