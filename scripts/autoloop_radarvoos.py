@@ -608,9 +608,9 @@ def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, mod
         log("INFO", f"Modelo ativo: {CORES['bold']}{CORES['green']}{nome_modelo}{CORES['reset']} (`{id_modelo}`)")
         log("SHIELD", f"Branch ativa protegida: {CORES['bold']}{branch_alvo}{CORES['reset']}")
         if modo_ciclo == "QA_ADVERSARIAL":
-            log("TEST", f"🕵️ Modo Operacional: {CORES['bold']}{CORES['magenta']}QA ADVERSARIAL (CAÇADOR DE BUGS & REFINADOR DE EXPERIÊNCIA){CORES['reset']}")
+            log("TEST", f"🕵️ Modo Operacional: {CORES['bold']}{CORES.get('cyan', '')}QA ADVERSARIAL (CAÇADOR DE BUGS & REFINADOR DE EXPERIÊNCIA){CORES['reset']}")
         else:
-            log("BUILD", f"🏗️ Modo Operacional: {CORES['bold']}{CORES['blue']}BUILDER (DESENVOLVEDOR DE RECURSOS){CORES['reset']}")
+            log("BUILD", f"🏗️ Modo Operacional: {CORES['bold']}{CORES.get('green', '')}BUILDER (DESENVOLVEDOR DE RECURSOS){CORES['reset']}")
         print("=" * 75)
 
         bloco_agents = carregar_diretrizes_agents()
