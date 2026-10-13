@@ -4,6 +4,43 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.17.0] - 2026-10-13 — Widget de Edição Inline de Milhas no Cockpit PWA
+
+### ✈️ Novo Recurso: Configuração de Paridade de Milhas Diretamente nos Cards
+
+- **`src/db.js`** · Migrações SQLite defensivas:
+  - `paridade_milhas REAL` — cotação customizada R$/milheiro por rota
+  - `programa_milhas TEXT DEFAULT 'smiles'` — programa de fidelidade da rota
+  - `rotasRepo.atualizar()`: incluídos no `UPDATE` com validação de tipo (numérico positivo ou null; string normalizada lowercase)
+
+- **`src/server/routes/rotas_routes.js`** · Novo endpoint `PATCH /api/rotas/:id/milhas`:
+  - Schema Ajv defensivo (params integer, body com `paridade_milhas` number/null e `programa_milhas` string 1-32 chars, `additionalProperties: false`)
+  - Validação de range: `paridade_milhas > 0`
+  - Emite telemetria `rota_milhas_atualizada` via SSE
+
+- **`src/public/js/card_rota.js`** · `renderizarBadgeMilhas` e `salvarMilhasInline`:
+  - Badge de estimativa (.milhas-estimativa-row) exibida quando há `preco_atual`
+  - Botão toggle ✏️ com cotação atual ou "Configurar milhas" (quando sem paridade)
+  - Formulário inline oculto com `<select>` de programa e `<input type="number">` de cotação
+  - Placeholder dinâmico sugerindo cotação padrão do programa selecionado
+  - Validação visual: classe `milhas-input-erro` quando paridade ≤ 0 ou NaN
+  - `salvarMilhasInline(rotaId, options)` exportada com mocks injetáveis (fetch, toast, document, recarregarDados)
+
+- **`src/public/app.js`** · Funções globais expostas no `window`:
+  - `window.salvarMilhasInline(rotaId)` — delega para `salvarMilhasInline` importado com callbacks do app
+  - `window.toggleMilhasEditor(rotaId)` — alterna display do formulário inline e foca no select ao abrir
+  - `window.atualizarPlaceholderMilhas(rotaId)` — atualiza placeholder ao trocar programa e remove estado de erro
+
+- **`src/public/styles.css`** · +155 linhas de CSS dark-mode anti-UI-slop:
+  - `.badge-milhas-estimadas`, `.milhas-estimativa-row`, `.milhas-editor-toggle`
+  - `.btn-milhas-editar` com hover cyan; `.milhas-editor-form` com border accent
+  - `.milhas-select`, `.milhas-input-cot` com estados `:focus` e `.milhas-input-erro`
+  - `.btn-milhas-salvar` (verde) e `.btn-milhas-cancelar` (hover vermelho)
+
+- **`tests/card_rota.test.js`** · +21 novos testes — **364/364 JS verdes (100%)**:
+  - `renderizarBadgeMilhas`: badge com ID por rota, botão toggle, formulário inline, select com opções e pré-seleção, oculta estimativa sem preco_atual, retorna '' sem rota.id
+  - `salvarMilhasInline`: sucesso com fetch mock, paridade zero, NaN, DOM ausente, erro de rede, erro HTTP 4xx/5xx, sem document/fetch
+
 ## [v2.16.10] - 2026-10-13 — Blindagem Adversarial de analisarLayoversEStopover (Domínio / Calculadora)
 
 ### 🛡️ Correção Defensiva & Robustez (Análise de Conexões e Stopover)
