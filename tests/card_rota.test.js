@@ -5,7 +5,10 @@ import {
   copiarLinkGoogleFlights,
   formatarCodigoBadge,
   formatarDataBr,
-  escapeHtml
+  escapeHtml,
+  calcularMilhasEstimadas,
+  renderizarBadgeMilhas,
+  COTACOES_MILHA_MILHEIRO
 } from '../src/public/js/card_rota.js';
 
 describe('Cockpit PWA: Card de Rota e Cópia Rápida de Link (card_rota.js)', () => {
@@ -253,6 +256,81 @@ describe('Cockpit PWA: Card de Rota e Cópia Rápida de Link (card_rota.js)', ()
       assert.equal(escapeHtml("it's"), 'it&#39;s');
       assert.equal(escapeHtml(null), '');
       assert.equal(escapeHtml(undefined), '');
+    });
+  });
+
+  describe('Badge de Milhas Estimadas: calcularMilhasEstimadas e renderizarBadgeMilhas', () => {
+    it('calcularMilhasEstimadas deve calcular milhas corretamente com paridade customizada', () => {
+      // R$ 1.750 / R$ 17,50 por milheiro = 100.000 milhas exatas (ceil de 100000.0 = 100000)
+      const res = calcularMilhasEstimadas(1750, 17.50, 'smiles');
+      assert.ok(res !== null, 'deve retornar objeto válido');
+      assert.equal(res.milhas, 100000);
+      assert.equal(res.programa, 'smiles');
+      assert.equal(res.cotacaoMilheiro, 17.50);
+    });
+
+    it('calcularMilhasEstimadas deve usar cotação padrão Smiles quando paridade for nula ou inválida', () => {
+      // Sem paridade: fallback para 17.50 (Smiles)
+      const resNull = calcularMilhasEstimadas(2450, null, 'smiles');
+      assert.ok(resNull !== null);
+      const cotacaoPadrao = COTACOES_MILHA_MILHEIRO.smiles;
+      const milhasEsperadas = Math.ceil((2450 / cotacaoPadrao) * 1000);
+      assert.equal(resNull.milhas, milhasEsperadas);
+      assert.equal(resNull.cotacaoMilheiro, cotacaoPadrao);
+
+      // Programa inválido: fallback para cotação Smiles
+      const resProgInvalido = calcularMilhasEstimadas(2450, null, 'inexistente');
+      assert.ok(resProgInvalido !== null);
+      assert.equal(resProgInvalido.cotacaoMilheiro, cotacaoPadrao);
+    });
+
+    it('calcularMilhasEstimadas deve retornar null para preço zero, negativo ou inválido', () => {
+      assert.equal(calcularMilhasEstimadas(0, 17.50), null);
+      assert.equal(calcularMilhasEstimadas(-500, 17.50), null);
+      assert.equal(calcularMilhasEstimadas(null, 17.50), null);
+      assert.equal(calcularMilhasEstimadas(undefined, 17.50), null);
+      assert.equal(calcularMilhasEstimadas('abc', 17.50), null);
+    });
+
+    it('renderizarBadgeMilhas deve retornar HTML com badge quando rota tem preco_atual válido', () => {
+      const rota = {
+        preco_atual: 2450,
+        paridade_milhas: 24.00,
+        programa_milhas: 'latam'
+      };
+      const html = renderizarBadgeMilhas(rota);
+      assert.ok(html.includes('badge-milhas-estimadas'), 'deve conter classe da badge');
+      assert.ok(html.includes('milhas'), 'deve mencionar milhas');
+      assert.ok(html.includes('Latam'), 'deve exibir nome do programa capitalizado');
+      // 2450 / 24.00 * 1000 = ceil(102083.33) = 102084
+      const milhasEsperadas = Math.ceil((2450 / 24.00) * 1000).toLocaleString('pt-BR');
+      assert.ok(html.includes(milhasEsperadas), `deve exibir ${milhasEsperadas} milhas`);
+    });
+
+    it('renderizarBadgeMilhas deve retornar string vazia quando rota não tem preco_atual', () => {
+      assert.equal(renderizarBadgeMilhas(null), '');
+      assert.equal(renderizarBadgeMilhas({}), '');
+      assert.equal(renderizarBadgeMilhas({ preco_atual: 0 }), '');
+      assert.equal(renderizarBadgeMilhas({ preco_atual: null }), '');
+    });
+
+    it('criarCardRota deve incluir badge-milhas-estimadas quando rota tem preco_atual e paridade', () => {
+      const rotaComParidade = {
+        id: 200,
+        origem: 'Brasília',
+        destino: 'Paris',
+        codigo_origem: 'BSB',
+        codigo_destino: 'CDG',
+        preco_atual: 3500,
+        paridade_milhas: 17.50,
+        programa_milhas: 'smiles',
+        link_google_flights: 'https://flights.google.com'
+      };
+      const html = criarCardRota(rotaComParidade);
+      assert.ok(html.includes('badge-milhas-estimadas'), 'card deve conter badge de milhas');
+      // 3500 / 17.50 * 1000 = ceil(200000) = 200.000
+      assert.ok(html.includes('200.000') || html.includes('200000'), 'deve exibir 200.000 milhas');
+      assert.ok(html.includes('Smiles'), 'deve identificar programa Smiles');
     });
   });
 });

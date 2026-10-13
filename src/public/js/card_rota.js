@@ -116,6 +116,68 @@ export async function copiarLinkGoogleFlights(event, link, options = {}) {
   }
 }
 
+/** Cotações de referência R$/milheiro por programa de fidelidade */
+export const COTACOES_MILHA_MILHEIRO = {
+  smiles:   17.50,
+  latam:    24.00,
+  latampass: 24.00,
+  livelo:   35.00,
+  azul:     20.00,
+  tudoazul: 20.00,
+  iberia:   65.00,
+  tap:      32.00
+};
+
+/**
+ * Calcula a estimativa de milhas necessárias para emitir o voo pelo preço atual.
+ *
+ * @param {number|null} precoAtual Preço atual em BRL
+ * @param {number|null} paridadeMilheiro Cotação R$ por milheiro (ex: 17.50 → 1.000 milhas = R$ 17,50)
+ * @param {string} [programa='smiles'] Chave do programa de fidelidade (para label)
+ * @returns {{ milhas: number, programa: string, cotacaoMilheiro: number } | null}
+ *   Retorna null quando preço ou paridade são inválidos.
+ */
+export function calcularMilhasEstimadas(precoAtual, paridadeMilheiro, programa = 'smiles') {
+  const preco = typeof precoAtual === 'number' ? precoAtual : parseFloat(precoAtual);
+  if (!Number.isFinite(preco) || preco <= 0) return null;
+
+  const progKey = String(programa || 'smiles').toLowerCase().trim();
+  const cotacaoPadrao = COTACOES_MILHA_MILHEIRO[progKey] || COTACOES_MILHA_MILHEIRO.smiles;
+  const cotacao = typeof paridadeMilheiro === 'number' && Number.isFinite(paridadeMilheiro) && paridadeMilheiro > 0
+    ? paridadeMilheiro
+    : cotacaoPadrao;
+
+  // milhas = (preço / R$-por-milheiro) * 1.000
+  const milhas = Math.ceil((preco / cotacao) * 1000);
+  return { milhas, programa: progKey, cotacaoMilheiro: cotacao };
+}
+
+/**
+ * Renderiza a badge visual de milhas estimadas para o card de rota.
+ * Retorna string vazia se não há dados suficientes para o cálculo.
+ *
+ * @param {object} rota Dados da rota
+ * @returns {string} HTML da badge ou ''
+ */
+export function renderizarBadgeMilhas(rota) {
+  if (!rota || !rota.preco_atual || rota.preco_atual <= 0) return '';
+
+  const paridade = rota.paridade_milhas ?? null;
+  const programa = String(rota.programa_milhas || 'smiles').toLowerCase().trim();
+  const resultado = calcularMilhasEstimadas(rota.preco_atual, paridade, programa);
+  if (!resultado) return '';
+
+  const milhasFormatadas = resultado.milhas.toLocaleString('pt-BR');
+  const nomePrograma = resultado.programa.charAt(0).toUpperCase() + resultado.programa.slice(1);
+  const cotacaoFormatada = resultado.cotacaoMilheiro.toFixed(2).replace('.', ',');
+
+  return `<div class="badge-milhas-estimadas" title="Estimativa p/ emissão em milhas (R$ ${cotacaoFormatada}/milheiro ${nomePrograma})">
+            <span class="milhas-icon">✈️🏆</span>
+            <span class="milhas-valor">~${milhasFormatadas} milhas</span>
+            <span class="milhas-programa">${nomePrograma}</span>
+          </div>`;
+}
+
 /**
  * Cria a marcação HTML completa de um card de rota para o Cockpit PWA.
  *
@@ -238,6 +300,8 @@ export function criarCardRota(rota) {
             <span class="price-label">Preço Atual</span>
             <span class="price-amount">${precoFormatado}</span>
           </div>
+          <!-- Badge de Milhas Estimadas (paridade configurada da rota) -->
+          ${renderizarBadgeMilhas(rota)}
           <!-- Sparkline de Tendência (smart-charts) -->
           <div class="sparkline-wrap">
             ${sparklineSvg}
