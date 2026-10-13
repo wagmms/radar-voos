@@ -1,8 +1,11 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { classificarItemFeed, identificarRegiaoDestino, detectarBugFareEstatistico } from '../src/domain/bug_fares.js';
 import { BugFareFeedWatcher } from '../src/services/bug_fare_feed_watcher.js';
-import { BugFareHunter, CORREDORES_GLOBAIS_SWEET_SPOT } from '../src/services/bug_fare_hunter.js';
+import { BugFareHunter, CORREDORES_GLOBAIS_SWEET_SPOT, ARQUIVO_WORKING_BUFFER_PADRAO } from '../src/services/bug_fare_hunter.js';
 import { rotasRepo, getDb } from '../src/db.js';
 
 describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
@@ -338,5 +341,169 @@ describe('BugFareHunter: Working Buffer + Z-Score + Deduplicação 24h', () => {
     const res = await hunter.executarVarreduraProativa({ limiteRotas: 2 });
     assert.strictEqual(chamado, true);
     assert.strictEqual(res.sucesso, true);
+  });
+});
+
+describe('BugFareHunter: Persistência Atômica do Working Buffer em Disco', () => {
+  const criarCaminhoTemp = () => path.join(os.tmpdir(), `test_working_buffer_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.json`);
+
+  it('deve salvar Working Buffer em disco de forma atômica com envelope e estrutura sanitizada', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const hunter = new BugFareHunter({ arquivoBuffer: tempFile });
+      hunter._registrarLeitura('SAO:LIS', 3800);
+      hunter._registrarLeitura('SAO:LIS', 3900);
+      hunter._registrarAlertaDisparado('SAO:LIS', 'BUG_FARE', 1750);
+      hunter._registrarLeitura('RIO:MIA', 2800);
+
+      const salvo = hunter.salvarWorkingBufferDisco(tempFile, { forcar: true });
+      assert.strictEqual(salvo, true);
+      assert(fs.existsSync(tempFile));
+
+      const conteudo = JSON.parse(fs.readFileSync(tempFile, 'utf-8'));
+      assert.strictEqual(conteudo.versao, 1);
+      assert.strictEqual(conteudo.totalCorredores, 2);
+      assert(conteudo.atualizadoEm);
+      assert(conteudo.corredores['SAO:LIS']);
+      assert.deepStrictEqual(conteudo.corredores['SAO:LIS'].leituras, [3800, 3900]);
+      assert.strictEqual(conteudo.corredores['SAO:LIS'].ultimoAlerta.tipo, 'BUG_FARE');
+      assert.strictEqual(conteudo.corredores['SAO:LIS'].ultimoAlerta.preco, 1750);
+      assert.deepStrictEqual(conteudo.corredores['RIO:MIA'].leituras, [2800]);
+      assert.strictEqual(conteudo.corredores['RIO:MIA'].ultimoAlerta, null);
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve restaurar Working Buffer do disco no boot da classe quando configurado', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const payload = {
+        versao: 1,
+        atualizadoEm: new Date().toISOString(),
+        totalCorredores: 1,
+        corredores: {
+          'SAO:PAR': {
+            leituras: [4200, 4100, 4050],
+            ultimoAlerta: { tipo: 'OPORTUNIDADE', preco: 2700, ts: 1728800000000 }
+          }
+        }
+      };
+      fs.writeFileSync(tempFile, JSON.stringify(payload, null, 2), 'utf-8');
+
+      // Boot com arquivo configurado
+      const hunter = new BugFareHunter({ arquivoBuffer: tempFile, carregarNoBoot: true });
+      assert(hunter._workingBuffer.has('SAO:PAR'));
+
+      const buffer = hunter._obterBufferCorreder('SAO:PAR');
+      assert.deepStrictEqual(buffer.leituras, [4200, 4100, 4050]);
+      assert.strictEqual(buffer.ultimoAlerta.tipo, 'OPORTUNIDADE');
+      assert.strictEqual(buffer.ultimoAlerta.preco, 2700);
+      assert.strictEqual(buffer.ultimoAlerta.ts, 1728800000000);
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve carregar formato plano (sem envelope de versão) com sanitização de leituras', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const payloadPlano = {
+        'BSB:CUN': {
+          leituras: [3000, 'invalido', -200, null, 3100, 2950],
+          ultimoAlerta: { tipo: 'BUG_FARE', preco: 1200, ts: 1728700000000 }
+        }
+      };
+      fs.writeFileSync(tempFile, JSON.stringify(payloadPlano), 'utf-8');
+
+      const hunter = new BugFareHunter();
+      const carregou = hunter.carregarWorkingBufferDisco(tempFile);
+      assert.strictEqual(carregou, true);
+      assert(hunter._workingBuffer.has('BSB:CUN'));
+
+      const buffer = hunter._obterBufferCorreder('BSB:CUN');
+      // Filtrou strings, nulos e negativos: apenas [3000, 3100, 2950]
+      assert.deepStrictEqual(buffer.leituras, [3000, 3100, 2950]);
+      assert.strictEqual(buffer.ultimoAlerta.tipo, 'BUG_FARE');
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve limitar leituras carregadas a BUFFER_MAX_LEITURAS (últimas 5)', () => {
+    const tempFile = criarCaminhoTemp();
+    try {
+      const payloadExcesso = {
+        corredores: {
+          'SAO:NYC': {
+            leituras: [1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000],
+            ultimoAlerta: null
+          }
+        }
+      };
+      fs.writeFileSync(tempFile, JSON.stringify(payloadExcesso), 'utf-8');
+
+      const hunter = new BugFareHunter();
+      hunter.carregarWorkingBufferDisco(tempFile);
+
+      const buffer = hunter._obterBufferCorreder('SAO:NYC');
+      assert.strictEqual(buffer.leituras.length, 5);
+      assert.deepStrictEqual(buffer.leituras, [4000, 5000, 6000, 7000, 8000]);
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  it('deve lidar defensivamente com arquivo inexistente, corrompido ou vazio sem lançar erro', () => {
+    const hunter = new BugFareHunter();
+
+    // Arquivo inexistente
+    const resInexistente = hunter.carregarWorkingBufferDisco('/tmp/nao_existe_working_buffer_12345.json');
+    assert.strictEqual(resInexistente, false);
+
+    // Arquivo vazio
+    const tempVazio = criarCaminhoTemp();
+    fs.writeFileSync(tempVazio, '', 'utf-8');
+    const resVazio = hunter.carregarWorkingBufferDisco(tempVazio);
+    assert.strictEqual(resVazio, false);
+    fs.unlinkSync(tempVazio);
+
+    // Arquivo corrompido (JSON inválido)
+    const tempCorrompido = criarCaminhoTemp();
+    fs.writeFileSync(tempCorrompido, '{ "invalido": true, ...corrompido', 'utf-8');
+    const resCorrompido = hunter.carregarWorkingBufferDisco(tempCorrompido);
+    assert.strictEqual(resCorrompido, false);
+    fs.unlinkSync(tempCorrompido);
+  });
+
+  it('deve limpar estado em memória via limparWorkingBuffer', () => {
+    const hunter = new BugFareHunter();
+    hunter._registrarLeitura('SAO:LIS', 3500);
+    assert.strictEqual(hunter._workingBuffer.size, 1);
+
+    hunter.limparWorkingBuffer();
+    assert.strictEqual(hunter._workingBuffer.size, 0);
+  });
+
+  it('deve invocar salvarWorkingBufferDisco ao término de escanearCorredoresProativos', async () => {
+    const hunter = new BugFareHunter();
+    let salvarChamado = false;
+    hunter.salvarWorkingBufferDisco = () => {
+      salvarChamado = true;
+      return true;
+    };
+
+    // Mock do provedorDirect para responder imediatamente sem rede
+    hunter.provedorDirect = {
+      buscarOfertas: async () => ({
+        ok: true,
+        encontrouVoos: true,
+        oferta: { preco: 4500, destinoReal: 'Lisboa' }
+      })
+    };
+
+    const res = await hunter.escanearCorredoresProativos({ limiteRotas: 1, notificar: false });
+    assert.strictEqual(res.sucesso, true);
+    assert.strictEqual(salvarChamado, true);
   });
 });

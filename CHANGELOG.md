@@ -4,6 +4,24 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.9] - 2026-10-13 — Persistência Atômica do Working Buffer em Disco (BugFareHunter)
+
+### 🚀 Novas Funcionalidades & Arquitetura Proativa
+- `src/services/bug_fare_hunter.js` · `BugFareHunter` / `salvarWorkingBufferDisco`:
+  - Implementada persistência atômica do cache do Working Buffer em disco (`data/working_buffer.json`) utilizando padrão temporário `.tmp` no mesmo diretório seguido de `fs.renameSync` para imunidade contra corrupção em falhas inesperadas.
+  - Envelope estruturado com `versao`, `atualizadoEm`, `totalCorredores` e mapa sanitizado de leituras e histórico do último alerta.
+- `src/services/bug_fare_hunter.js` · `carregarWorkingBufferDisco` & Construtor:
+  - Recarregamento automático no boot da classe, garantindo retenção de memória e volatilidade zero após reinicializações do processo.
+  - Suporte resiliente a envelopes versionados e formatos legados planos, além de sanitização estrita de entradas e aplicação do limite de janela deslizante (`BUFFER_MAX_LEITURAS = 5`).
+- `src/services/bug_fare_hunter.js` · `escanearCorredoresProativos`:
+  - Invocação automática de `this.salvarWorkingBufferDisco()` ao término do ciclo de varredura proativa.
+- `.gitignore`:
+  - Adicionado `data/working_buffer.json` e `data/*.tmp*` para manter working tree limpa e sem ruídos em tempo de execução.
+- `tests/bug_fares.test.js`:
+  - 7 novos testes automatizados dedicados cobrindo escrita atômica, restauração no boot, sanitização de leituras corrompidas, arquivos inválidos e orquestração do ciclo de varredura (230/230 testes aprovados).
+
+---
+
 ## [v2.9.8] - 2026-10-13 — QA & Blindagem Adversarial em `somarDiasData`
 
 ### 🛡️ Blindagem de QA Adversarial

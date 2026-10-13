@@ -1,28 +1,28 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.9.7)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.9.9)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.9.7 100% operacional com 222/222 testes JS e 10/10 testes Python aprovados. Decodificação de payload Protobuf `tfu` (Base64URL) implementada no ScraplingProvider com extração multicamada (4ª camada) cobrindo respostas AJAX e URLs de redirecionamento para a aba Cheapest do Google Flights.
-- **Diretriz Prioritária**: Aumentar a taxa de sucesso de extração da aba Cheapest do Google Flights via decodificação de payload `tfu` e persistência do Working Buffer.
-- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` · `extrairPrecoCheapestTab` & `decodificarPrecoDoTfu` · Implementada 4ª camada de extração via decode Base64URL do payload Protobuf canônico `tfu` (moeda e escala de centavos), capturando tarifas mínimas em respostas AJAX e URLs de redirecionamento sem corpo HTML rico. 10 novos testes adicionados (222/222 verdes).
+- **Estado Geral**: 🟢 Radar v2.9.9 100% operacional com 230/230 testes JS e 10/10 testes Python aprovados. Persistência atômica do Working Buffer do BugFareHunter implementada em disco (`data/working_buffer.json`) com restauração automática no boot da classe.
+- **Diretriz Prioritária**: Aumentar a precisão de extração de companhias aéreas e tarifas no Google Flights e refinamento das badges visuais do Cockpit PWA.
+- **Última Tarefa Concluída**: `src/services/bug_fare_hunter.js` · `salvarWorkingBufferDisco` & `carregarWorkingBufferDisco` · Implementada persistência atômica do cache do Working Buffer em disco (`data/working_buffer.json`) via escrita em arquivo temporário e `fs.renameSync`, com recarregamento no boot e invocação ao final de `escanearCorredoresProativos`. 7 novos testes adicionados (230/230 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/services/bug_fare_hunter.js`
-- **Função/Componente/Seletor**: `escanearCorredoresProativos` (com métodos auxiliares `salvarWorkingBufferDisco` / `carregarWorkingBufferDisco`)
-- **Comportamento Esperado / Critério de Aceite**: Persistir o cache do Working Buffer em disco (`data/working_buffer.json`) de forma atômica após cada ciclo de varredura e recarregá-lo no boot da classe, garantindo retenção de memória e volatilidade zero após reinicializações do processo.
+- **Arquivo/Módulo Alvo**: `src/services/providers/scrapling_client.js`
+- **Função/Componente/Seletor**: `extrairVoosDoHtml`
+- **Comportamento Esperado / Critério de Aceite**: Adicionar fallback defensivo de extração de companhia aérea por código IATA de 2 letras (ex: G3, LA, AD, TP, AF) diretamente da matriz de voos e atributos data-* do Google Flights quando os nomes extensos não estiverem presentes nos seletores de texto ou aria-labels.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/providers/scrapling_client.js` • `extrairVoosDoHtml` • Adicionar fallback de extração de companhia aérea por código IATA de 2 letras diretamente da matriz de voos do Google Flights.
 - [ ] `src/public/app.js` • `renderizarRotas` • Refinar renderização de badges de conexões com exibição de escala noturna / stopover em cards móveis.
 - [ ] `src/domain/calculadora.js` • `avaliarCustoDestinoComTotal` • Suporte a moedas dinâmicas e conversão de diárias internacionais para destinos fora do dicionário base.
 - [ ] `src/domain/rotas.js` • `gerarLinkGoogleFlightsCheapest` • Suporte a múltiplos passageiros e seleção de cabine (Premium Economy / Business) no payload tfs.
+- [ ] `src/services/notifier_telegram.js` • `enviarAlertaBugFare` • Adicionar botão inline com atalho de consulta direta de regras de bagagem da rota.
 
 ---
 
