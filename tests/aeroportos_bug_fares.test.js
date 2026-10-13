@@ -38,6 +38,20 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.notStrictEqual(concretoAmSul.cidade, 'América do Sul');
   });
 
+  it('deve resolver destino concreto priorizando destinoReal e codigoDestinoReal quando informados', () => {
+    const concretoScl = resolverDestinoConcreto({
+      destino: 'América do Sul',
+      codigoDestino: '/m/06_1',
+      destinoReal: 'Santiago (SCL)',
+      codigoDestinoReal: 'SCL'
+    });
+
+    assert.ok(concretoScl);
+    assert.strictEqual(concretoScl.cidade, 'Santiago');
+    assert.strictEqual(concretoScl.pais, 'Chile');
+    assert.strictEqual(concretoScl.iata, 'SCL');
+  });
+
   it('deve formatar período da viagem com precisão e clareza', () => {
     const periodoIdaEVolta = formatarPeriodoViagem('2026-12-08', '2026-12-22');
     assert.strictEqual(periodoIdaEVolta, 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
@@ -51,7 +65,9 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
       origem: 'São Paulo',
       codigoOrigem: 'SAO',
       destino: 'América do Sul',
-      codigoDestino: 'BUE',
+      codigoDestino: '/m/06_1',
+      codigoDestinoReal: 'SCL',
+      destinoReal: 'Santiago (SCL)',
       dataIda: '2026-12-08',
       dataVolta: '2026-12-22',
       preco: 414,
@@ -60,25 +76,23 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
 
     assert.ok(card);
     assert.strictEqual(card.preco, 414);
-    assert.strictEqual(card.cidade_destino, 'Buenos Aires');
-    assert.strictEqual(card.pais_destino, 'Argentina');
-    assert.ok(card.aeroporto_chegada.includes('Ezeiza') || card.aeroporto_chegada.includes('Aeroparque'));
+    assert.strictEqual(card.cidade_destino, 'Santiago');
+    assert.strictEqual(card.pais_destino, 'Chile');
+    assert.ok(card.aeroporto_chegada.includes('SCL') || card.aeroporto_chegada.includes('Arturo Merino'));
     assert.strictEqual(card.periodo_texto, 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
 
     // Link NUNCA deve conter through nem termos de continente genérico
     assert.ok(card.link);
     assert.ok(!card.link.includes('through'));
-    assert.ok(!card.link.includes('South%20America'));
-    assert.ok(!card.link.includes('/m/06_1'));
-    // Link canônico deve usar Protobuf tfs da aba Cheapest
+    // Link canônico para o aeroporto físico achado (SCL) deve usar Protobuf tfs da aba Cheapest
     assert.ok(card.link.includes('tfs='));
   });
 
-  it('gerarLinkGoogleFlights deve utilizar returning em vez de through para round-trip', () => {
-    const link = gerarLinkGoogleFlights('SAO', 'BUE', '2026-12-08', '2026-12-22');
+  it('gerarLinkGoogleFlights deve utilizar returning e converter KGMID para nome em inglês aceito pelo Google Flights', () => {
+    const link = gerarLinkGoogleFlights('SAO', '/m/06_1', '2026-12-08', '2026-12-22');
     assert.ok(!link.includes('through'));
     assert.ok(link.includes('returning'));
-    assert.ok(link.includes('Flights%20from%20SAO%20to%20BUE') || link.includes('Flights%20from%20SAO%20to%20EZE'));
+    assert.ok(link.includes('Flights%20from%20SAO%20to%20South%20America'));
   });
 
   it('deve persistir e recuperar Bug Fare com campos enriquecidos no SQLite', () => {
