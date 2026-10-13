@@ -67,6 +67,36 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     });
   });
 
+  it('gerarCombinacoesFlexibilidade: deve normalizar defensivamente "Só Ida", formato brasileiro e entradas nulas/não-finitas', () => {
+    // 1. String "Só Ida" deve ser uniformemente null em todas as combinações, incluindo Data Base
+    const combsSoIda = gerarCombinacoesFlexibilidade('2026-11-10', 'Só Ida', 2);
+    assert.strictEqual(combsSoIda.length, 5);
+    combsSoIda.forEach(c => {
+      assert.strictEqual(c.dataVolta, null);
+    });
+    assert.strictEqual(combsSoIda[0].dataVolta, null);
+
+    // 2. Formato brasileiro DD/MM/YYYY deve ser normalizado para ISO em todas as combinações
+    const combsBr = gerarCombinacoesFlexibilidade('10/11/2026', '20/11/2026', 1);
+    assert.strictEqual(combsBr[0].dataIda, '2026-11-10');
+    assert.strictEqual(combsBr[0].dataVolta, '2026-11-20');
+    assert.strictEqual(combsBr[1].dataIda, '2026-11-09');
+    assert.strictEqual(combsBr[1].dataVolta, '2026-11-19');
+    assert.strictEqual(combsBr[2].dataIda, '2026-11-11');
+    assert.strictEqual(combsBr[2].dataVolta, '2026-11-21');
+
+    // 3. Entradas nulas e flexibilidade inválida ou negativa devem degradar graciosamente sem lançar erro
+    const combsNulo = gerarCombinacoesFlexibilidade(null, null, -5);
+    assert.strictEqual(combsNulo.length, 1);
+    assert.strictEqual(combsNulo[0].dataIda, null);
+    assert.strictEqual(combsNulo[0].dataVolta, null);
+    assert.strictEqual(combsNulo[0].deltaDias, 0);
+
+    const combsNan = gerarCombinacoesFlexibilidade('2026-11-10', null, NaN);
+    assert.strictEqual(combsNan.length, 1);
+    assert.strictEqual(combsNan[0].dataIda, '2026-11-10');
+  });
+
   it('deve persistir e recuperar rota com flexibilidade_dias e melhor_opcao_flexivel no SQLite', () => {
     const rota = rotasRepo.criar({
       origem: 'São Paulo',

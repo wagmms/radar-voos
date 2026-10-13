@@ -601,18 +601,21 @@ export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 1
  * Gera as combinações de datas na janela de flexibilidade (±0 a ±7 dias)
  */
 export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeDias = 0) {
+  const idaNorm = formatarDataParaBusca(dataIda) || (dataIda ? String(dataIda).trim() : null);
+  const voltaEfetiva = (ehSoIda(dataVolta) || !dataVolta) ? null : (formatarDataParaBusca(dataVolta) || String(dataVolta).trim());
+
   const flex = Math.min(7, Math.max(0, parseInt(flexibilidadeDias, 10) || 0));
   if (flex === 0) {
-    return [{ dataIda, dataVolta, deltaDias: 0, label: 'Data Base' }];
+    return [{ dataIda: idaNorm, dataVolta: voltaEfetiva, deltaDias: 0, label: 'Data Base' }];
   }
 
   const combinacoes = [
-    { dataIda, dataVolta, deltaDias: 0, label: 'Data Base' }
+    { dataIda: idaNorm, dataVolta: voltaEfetiva, deltaDias: 0, label: 'Data Base' }
   ];
 
   for (let delta = 1; delta <= flex; delta++) {
-    const idaMenos = somarDiasData(dataIda, -delta);
-    const voltaMenos = dataVolta ? somarDiasData(dataVolta, -delta) : null;
+    const idaMenos = somarDiasData(idaNorm, -delta);
+    const voltaMenos = voltaEfetiva ? somarDiasData(voltaEfetiva, -delta) : null;
     combinacoes.push({
       dataIda: idaMenos,
       dataVolta: voltaMenos,
@@ -620,8 +623,8 @@ export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeD
       label: `${-delta}d`
     });
 
-    const idaMais = somarDiasData(dataIda, delta);
-    const voltaMais = dataVolta ? somarDiasData(dataVolta, delta) : null;
+    const idaMais = somarDiasData(idaNorm, delta);
+    const voltaMais = voltaEfetiva ? somarDiasData(voltaEfetiva, delta) : null;
     combinacoes.push({
       dataIda: idaMais,
       dataVolta: voltaMais,

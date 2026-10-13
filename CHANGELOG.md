@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.14.5] - 2026-10-13 — Blindagem Defensiva de gerarCombinacoesFlexibilidade (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Rotas e Matriz de Flexibilidade)
+- `src/domain/rotas.js`:
+  - `gerarCombinacoesFlexibilidade`: corrigido bug em que valores textuais de retorno como `"Só Ida"` permaneciam no elemento da Data Base (`combinacoes[0].dataVolta = 'Só Ida'`) enquanto eram convertidos para `null` nos deltas de flexibilidade, causando assimetria na estrutura de retorno de voos One-Way. Implementada normalização canônica prévia de `dataIda` e `dataVolta` via `ehSoIda` e `formatarDataParaBusca`, assegurando que datas em formato brasileiro (`DD/MM/AAAA`) sejam padronizadas para `YYYY-MM-DD` uniformemente em todas as combinações e entradas nulas/não-finitas degradem com resiliência sem exceções não tratadas.
+- `tests/rotas_flexibilidade.test.js`:
+  - Adicionado caso de teste adversarial cobrindo normalização uniforme de `"Só Ida"`, datas em formato brasileiro `DD/MM/AAAA` e entradas nulas/não-finitas, totalizando 335 testes com 100% de aprovação.
+
 ## [v2.14.4] - 2026-10-13 — Blindagem Defensiva de formatarPeriodoViagem (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Domínio Aeroportos e Formatação de Período)
