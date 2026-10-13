@@ -140,7 +140,7 @@ export function parsePreco(valor) {
     if (!Number.isFinite(valor) || valor < 0) return 0;
     return valor;
   }
-  if (valor === null || valor === undefined) return 0;
+  if (valor === null || valor === undefined || typeof valor === 'symbol') return 0;
   let s = String(valor)
     .replace(/[\u00A0\u202F]/g, ' ')
     .replace(/(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)/gi, '')
@@ -169,8 +169,8 @@ export function parsePreco(valor) {
     const pontos = (s.match(/\./g) || []).length;
     if (pontos > 1) {
       s = s.replace(/\./g, '');
-    } else if (/^\d{1,3}\.\d{3}$/.test(s)) {
-      // Ponto único usado como separador de milhar (ex: "1.500", "2.350", "R$ 1.950")
+    } else if (/^\s*-?\d{1,3}\.\d{3}(?:[^\d.,]|$)/.test(s)) {
+      // Ponto único usado como separador de milhar (ex: "1.500", "2.350", "R$ 1.950", "1.500 por pessoa")
       s = s.replace(/\./g, '');
     }
   }

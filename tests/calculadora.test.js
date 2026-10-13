@@ -59,6 +59,13 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco('R$\u00A03.450,00'), 3450.00);
     assert.strictEqual(parsePreco('1 500,50'), 1500.50);
     assert.strictEqual(parsePreco('1 234 567'), 1234567);
+
+    // 4. Testes adversariais de scraping: sufixos contextuais e tipos não convencionais
+    assert.strictEqual(parsePreco('1.500 por pessoa'), 1500);
+    assert.strictEqual(parsePreco('1.500/trecho'), 1500);
+    assert.strictEqual(parsePreco('R$ 1.950 ida e volta'), 1950);
+    assert.strictEqual(parsePreco('12.350 (apenas ida)'), 12350);
+    assert.strictEqual(parsePreco(Symbol('invalido')), 0);
   });
 
   it('deve calcular variações percentuais e sinalizar quedas relâmpago', () => {

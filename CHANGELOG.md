@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.17.1] - 2026-10-13 — Blindagem Adversarial em parsePreco (Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido bug de parsing onde separador de milhar com ponto único em strings de tarifas contendo sufixos contextuais de scraping (ex: `"1.500 por pessoa"`, `"1.500/trecho"`, `"R$ 1.950 ida e volta"`) não removia o ponto, truncando valores para decimais (ex: 1.5 em vez de 1500).
+  - Adicionada blindagem contra valores do tipo `Symbol` para evitar exceção `TypeError`.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes adversariais cobrindo sufixos contextuais e entradas inválidas/Symbols.
+
 ## [v2.17.0] - 2026-10-13 — Widget de Edição Inline de Milhas no Cockpit PWA
 
 ### ✈️ Novo Recurso: Configuração de Paridade de Milhas Diretamente nos Cards
