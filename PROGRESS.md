@@ -1,27 +1,27 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.17.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.19.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.18.0 100% operacional com 376/376 testes JS e 10/10 testes Python aprovados. `calcularMilhasRota` implementada no backend com estimativa automática de milhas no retorno de `escanearRota`.
+- **Estado Geral**: 🟢 Radar v2.19.0 100% operacional com 385/385 testes JS e 10/10 testes Python aprovados. `GET /api/rotas` agora serializa `paridade_milhas`, `programa_milhas` e `milhas_estimadas` calculado server-side.
 - **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
-- **Última Tarefa Concluída**: `src/services/flight_scanner.js` · `calcularMilhasRota` + `escanearRota` (step 6) · Função pura exportada que calcula milhas estimadas a partir de `paridade_milhas` e `programa_milhas` da rota; campo `milhas_estimadas` incluído no payload de retorno de `escanearRota`; 12 novos testes (376/376 verdes).
+- **Última Tarefa Concluída**: `src/server/routes/rotas_routes.js` · `GET /api/rotas` map · `paridade_milhas`, `programa_milhas` e `milhas_estimadas` (via `calcularMilhasRota`) incluídos no payload de cada rota; Cockpit PWA não precisa mais recalcular nem fazer chamada extra; 2 novos testes (385/385 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/server/routes/rotas_routes.js`
-- **Função/Componente/Seletor**: Rota `GET /api/rotas` — `rotasRepo.listarTodas()` + `map` de `rotasCompletas`
-- **Comportamento Esperado / Critério de Aceite**: Garantir que `paridade_milhas` e `programa_milhas` estejam sempre presentes e serializados no payload de resposta (`rotas[].paridade_milhas` e `rotas[].programa_milhas`); adicionar `milhas_estimadas` calculado via `calcularMilhasRota` no objeto de cada rota retornada, permitindo exibição direta no Cockpit PWA sem chamada adicional ao servidor.
+- **Arquivo/Módulo Alvo**: `src/public/app.js`
+- **Função/Componente/Seletor**: `abrirEdicaoRota` — modal de edição de rota existente
+- **Comportamento Esperado / Critério de Aceite**: Pré-preencher os campos `paridade_milhas` e `programa_milhas` no modal de edição quando a rota já tiver esses valores configurados; salvar via `PATCH /api/rotas/:id/milhas` ao confirmar; exibir `milhas_estimadas` atualizado em tempo real no card da rota sem reload da página.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/server/routes/rotas_routes.js` • Rota `GET /api/rotas` • Incluir `paridade_milhas`, `programa_milhas` e `milhas_estimadas` (via `calcularMilhasRota`) no payload de resposta de cada rota.
-- [ ] `src/public/app.js` • `abrirEdicaoRota` • Pré-preencher `paridade_milhas` e `programa_milhas` no modal de edição de rota existente (campos adicionais ao modal).
+- [ ] `src/public/app.js` • `abrirEdicaoRota` • Pré-preencher `paridade_milhas` e `programa_milhas` no modal de edição de rota existente; salvar via PATCH e atualizar card inline sem reload.
 - [ ] `src/services/notifier_telegram.js` • `enviarAlertaOportunidade` • Incluir seção "✈️ ~NNN milhas" no card de alerta usando `milhas_estimadas` do resultado de `escanearRota`.
+- [ ] `src/public/js/card_rota.js` • `renderizarBadgesMilhas` • Consumir `milhas_estimadas` já calculado no payload do `GET /api/rotas` (sem recalcular no cliente), exibindo badge de milhas estimadas no card.
 
 ---
 
