@@ -15,6 +15,7 @@ import {
   extrairInfoBagagem
 } from './google_flights_direct_provider.js';
 import { PADROES_IGNORAR_RODAPE } from '../../domain/dicionarios.js';
+import { fetchComPrimpTls, verificarPrimpDisponivel } from './tls_impersonate_client.js';
 
 
 /**
@@ -863,18 +864,30 @@ export class ScraplingProvider extends FlightProviderInterface {
         clearTimeout(timeoutId);
         this._requisicoesCiclo++;
 
-        // Detecção de bloqueio anti-bot → retry imediato com novo perfil
-        if (detectarBloqueioBot(resp)) {
+        let respOk = resp.ok;
+        let respUrl = resp.url;
+        let html = respOk ? await resp.text() : '';
+
+        // Se detectar bloqueio anti-bot ou HTML vazio e primp estiver disponível no sistema (produção/live),
+        // aciona failover instantâneo para TLS Impersonation de Chrome 145 (padrão primp / fast-flights)
+        if (process.env.NODE_ENV !== 'test' && (detectarBloqueioBot(resp) || html.length < 5000) && await verificarPrimpDisponivel()) {
+          const resPrimp = await fetchComPrimpTls(urlCheapest, { timeoutMs: HTTP_TIMEOUT_MS });
+          if (resPrimp.ok && resPrimp.text.length > 5000) {
+            html = resPrimp.text;
+            respOk = true;
+          }
+        }
+
+        // Detecção de bloqueio anti-bot persistente → retry imediato com novo perfil
+        if (detectarBloqueioBot(resp) && !respOk) {
           ultimoErro = `Bloqueio anti-bot detectado (HTTP ${resp.status}, URL: ${resp.url}) — tentativa ${tentativa + 1}/${MAX_TENTATIVAS}`;
           continue;
         }
 
-        if (!resp.ok) {
+        if (!respOk) {
           ultimoErro = `HTTP ${resp.status} na tentativa ${tentativa + 1}`;
           continue;
         }
-
-        const html = await resp.text();
 
         // Extração do preço da aba Cheapest (camadas 1-3 no HTML + camada 4 via URL de resposta/tfu)
         const precoCheapest = extrairPrecoCheapestTab(html, resp.url);

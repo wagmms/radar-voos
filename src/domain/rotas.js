@@ -467,72 +467,48 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
   const voltaRaw = ehSoIda(dataVolta) ? null : dataVolta;
   const voltaEfetiva = voltaRaw ? (formatarDataParaBusca(voltaRaw) || (typeof voltaRaw === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(voltaRaw.trim()) ? voltaRaw.trim() : null)) : null;
 
-  const leg1Parts = [];
-  leg1Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(idaNorm)]));
-  const maxMinNum = Number(maxDurationMinutes);
-  if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
-    leg1Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
-  }
-  for (const orig of origensEfetivas) {
-    const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
-    const origBytes = Buffer.from(orig);
-    const sub = Buffer.concat([
-      Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
-      Buffer.from([0x12, origBytes.length]),
-      origBytes
-    ]);
-    leg1Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
-  }
-  for (const dest of destinosEfetivos) {
-    const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
-    const destBytes = Buffer.from(dest);
-    const sub = Buffer.concat([
-      Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
-      Buffer.from([0x12, destBytes.length]),
-      destBytes
-    ]);
-    leg1Parts.push(Buffer.concat([Buffer.from([0x72]), encodeVarint(sub.length), sub]));
+  const criarLeg = (dataStr, origList, destList) => {
+    const parts = [];
+    // Data: Field 2 (string)
+    parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataStr)]));
+    // Max duration: Field 12 (varint)
+    const maxMinNum = Number(maxDurationMinutes);
+    if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
+      parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
+    }
+    // from_airport: Field 13 (Airport: string airport = 2)
+    for (const o of origList) {
+      const oBytes = Buffer.from(o);
+      const aeroBuf = Buffer.concat([Buffer.from([0x12, oBytes.length]), oBytes]);
+      parts.push(encodeLengthDelimited(13, aeroBuf));
+    }
+    // to_airport: Field 14 (Airport: string airport = 2)
+    for (const d of destList) {
+      const dBytes = Buffer.from(d);
+      const aeroBuf = Buffer.concat([Buffer.from([0x12, dBytes.length]), dBytes]);
+      parts.push(encodeLengthDelimited(14, aeroBuf));
+    }
+    return Buffer.concat(parts);
+  };
+
+  const legs = [];
+  legs.push(encodeLengthDelimited(3, criarLeg(idaNorm, origensEfetivas, destinosEfetivos)));
+  const tripType = voltaEfetiva ? 0x01 : 0x02; // 1 = ROUND_TRIP, 2 = ONE_WAY
+  if (voltaEfetiva) {
+    legs.push(encodeLengthDelimited(3, criarLeg(voltaEfetiva, destinosEfetivos, origensEfetivas)));
   }
 
-  // Trip type: 0x01 para Ida e Volta (Round-Trip), 0x02 para Só Ida (One-Way)
-  // Conforme especificação canônica do enum Trip do Google Flights (ROUND_TRIP = 1, ONE_WAY = 2)
-  const tripType = voltaEfetiva ? 0x01 : 0x02;
   const rootParts = [
-    Buffer.from([0x08, 0x1c, 0x10, tripType]),
-    encodeLengthDelimited(3, Buffer.concat(leg1Parts))
+    ...legs,
+    // Passengers: Field 8 (Passenger.ADULT = 1) -> tag 0x42 (packed)
+    Buffer.from([0x42, 0x01, 0x01]),
+    // Seat: Field 9 (ECONOMY = 1) -> tag 0x48
+    Buffer.from([0x48, 0x01]),
+    // Trip: Field 19 (ROUND_TRIP = 1, ONE_WAY = 2) -> tag 0x98, 0x01
+    Buffer.from([0x98, 0x01, tripType])
   ];
 
-  if (voltaEfetiva) {
-    const leg2Parts = [];
-    leg2Parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(voltaEfetiva)]));
-    if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
-      leg2Parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
-    }
-    for (const dest of destinosEfetivos) {
-      const isKgmid = dest.startsWith('/m/') || dest.startsWith('/g/');
-      const destBytes = Buffer.from(dest);
-      const sub = Buffer.concat([
-        Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
-        Buffer.from([0x12, destBytes.length]),
-        destBytes
-      ]);
-      leg2Parts.push(Buffer.concat([Buffer.from([0x6a]), encodeVarint(sub.length), sub]));
-    }
-    for (const orig of origensEfetivas) {
-      const isKgmid = orig.startsWith('/m/') || orig.startsWith('/g/');
-      const origBytes = Buffer.from(orig);
-      const sub = Buffer.concat([
-        Buffer.from([0x08, isKgmid ? 0x02 : 0x01]),
-        Buffer.from([0x12, origBytes.length]),
-        origBytes
-      ]);
-      leg2Parts.push(Buffer.concat([Buffer.from([0x72]), encodeVarint(sub.length), sub]));
-    }
-    rootParts.push(encodeLengthDelimited(3, Buffer.concat(leg2Parts)));
-  }
-
-  rootParts.push(Buffer.from([0x40, 0x01, 0x48, 0x01, 0x70, 0x01, 0x98, 0x01, tripType]));
-  return Buffer.concat(rootParts).toString('base64url');
+  return Buffer.concat(rootParts).toString('base64');
 }
 
 /**

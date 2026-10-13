@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.20.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.21.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.20.0 100% operacional com 436/436 testes JS aprovados. Corrigida a extração de preços (extirpado falso R$ 486 de rodapé) e expandida a busca continental (América do Sul e Europa cobrindo todo o continente).
+- **Estado Geral**: 🟢 Radar v2.21.0 100% operacional com 439/439 testes JS aprovados. Motor de TLS Impersonation com spoofing Chrome 145 (padrão primp) ativo e serializador Protobuf canônico puro do Google Flights validado.
 - **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
-- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` e `src/domain/dicionarios.js` · `extrairVoosDoHtml` / `DESTINOS_CONTINENTES` · Eliminada captura de sugestões de rodapé/FAQ (R$ 486 fantasma) via `PADROES_IGNORAR_RODAPE` e remoção da Camada C cega; implementada expansão continental abrangente para múltiplos aeroportos (América do Sul -> SCL R$ 1.655, Europa -> BCN/MAD R$ 3.624 em BRL); 5 novos testes unitários (436/436 verdes); deploy realizado em `main`.
+- **Última Tarefa Concluída**: `src/services/providers/tls_impersonate_client.js` e `src/domain/rotas.js` · `fetchComPrimpTls` / `gerarTfs` · Implementada engine de TLS Impersonation via primp (Chrome 145 sobre macOS/Linux) integrada ao ScraplingProvider; serializador Protobuf reestruturado conforme especificação pura `flights.proto` do fast-flights, garantindo hidratação SSR instantânea de voos tanto para Só Ida quanto para Ida e Volta (3 novos testes, 439/439 verdes).
 
 ---
 

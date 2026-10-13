@@ -4,6 +4,19 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.21.0] - 2026-10-13 — TLS Impersonation Engine (Padrão primp / Chrome 145) & Serializador Protobuf Canônico Puro (flights.proto)
+
+### 🥷 Nova Funcionalidade de Evasão TLS & Refatoração Canônica:
+- **`src/services/providers/tls_impersonate_client.js`**:
+  - Criado o módulo de impersonação TLS de navegador real baseado na biblioteca `primp` (utilizada pelo `fast-flights`).
+  - Executa requisições espelhando a assinatura de TLS (JA3 / JA4) do Chrome 145 sobre macOS/Linux com timeouts controlados e degradação graciosa.
+- **`src/services/providers/scrapling_client.js`**:
+  - Integrado failover automático de ultra-stealth via `fetchComPrimpTls` caso a requisição HTTP nativa sofra bloqueio anti-bot ou receba HTML vazio de consentimento.
+- **`src/domain/rotas.js`** (`gerarTfs`):
+  - Serializador Protobuf alinhado 100% à especificação canônica `flights.proto`: removidos prefixos obsoletos do SerpAPI e tags espúrias na submensagem `Airport`, garantindo que o Google Flights hidrate o payload integral de voos tanto para Só Ida quanto para Ida e Volta (Round-Trip) no SSR inicial.
+- **`tests/tls_impersonate_client.test.js`**:
+  - Nova suíte de testes unitários para a engine de impersonação TLS (439/439 testes verdes).
+
 ## [v2.20.0] - 2026-10-13 — Motor de Scraping Fast-Flights Engine: Extração Nativa de Dados Estruturados via JSON `script.ds:1` (Scrapling & Direct Providers)
 
 ### 🚀 Nova Funcionalidade & Arquitetura de Alta Fidelidade (Padrão fast-flights v3.0):
