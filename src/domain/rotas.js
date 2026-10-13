@@ -67,7 +67,10 @@ export function normalizarParaSerpApi(codigo) {
  * Identifica se o campo de volta representa 'Só Ida'
  */
 export function ehSoIda(campoVolta) {
-  if (campoVolta === null || campoVolta === undefined) return true;
+  if (campoVolta === null || campoVolta === undefined || campoVolta === false) return true;
+  if (typeof campoVolta === 'number') {
+    return !Number.isFinite(campoVolta) || campoVolta <= 0;
+  }
   const str = String(campoVolta).trim();
   if (str === '') return true;
 
@@ -79,10 +82,27 @@ export function ehSoIda(campoVolta) {
     limpo === 'ida' ||
     limpo === 'one way' ||
     limpo === 'oneway' ||
+    limpo === 'single' ||
+    limpo === 'single trip' ||
+    limpo === 'sem volta' ||
+    limpo === 'sem-volta' ||
+    limpo === 'sem retorno' ||
+    limpo === 'sem data' ||
+    limpo === 'sem data de volta' ||
+    limpo === 'null' ||
+    limpo === 'undefined' ||
+    limpo === 'none' ||
+    limpo === 'n/a' ||
+    limpo === 'na' ||
+    limpo === 'false' ||
+    limpo === '0' ||
     limpo.includes('so ida') ||
     limpo.includes('somente ida') ||
     limpo.includes('apenas ida') ||
-    limpo.includes('one-way')
+    limpo.includes('one-way') ||
+    limpo.includes('sem volta') ||
+    limpo.includes('sem retorno') ||
+    limpo.includes('no return')
   );
 }
 

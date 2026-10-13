@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.21] - 2026-10-13 — Blindagem Adversarial em ehSoIda contra Booleano False, Sentinelas e Ausência Explícita de Volta (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`ehSoIda`):
+  - Corrigido falso negativo em que entradas booleanas `false`, numéricas zeradas (`0`), `NaN` ou strings sentinelas de ausência de volta (ex: `"sem volta"`, `"sem_volta"`, `"sem retorno"`, `"null"`, `"undefined"`, `"none"`, `"n/a"`, `"no return"`, `"single"`) eram interpretadas indevidamente como viagens de Ida e Volta (`Round-Trip`), causando corrupção de modalidade e exibição errônea nos alertas do Telegram e rotas flexíveis.
+  - Implementada checagem defensiva para primitivos falsy/booleanos e vocabulário semântico de viagens de Só Ida / sem retorno.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo `false`, `0`, `NaN`, `"sem volta"`, `"sem retorno"`, `"no return"`, `"single"`, `"null"`, `"undefined"`, `"none"` e `"n/a"`, garantindo 100% de precisão na classificação de modalidades.
+
 ## [v2.18.20] - 2026-10-13 — Blindagem Adversarial em gerarLinkGoogleFlights contra Datas Malformadas e Volta Retroativa (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

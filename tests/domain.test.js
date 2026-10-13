@@ -106,6 +106,24 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(ehSoIda('14'), false);
   });
 
+  it('deve lidar com casos adversariais em ehSoIda (booleanos, sentinelas e strings sem volta)', () => {
+    assert.strictEqual(ehSoIda(false), true);
+    assert.strictEqual(ehSoIda(0), true);
+    assert.strictEqual(ehSoIda(NaN), true);
+    assert.strictEqual(ehSoIda('sem volta'), true);
+    assert.strictEqual(ehSoIda('sem_volta'), true);
+    assert.strictEqual(ehSoIda('sem retorno'), true);
+    assert.strictEqual(ehSoIda('no return'), true);
+    assert.strictEqual(ehSoIda('single'), true);
+    assert.strictEqual(ehSoIda('null'), true);
+    assert.strictEqual(ehSoIda('undefined'), true);
+    assert.strictEqual(ehSoIda('none'), true);
+    assert.strictEqual(ehSoIda('n/a'), true);
+    assert.strictEqual(ehSoIda('0'), true);
+    assert.strictEqual(ehSoIda(14), false);
+    assert.strictEqual(ehSoIda('10 dias'), false);
+  });
+
   it('deve extrair dias de estadia de múltiplos formatos numéricos e textuais', () => {
     assert.strictEqual(extrairDiasEstadia('10 dias'), 10);
     assert.strictEqual(extrairDiasEstadia('10'), 10);
