@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.5] - 2026-10-12
+
+### 🏛️ Governança Canônica com AGENTS.md e Blindagem Total do Autoloop contra Travamentos
+- **Diretrizes Técnicas Canônicas (`AGENTS.md`)**:
+  - Criado arquivo canônico de engenharia na raiz do repositório definindo padrões estritos de arquitetura: Fastify 4 modular com Ajv, SQLite nativo Node.js 22 operando em WAL mode (`busy_timeout=5000`, `synchronous=NORMAL`, `BEGIN IMMEDIATE`), web scraping anti-bloqueio com `scrapling`, Google Flights (aba Cheapest via Protobuf `tfs`), caçador proativo de Bug Fares (`proactive-agent`), Cockpit PWA mobile-first anti-slop com `smart-charts` e `remotion-maps`, e notificações seguras com `telegram-compose`.
+  - Injeção contextual e dinâmica do `AGENTS.md` diretamente no prompt do autoloop em cada ciclo executado.
+- **Blindagem do Autoloop contra Travamentos e Congelamentos (`scripts/autoloop_radarvoos.py`)**:
+  - **Timeout Estrito de 15 Minutos (900s)**: Invocação do AGY CLI protegida por timeout rígido (`timeout=TIMEOUT_TURNO_AGY`), eliminando travamentos indefinidos por chamadas bloqueadas ou gargalos de rede.
+  - **Encerramento de Grupo de Processos (`stop_process_group`)**: Interrupção limpa e em árvore de todos os processos descendentes caso o tempo limite seja excedido (código 124), seguida de auto-rollback defensivo imediato.
+  - **Limpeza Automática de Travas Residuais do Git**: Rotina `limpar_travas_residuais` que remove com segurança travas órfãs (`.git/index.lock`, `refs/heads/*.lock`, `HEAD.lock`) na inicialização, no início de cada ciclo e antes de qualquer operação de rollback.
+- **Filtro Cirúrgico de Notificações no Telegram (Zero Ruído)**:
+  - Adicionado filtro mandatório: relatórios de ciclo só são despachados quando o commit recém-gerado for uma entrega real de funcionalidade (`commit_msg.startswith("feat:")`).
+  - Commits secundários (`fix:`, `chore:`, `test:`, `refactor:`) permanecem estritamente silenciosos, mantendo a tranquilidade do usuário e respeitando o cooldown protetor de 5 minutos (300s).
+- **Cobertura de Testes Unitários Expandida (`tests/test_autoloop_radarvoos_throttling.py`)**:
+  - Ampliada a suíte para 8 testes unitários cobrindo o novo filtro de commits `feat:`, a rotina de remoção de travas `.git/index.lock` e o carregador seguro de `AGENTS.md`.
+
 ## [2.7.4] - 2026-10-12
 
 ### 🛡️ Blindagem do Autoloop e Throttling Estrito Anti-Spam no Telegram

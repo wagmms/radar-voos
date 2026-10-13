@@ -98,6 +98,41 @@ class TestAutoloopRadarVoosThrottling(unittest.TestCase):
 
     @patch("autoloop_radarvoos.enviar_notificacao_telegram")
     @patch("subprocess.run")
+    def test_suprime_notificacao_se_nao_for_feat(self, mock_subproc, mock_enviar_tg):
+        mock_enviar_tg.return_value = True
+
+        res_hash = MagicMock()
+        res_hash.stdout = "ghi9012\n"
+        res_msg = MagicMock()
+        res_msg.stdout = "fix(scanner): corrigir seletor quebrado\n"
+        mock_subproc.side_effect = [res_hash, res_msg]
+
+        # Mesmo sem cooldown ativo, commits que não começam com feat: devem ser silenciados
+        autoloop.salvar_estado_notificacao("abc1234", ts=time.time() - 1000)
+
+        enviou = autoloop.enviar_relatorio_ciclo_telegram(token="token", chat_id="chat", forcar=False)
+        self.assertFalse(enviou)
+        mock_enviar_tg.assert_not_called()
+
+    def test_limpar_travas_residuais(self):
+        git_dir = Path(self.temp_dir.name) / ".git"
+        git_dir.mkdir(parents=True, exist_ok=True)
+        lock_file = git_dir / "index.lock"
+        lock_file.write_text("dummy lock")
+        self.assertTrue(lock_file.exists())
+
+        autoloop.limpar_travas_residuais(repo_dir=self.temp_dir.name)
+        self.assertFalse(lock_file.exists())
+
+    def test_carregar_diretrizes_agents(self):
+        agents_file = Path(self.temp_dir.name) / "AGENTS.md"
+        agents_file.write_text("# Diretrizes Radar de Voos Teste", encoding="utf-8")
+
+        conteudo = autoloop.carregar_diretrizes_agents(repo_dir=self.temp_dir.name)
+        self.assertIn("Diretrizes Radar de Voos Teste", conteudo)
+
+    @patch("autoloop_radarvoos.enviar_notificacao_telegram")
+    @patch("subprocess.run")
     def test_rejeita_commit_na(self, mock_subproc, mock_enviar_tg):
         mock_subproc.side_effect = Exception("Git indisponível")
         enviou = autoloop.enviar_relatorio_ciclo_telegram(token="token", chat_id="chat", forcar=False)

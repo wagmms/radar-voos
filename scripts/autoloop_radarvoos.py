@@ -226,6 +226,32 @@ deploy_lock = threading.Lock()
 DEFAULT_RADAR_DIR = Path("/home/wagmoraes/Projetos IA/RadarVoos")
 BRANCH_SEGURA_PADRAO = "autoloop/dev"
 STATE_TELEGRAM_FILE = DEFAULT_RADAR_DIR / "data" / "autoloop_telegram_state.json"
+TIMEOUT_TURNO_AGY = 900  # 15 minutos (900s)
+
+def limpar_travas_residuais(repo_dir=DEFAULT_RADAR_DIR):
+    """Remove travas residuais do Git (.git/index.lock, refs locks, etc.) deixadas por encerramentos forçados."""
+    git_dir = Path(repo_dir) / ".git"
+    if not git_dir.is_dir():
+        return
+    padroes_trava = ["index.lock", "refs/heads/*.lock", "HEAD.lock", "config.lock"]
+    for padrao in padroes_trava:
+        for trava in git_dir.glob(padrao):
+            try:
+                trava.unlink(missing_ok=True)
+                log("AVISO", f"🧹 Trava residual do Git removida com sucesso: {trava.name}")
+            except Exception as e:
+                log("AVISO", f"Falha ao limpar trava do Git {trava}: {e}")
+
+def carregar_diretrizes_agents(repo_dir=DEFAULT_RADAR_DIR):
+    """Carrega o AGENTS.md local do repositório para injetar no prompt do agente."""
+    arquivo_agents = Path(repo_dir) / "AGENTS.md"
+    if arquivo_agents.is_file():
+        try:
+            with open(arquivo_agents, "r", encoding="utf-8") as f:
+                return f.read().strip()
+        except Exception:
+            pass
+    return ""
 
 def carregar_estado_notificacao():
     try:
@@ -379,7 +405,7 @@ def enviar_relatorio_ciclo_telegram(token=None, chat_id=None, branch_alvo=BRANCH
     if commit_hash == "N/A":
         return False
 
-    # Deduplicação e Throttling Estrito de Notificações
+    # Deduplicação, Filtro por Tipo e Throttling Estrito de Notificações
     estado = carregar_estado_notificacao()
     last_commit = estado.get("last_notified_commit")
     last_ts = estado.get("last_notified_ts", 0)
@@ -390,7 +416,12 @@ def enviar_relatorio_ciclo_telegram(token=None, chat_id=None, branch_alvo=BRANCH
         log("INFO", f"🔕 Notificação do Telegram suprimida: commit {commit_hash} já foi notificado anteriormente.")
         return False
 
-    # 2. Cooldown mínimo de 300 segundos (5 minutos) entre notificações consecutivas para evitar rajadas
+    # 2. Apenas notificar se for uma entrega real de funcionalidade (commit com prefixo feat:)
+    if not forcar and not commit_msg.strip().lower().startswith("feat"):
+        log("INFO", f"🔕 Notificação do Telegram suprimida: commit '{commit_msg[:50]}' não é uma nova funcionalidade (feat:).")
+        return False
+
+    # 3. Cooldown mínimo de 300 segundos (5 minutos) entre notificações consecutivas para evitar rajadas
     if not forcar and (agora_ts - last_ts) < 300:
         restante = int(300 - (agora_ts - last_ts))
         log("INFO", f"🔕 Notificação do Telegram suprimida (cooldown ativo, {restante}s restantes).")
@@ -429,6 +460,7 @@ def executar_validacao_radar(tier="fast"):
 
 def executar_rollback_defensivo(sha_alvo=None):
     log("AVISO", "🛡️ [AUTO-ROLLBACK] Restaurando estado anterior do repositório para evitar quebras...")
+    limpar_travas_residuais()
     if sha_alvo:
         subprocess.run(["git", "reset", "--hard", sha_alvo], check=False)
     else:
@@ -557,6 +589,7 @@ def montar_bloco_skills_radar():
 
 def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, auto_rollback=True, telegram_token=None, telegram_chat=None):
     with deploy_lock:
+        limpar_travas_residuais()
         token = agy_contas.carregar_conta(num_conta)
         email = agy_contas.extract_email(token)
 
@@ -576,6 +609,9 @@ def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, aut
         log("SHIELD", f"Branch ativa protegida: {CORES['bold']}{branch_alvo}{CORES['reset']}")
         print("=" * 75)
 
+        bloco_agents = carregar_diretrizes_agents()
+        prompt_agents = f"\n### DIRETRIZES TÉCNICAS DO REPOSITÓRIO (AGENTS.md):\n{bloco_agents}\n" if bloco_agents else ""
+
         prompt = f"""Você é um engenheiro sênior e arquiteto de software trabalhando no projeto Radar de Voos (RadarVoos - Travel Hacking Engine, Fastify 4, SQLite Nativo WAL, PWA Cockpit e Telegram Bot).
 Objetivo Geral: {objetivo}
 
@@ -585,16 +621,17 @@ DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
 3. ARQUITETURA E FOCO TÉCNICO DO RADAR DE VOOS:
    ★ PRECISÃO DE BUSCA E PARÂMETROS DE VOOS:
      - Refinar a extração de dados do Google Flights (tarifas normais vs cheapest tab via Protobuf tfs).
+     - Integração com Scrapling para contornar bloqueios anti-bot e headers dinâmicos resilientes.
      - Assegurar distinção precisa entre viagem "Só Ida" (One-Way) e "Ida e Volta" (Round-Trip) em todas as rotas e filtros.
      - Validação estrita de datas, matriz de flexibilidade (±0 a ±7 dias) e janelas sem data fixa.
-     - Detecção de Bug Fares através de Z-Score estatístico e piso tarifário por continente.
+     - Detecção de Bug Fares através de Z-Score estatístico (proactive-agent) e piso tarifário por continente.
    ★ COCKPIT PWA MODERNO (ANTI-UI-SLOP):
-     - Interface limpa, mobile-first, dark mode nativo, sparklines em SVG puro e gráficos geodésicos.
+     - Interface limpa, mobile-first, dark mode nativo, sparklines em SVG puro (smart-charts) e gráficos geodésicos (remotion-maps).
      - Feedback claro nos cards de rotas (badges contextuais de tipo de viagem e teto de preço).
    ★ ROBUSTEZ DO BACKEND:
      - Endpoints Fastify 4 com tratamento de erro resiliente e schemas defensivos.
      - SQLite nativo do Node.js 22 com WAL mode, busy_timeout e transações atômicas seguras.
-     - Bot Telegram com formatação HTML segura e inline keyboards com paginação.
+     - Bot Telegram com formatação HTML segura e inline keyboards com paginação (telegram-compose).
 4. TESTES E VALIDAÇÃO OBRIGATÓRIA:
    - Antes de concluir o ciclo, execute OBRIGATORIAMENTE `./validate.sh fast` para certificar que 100% dos testes e verificações de sintaxe passam.
 5. Se identificar melhorias ou refatorações futuras, NÃO implemente fora de escopo; registre-as em docs/SUGESTOES_FUTURAS.md (mantendo apenas até 5 no PROGRESS.md).
@@ -606,6 +643,7 @@ DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
      3) Comportamento Esperado / Critério de Aceite
    - Crie novos testes automatizados em tests/ cobrindo as novas funcionalidades.
    - Faça um commit semântico limpo (ex: feat:, fix:, test:, refactor:) na branch {branch_alvo}.
+{prompt_agents}
 {montar_bloco_skills_radar()}
 """
 
@@ -638,18 +676,24 @@ DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
 
         try:
             if run_observed:
-                processo = run_observed(cmd, stage="ciclo_agy", on_line=receber_linha,
+                processo = run_observed(cmd, stage="ciclo_agy", timeout=TIMEOUT_TURNO_AGY,
+                                        on_line=receber_linha,
                                         emit=_emitir_evento_equilibrado,
                                         on_start=_registrar_processo_ativo)
                 ret_code = processo.returncode
             else:
                 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
                 _registrar_processo_ativo(proc)
-                for line in proc.stdout:
-                    receber_linha(line)
-                    _emitir_evento_equilibrado(line)
-                proc.wait()
-                ret_code = proc.returncode
+                try:
+                    for line in proc.stdout:
+                        receber_linha(line)
+                        _emitir_evento_equilibrado(line)
+                    proc.wait(timeout=TIMEOUT_TURNO_AGY)
+                    ret_code = proc.returncode
+                except subprocess.TimeoutExpired:
+                    log("ERRO", f"⏰ Timeout estrito de {TIMEOUT_TURNO_AGY}s atingido no turno do AGY! Encerrando processo...")
+                    proc.kill()
+                    ret_code = 124
         except Exception as e:
             log("ERRO", f"Falha na invocação do AGY: {e}")
             ret_code = 1
@@ -657,6 +701,8 @@ DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
             _processo_agy_ativo = None
 
         if ret_code != 0:
+            if ret_code == 124:
+                log("ERRO", f"⏰ Turno do AGY foi cancelado devido a estouro do tempo limite ({TIMEOUT_TURNO_AGY}s).")
             cota_atingida = any(m in indicadores_cota for m in ["resource_exhausted", "429", "quota", "credits balance is too low", "model capacity exceeded"])
             if cota_atingida:
                 chave_b = (num_conta, id_modelo)
@@ -721,6 +767,7 @@ def main():
         os.chdir(DEFAULT_RADAR_DIR)
 
     log("SMART", "🛫 Iniciando Autoloop Radar de Voos...")
+    limpar_travas_residuais()
     garantir_branch_segura(args.branch)
 
     # Executa validação inicial de integridade

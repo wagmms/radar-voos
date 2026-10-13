@@ -1,34 +1,34 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.7.4)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.7.5)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.4 operacional (102/102 testes JS + 5/5 testes Python passando). Autoloop blindado com throttling de 5 min (300s), supressão de notificações redundantes por commit hash e bloqueio estrito pós-execução contra loops em falhas da IA.
-- **Diretriz Prioritária**: Aprimorar continuamente a precisão de busca do Google Flights (aba cheapest, conexões, bagagens), detecção de Bug Fares e refinamento de interface PWA via turnos autônomos orientados a skills.
-- **Última Tarefa Concluída**: Implementada blindagem completa contra rajadas de notificações no autoloop do Radar de Voos (`scripts/autoloop_radarvoos.py`, `autoloop-radarvoos` e `tests/test_autoloop_radarvoos_throttling.py`): supressão de notificações para o mesmo commit, cooldown protetor de 300s, bloqueio de relatórios quando o turno da IA falha (`ret_code != 0`), detecção de novos commits e salvaguarda automática (5 testes unitários aprovados).
+- **Estado Geral**: 🟢 Radar v2.7.5 operacional (102/102 testes JS + 8/8 testes Python passando). Diretrizes de engenharia consolidadas no `AGENTS.md` e integradas ao autoloop. Autoloop blindado contra travamentos (timeout estrito de 15m / 900s, limpeza automática de travas residuais do Git, auto-kill com `stop_process_group` e auto-rollback defensivo). Notificações no Telegram calibradas para alertar exclusivamente novas funcionalidades (`feat:`), silenciando commits secundários com cooldown de 5 min.
+- **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
+- **Última Tarefa Concluída**: Criado `AGENTS.md` canônico na raiz do repositório definindo padrões de arquitetura (Fastify 4, SQLite WAL, Scrapling, PWA anti-slop); blindado o autoloop (`scripts/autoloop_radarvoos.py`, `autoloop-radarvoos` e `tests/test_autoloop_radarvoos_throttling.py`) contra travamentos com timeout rígido de 15 minutos (900s), limpeza automática de travas residuais (`.git/index.lock`), injeção dinâmica do `AGENTS.md` no prompt e filtro cirúrgico que envia relatórios no Telegram apenas para commits com prefixo `feat:` (8 testes unitários aprovados).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/services/notifier_telegram.js`
-- **Função/Componente/Seletor**: `processarComando`
-- **Comportamento Esperado / Critério de Aceite**: Adicionar comando interativo `/paridade [milhas] [programa]` para cálculo de paridade monetária de milhas aéreas (Smiles a R$ 17,50/milheiro, Latam Pass a R$ 24,00/milheiro, Livelo a R$ 35,00/milheiro) retornando o valor de referência equivalente em reais com resposta formatada em HTML seguro e validação defensiva de argumentos.
+- **Arquivo/Módulo Alvo**: `src/services/providers/scrapling_client.js`
+- **Função/Componente/Seletor**: `obterTarifasGoogleFlights`
+- **Comportamento Esperado / Critério de Aceite**: Criar adaptador de scraping resiliente baseado no padrão da skill `scrapling` com evasão de detecção de bots, cabeçalhos HTTP realistas e extração de tarifas da aba "Cheapest" via Protobuf `tfs`, integrando com failover defensivo para os provedores existentes.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/notifier_telegram.js` • `processarComando` • Adicionar comando `/paridade` para conversão de milhas aéreas (Smiles/Latam Pass/Livelo) em valor equivalente em reais.
-- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Adicionar suporte a parâmetros de cabine (Premium Economy e Executiva) na varredura autônoma global.
-- [ ] `src/services/flight_scanner.js` • `escanearRota` • Registrar histórico de escalas e bagagens em colunas dedicadas de telemetria no SQLite.
-- [ ] `src/public/app.js` • `renderizarRotas` • Adicionar ordenação rápida por maior economia em relação ao teto configurado.
+- [ ] `src/services/providers/scrapling_client.js` • `obterTarifasGoogleFlights` • Adaptador de scraping resiliente com cabeçalhos dinâmicos e parsing da aba Cheapest via Protobuf tfs.
+- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Integrar padrão `proactive-agent` com Working Buffer de 24h, deduplicação de alertas e Z-score estatístico proativo.
+- [ ] `src/services/notifier_telegram.js` • `processarComando` • Adicionar comando interativo `/paridade` para conversão de milhas aéreas (Smiles/Latam Pass/Livelo) com formatação HTML segura (`telegram-compose`).
+- [ ] `src/public/app.js` • `renderizarRotas` • Adicionar ordenação rápida por maior economia em relação ao teto e sparklines em SVG puro ultraleve (`smart-charts`).
 
 ---
 
 ## 💡 Sugestões Futuras (Buffer Leve)
 1. Integração com API de milhas (Smiles, LATAM Pass, TudoAzul) para cálculo de paridade pontos vs reais.
-2. Exportação de histórico de preços para CSV ou PDF executivo.
+2. Visualização de rotas com arcos ortodrômicos geodésicos SVG (`remotion-maps`) no Cockpit PWA.
 3. Notificação Push nativa no navegador (Web Push API com VAPID).
 4. Configuração de alertas de Bug Fare por faixa de preço customizada no Telegram.
 5. Gráfico de dispersão de preços históricos por época do ano no Cockpit PWA.
