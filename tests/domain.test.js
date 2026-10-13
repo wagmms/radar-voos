@@ -80,6 +80,18 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(voltaSoIda, null);
   });
 
+  it('calcularDataVolta: deve tratar com resiliência entradas malformadas, formato brasileiro e nulos sem disparar RangeError', () => {
+    // Casos adversariais de entrada malformada
+    assert.strictEqual(calcularDataVolta('data-invalida', '10 dias'), null);
+    assert.strictEqual(calcularDataVolta('2026-99-99', '10 dias'), null);
+    assert.strictEqual(calcularDataVolta(null, '10 dias'), null);
+    assert.strictEqual(calcularDataVolta(undefined, '10 dias'), null);
+
+    // Formato brasileiro DD/MM/YYYY suportado graciosamente
+    assert.strictEqual(calcularDataVolta('10/05/2026', '10 dias'), '2026-05-20');
+    assert.strictEqual(calcularDataVolta('10/05/2026', 14), '2026-05-24');
+  });
+
   it('não deve converter números soltos em datas arbitrárias no formato de busca', () => {
     assert.strictEqual(formatarDataParaBusca('10'), null);
     assert.strictEqual(formatarDataParaBusca('10 dias'), null);

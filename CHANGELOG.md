@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.1] - 2026-10-13 — QA & Blindagem Adversarial em `calcularDataVolta`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/rotas.js` · `calcularDataVolta`:
+  - Blindada a resolução de data de volta calculada com base em duração de estadia contra exceção crítica `RangeError: Invalid time value`.
+  - Normalização da data de ida via `formatarDataParaBusca`, tratando entradas malformadas, datas inválidas e suportando graciosamente formatos regionais como `DD/MM/YYYY`.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial cobrindo entradas malformadas, nulas/indefinidas, datas inválidas e datas no formato brasileiro (totalizando 247/247 testes aprovados).
+
+---
+
 ## [v2.10.0] - 2026-10-13 — Fallback Defensivo de Extração de Companhia Aérea por Código IATA (ScraplingClient)
 
 ### 🚀 Novas Funcionalidades & Resiliência de Scraping

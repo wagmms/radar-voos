@@ -149,8 +149,11 @@ export function calcularDataVolta(dataIdaStr, campoVolta) {
   if ((!isNaN(campoVolta) && typeof campoVolta === 'number') || matchDias) {
     const dias = matchDias ? parseInt(matchDias[1], 10) : parseInt(strTrim, 10);
     if (dias > 0 && dataIdaStr) {
-      const [ano, mes, dia] = dataIdaStr.split('-').map(Number);
+      const dataIdaNorm = formatarDataParaBusca(dataIdaStr);
+      if (!dataIdaNorm) return null;
+      const [ano, mes, dia] = dataIdaNorm.split('-').map(Number);
       const dataIda = new Date(Date.UTC(ano, mes - 1, dia));
+      if (isNaN(dataIda.getTime())) return null;
       dataIda.setUTCDate(dataIda.getUTCDate() + dias);
       return dataIda.toISOString().split('T')[0];
     }
