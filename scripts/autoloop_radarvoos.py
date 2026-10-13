@@ -587,7 +587,7 @@ def montar_bloco_skills_radar():
 - **`clean-code-guard` & `tdd`**: Use para implementar mudanças cirúrgicas orientadas a testes automatizados com 100% de cobertura.
 """
 
-def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, auto_rollback=True, telegram_token=None, telegram_chat=None):
+def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, modo_ciclo="BUILDER", auto_rollback=True, telegram_token=None, telegram_chat=None):
     with deploy_lock:
         limpar_travas_residuais()
         token = agy_contas.carregar_conta(num_conta)
@@ -607,18 +607,60 @@ def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, aut
         log("INFO", f"Iniciando ciclo na {CORES['bold']}Conta {num_conta}{CORES['reset']} ({email})")
         log("INFO", f"Modelo ativo: {CORES['bold']}{CORES['green']}{nome_modelo}{CORES['reset']} (`{id_modelo}`)")
         log("SHIELD", f"Branch ativa protegida: {CORES['bold']}{branch_alvo}{CORES['reset']}")
+        if modo_ciclo == "QA_ADVERSARIAL":
+            log("TEST", f"🕵️ Modo Operacional: {CORES['bold']}{CORES['magenta']}QA ADVERSARIAL (CAÇADOR DE BUGS & REFINADOR DE EXPERIÊNCIA){CORES['reset']}")
+        else:
+            log("BUILD", f"🏗️ Modo Operacional: {CORES['bold']}{CORES['blue']}BUILDER (DESENVOLVEDOR DE RECURSOS){CORES['reset']}")
         print("=" * 75)
 
         bloco_agents = carregar_diretrizes_agents()
         prompt_agents = f"\n### DIRETRIZES TÉCNICAS DO REPOSITÓRIO (AGENTS.md):\n{bloco_agents}\n" if bloco_agents else ""
 
+        if modo_ciclo == "QA_ADVERSARIAL":
+            diretriz_modo = f"""
+### 🕵️ MODO ATIVO DESTE TURNO: QA ADVERSARIAL, TESTES DE ESTRESSE & REFINO DE EXPERIÊNCIA
+Você está atuando como Engenheiro Chefe de QA, Fuzzing e Usabilidade do Radar de Voos.
+Sua missão primordial neste ciclo NÃO é criar novas grandes features do backlog, mas sim AUDITAR, TESTAR IMPLACAVELMENTE E POLIR AS FUNÇÕES EXISTENTES:
+1. SELECIONE UMA ÁREA EXISTENTE PARA AUDITAR E CAÇAR ERROS:
+   - Domínio Aeronáutico & Datas (src/domain/rotas.js, bug_fares.js, aeroportos.js):
+     * Datas extremas, anos bissextos, viradas de ano/mês, fusos UTC/BRT, viagens Só Ida vs Ida e Volta, KGMIDs, pisos de Bug Fare.
+   - Banco de Dados SQLite & Concorrência (src/db.js):
+     * Transações, WAL mode, limites de teto (preco_alvo), integridade de rotas, limpeza de arquivos de teste órfãos.
+   - Provedores & Resiliência (src/services/providers/):
+     * Tratamento de timeouts, parsing de HTML dinâmico, formato monetário brasileiro (milhares e centavos), failover.
+   - Bot do Telegram (src/services/notifier_telegram.js):
+     * Comandos (/teto, /verificar, /paridade, /rotas), botões inline, callbacks, sanitização HTML, destaque de economia real.
+   - Cockpit PWA (src/public/app.js):
+     * Renderização, formatação de datas, responsividade mobile, feedback ao usuário, filtros.
+2. CRIE TESTES DE ESTRESSE / ADVERSARIAIS em tests/:
+   - Crie casos de teste agressivos simulando entradas inválidas, datas de borda, concorrência e formatos inesperados.
+3. IDENTIFICOU UM BUG, INCONSISTÊNCIA OU COMPORTAMENTO INDESEJADO?
+   - CORRIJA A FUNÇÃO IMEDIATAMENTE no código-fonte da aplicação.
+4. IDENTIFICOU OPORTUNIDADE DE MELHORIA NA EXPERIÊNCIA DO USUÁRIO?
+   - APRIMORE A FUNÇÃO EXISTENTE (mensagens mais claras, formatação visual refinada, atalhos mais rápidos, validações amigáveis).
+5. EXECUTE OBRIGATORIAMENTE `./validate.sh fast` para certificar 100% de aprovação.
+6. CRIE UM COMMIT SEMÂNTICO (ex: `test:`, `fix:`, `refactor:`) descrevendo o teste adversarial e a blindagem/melhoria realizada.
+"""
+        else:
+            diretriz_modo = f"""
+### 🏗️ MODO ATIVO DESTE TURNO: BUILDER (DESENVOLVIMENTO DE RECURSOS)
+Você está atuando como Engenheiro Construtor do Radar de Voos.
+1. Verifique PROGRESS.md e o status do git para compreender o contexto imediato.
+2. Foque em APENAS UMA tarefa atômica do topo de '## 🎯 Próxima Tarefa em Andamento' ou do '[Backlog Prioritário]'.
+3. Implemente a funcionalidade com código limpo, robusto e defensivo.
+4. Crie novos testes automatizados em tests/ cobrindo as novas funcionalidades.
+5. Execute OBRIGATORIAMENTE `./validate.sh fast` para certificar 100% de aprovação.
+6. Ao finalizar, atualize PROGRESS.md (arquivando detalhes em CHANGELOG.md) e faça commit semântico (ex: `feat:` para entregas ao usuário).
+"""
+
         prompt = f"""Você é um engenheiro sênior e arquiteto de software trabalhando no projeto Radar de Voos (RadarVoos - Travel Hacking Engine, Fastify 4, SQLite Nativo WAL, PWA Cockpit e Telegram Bot).
 Objetivo Geral: {objetivo}
 
+{diretriz_modo}
+
 DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
 1. Verifique PROGRESS.md e o status do git (git status / git log -n 5) para compreender o contexto imediato.
-2. Foque em APENAS UMA tarefa atômica do topo de '## 🎯 Próxima Tarefa em Andamento' ou do '[Backlog Prioritário]'.
-3. ARQUITETURA E FOCO TÉCNICO DO RADAR DE VOOS:
+2. ARQUITETURA E FOCO TÉCNICO DO RADAR DE VOOS:
    ★ PRECISÃO DE BUSCA E PARÂMETROS DE VOOS:
      - Refinar a extração de dados do Google Flights (tarifas normais vs cheapest tab via Protobuf tfs).
      - Integração com Scrapling para contornar bloqueios anti-bot e headers dinâmicos resilientes.
@@ -632,17 +674,16 @@ DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
      - Endpoints Fastify 4 com tratamento de erro resiliente e schemas defensivos.
      - SQLite nativo do Node.js 22 com WAL mode, busy_timeout e transações atômicas seguras.
      - Bot Telegram com formatação HTML segura e inline keyboards com paginação (telegram-compose).
-4. TESTES E VALIDAÇÃO OBRIGATÓRIA:
+3. TESTES E VALIDAÇÃO OBRIGATÓRIA:
    - Antes de concluir o ciclo, execute OBRIGATORIAMENTE `./validate.sh fast` para certificar que 100% dos testes e verificações de sintaxe passam.
-5. Se identificar melhorias ou refatorações futuras, NÃO implemente fora de escopo; registre-as em docs/SUGESTOES_FUTURAS.md (mantendo apenas até 5 no PROGRESS.md).
-6. Ao finalizar a tarefa:
-   - Marque a tarefa concluída no PROGRESS.md (arquivando detalhes em CHANGELOG.md para mantê-lo sempre enxuto).
-   - Ao mover ou cadastrar a próxima tarefa em 'Próxima Tarefa em Andamento', use especificação CIRÚRGICA obrigatória em 3 partes:
+4. Se identificar melhorias ou refatorações futuras, NÃO implemente fora de escopo; registre-as em docs/SUGESTOES_FUTURAS.md (mantendo apenas até 5 no PROGRESS.md).
+5. Ao finalizar a tarefa:
+   - Marque a tarefa no PROGRESS.md (mantendo-o sempre enxuto e arquivando histórico em CHANGELOG.md).
+   - Use especificação CIRÚRGICA obrigatória em 3 partes para qualquer nova tarefa:
      1) Arquivo/Módulo Alvo
      2) Função/Componente/Seletor
      3) Comportamento Esperado / Critério de Aceite
-   - Crie novos testes automatizados em tests/ cobrindo as novas funcionalidades.
-   - Faça um commit semântico limpo (ex: feat:, fix:, test:, refactor:) na branch {branch_alvo}.
+   - Faça um commit semântico limpo na branch {branch_alvo}.
 {prompt_agents}
 {montar_bloco_skills_radar()}
 """
@@ -760,13 +801,14 @@ def main():
     parser.add_argument("--ciclos", type=int, default=0, help="Número de ciclos (0 = contínuo)")
     parser.add_argument("--sem-rollback", action="store_true", help="Desativa auto-rollback defensivo")
     parser.add_argument("--modelo", default=None, help="Modelo forçado para todos os turnos")
+    parser.add_argument("--modo", choices=["alternado", "builder", "qa"], default="alternado", help="Modo operacional: alternado (1 builder, 1 qa), builder ou qa")
     args = parser.parse_args()
 
     # Move para o diretório raiz do RadarVoos
     if DEFAULT_RADAR_DIR.is_dir():
         os.chdir(DEFAULT_RADAR_DIR)
 
-    log("SMART", "🛫 Iniciando Autoloop Radar de Voos...")
+    log("SMART", "🛫 Iniciando Autoloop Radar de Voos (Modo Híbrido: Builder + QA Tester)...")
     limpar_travas_residuais()
     garantir_branch_segura(args.branch)
 
@@ -782,6 +824,14 @@ def main():
     ciclo_atual = 0
     while True:
         ciclo_atual += 1
+
+        if args.modo == "qa":
+            modo_ciclo = "QA_ADVERSARIAL"
+        elif args.modo == "builder":
+            modo_ciclo = "BUILDER"
+        else:
+            modo_ciclo = "BUILDER" if (ciclo_atual % 2 == 1) else "QA_ADVERSARIAL"
+
         tarefa_ativa = obter_tarefa_ativa_progress() or ""
         perfil, desc_perfil, modelos_candidatos = classificar_perfil_tarefa(tarefa_ativa)
 
@@ -792,7 +842,7 @@ def main():
 
         num_conta, nome_mod, id_mod = obter_proximo_alvo(modelos_execucao)
 
-        log("INFO", f"Ciclo #{ciclo_atual} · Perfil: {desc_perfil}")
+        log("INFO", f"Ciclo #{ciclo_atual} · Modo: {modo_ciclo} · Perfil: {desc_perfil}")
         if tarefa_ativa:
             log("INFO", f"🎯 Tarefa em foco: {tarefa_ativa[:90]}")
 
@@ -802,6 +852,7 @@ def main():
             id_modelo=id_mod,
             objetivo=args.objetivo,
             branch_alvo=args.branch,
+            modo_ciclo=modo_ciclo,
             auto_rollback=not args.sem_rollback,
             telegram_token=token_tg,
             telegram_chat=chat_tg

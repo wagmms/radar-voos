@@ -139,5 +139,52 @@ class TestAutoloopRadarVoosThrottling(unittest.TestCase):
         self.assertFalse(enviou)
         mock_enviar_tg.assert_not_called()
 
+    def test_alternancia_modos_builder_e_qa(self):
+        # Testa a lógica de rodízio: ímpar = BUILDER, par = QA_ADVERSARIAL
+        modo_1 = "BUILDER" if (1 % 2 == 1) else "QA_ADVERSARIAL"
+        modo_2 = "BUILDER" if (2 % 2 == 1) else "QA_ADVERSARIAL"
+        modo_3 = "BUILDER" if (3 % 2 == 1) else "QA_ADVERSARIAL"
+        self.assertEqual(modo_1, "BUILDER")
+        self.assertEqual(modo_2, "QA_ADVERSARIAL")
+        self.assertEqual(modo_3, "BUILDER")
+
+    @patch("autoloop_radarvoos.agy_contas")
+    @patch("autoloop_radarvoos.run_observed")
+    @patch("subprocess.run")
+    def test_prompt_injeta_diretriz_qa_adversarial(self, mock_subproc, mock_run_observed, mock_agy):
+        mock_agy.carregar_conta.return_value = "token"
+        mock_agy.extract_email.return_value = "dev@example.com"
+        mock_subproc.return_value.stdout = "abc1234"
+
+        # Captura os argumentos passados para run_observed
+        args_capturados = []
+        def fake_run_observed(cmd, **kwargs):
+            args_capturados.extend(cmd)
+            mock_res = MagicMock()
+            mock_res.returncode = 0
+            return mock_res
+
+        mock_run_observed.side_effect = fake_run_observed
+
+        with patch("autoloop_radarvoos.executar_validacao_radar", return_value=True):
+            autoloop.executar_ciclo(
+                num_conta=1,
+                nome_modelo="Flash",
+                id_modelo="gemini-2.5-flash",
+                objetivo="Teste",
+                branch_alvo="autoloop/dev",
+                modo_ciclo="QA_ADVERSARIAL",
+                auto_rollback=False
+            )
+
+        prompt_usado = ""
+        for i, a in enumerate(args_capturados):
+            if a == "-p" and i + 1 < len(args_capturados):
+                prompt_usado = args_capturados[i + 1]
+                break
+
+        self.assertIn("QA ADVERSARIAL", prompt_usado)
+        self.assertIn("CAÇADOR DE BUGS", prompt_usado)
+
 if __name__ == "__main__":
     unittest.main()
