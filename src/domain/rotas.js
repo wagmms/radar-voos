@@ -430,8 +430,21 @@ export function encodeVarint(num) {
  * Codifica campo length-delimited do Protocol Buffers (wire type 2)
  */
 export function encodeLengthDelimited(tag, buf) {
-  const tagByte = (tag << 3) | 2;
-  return Buffer.concat([Buffer.from([tagByte]), encodeVarint(buf.length), buf]);
+  const tagNum = (Number.isFinite(+tag) && +tag > 0) ? Math.floor(+tag) : 1;
+  const tagVarint = encodeVarint((tagNum << 3) | 2);
+
+  let bufferEfetivo;
+  if (Buffer.isBuffer(buf)) {
+    bufferEfetivo = buf;
+  } else if (buf instanceof Uint8Array) {
+    bufferEfetivo = Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength);
+  } else if (typeof buf === 'string') {
+    bufferEfetivo = Buffer.from(buf, 'utf8');
+  } else {
+    bufferEfetivo = Buffer.alloc(0);
+  }
+
+  return Buffer.concat([tagVarint, encodeVarint(bufferEfetivo.length), bufferEfetivo]);
 }
 
 /**

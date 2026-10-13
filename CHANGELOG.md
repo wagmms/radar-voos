@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.39] - 2026-10-13 — Blindagem Adversarial em encodeLengthDelimited com Suporte a Campos Protobuf >= 16 e Buffers Nulos (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`encodeLengthDelimited`):
+  - Corrigida codificação de tags Protobuf para campos com número `>= 16` (`(field_number << 3) | 2 >= 128`), substituindo o byte fixo `Buffer.from([tagByte])` por `encodeVarint((tagNum << 3) | 2)` em conformidade estrita com o wire format oficial de Protocol Buffers.
+  - Sanitização defensiva do payload: buffers nulos, indefinidos ou de tipos primitivos numéricos agora degradam graciosamente para buffer vazio (`Buffer.alloc(0)`) sem disparar `TypeError: Cannot read properties of null (reading 'length')`.
+  - Suporte resiliente a conversão de `string` (utf-8) e `Uint8Array` para instâncias de `Buffer`.
+  - Normalização defensiva de números de campo negativos, nulos ou `NaN` para campo padrão `1`.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) campo canônico tag 3, (2) campo tag 16 com varint multi-byte `[0x82, 0x01]`, (3) conversão de strings e Uint8Array, e (4) resiliência a nulos, indefinidos, tipos inesperados e tags inválidas.
+
 ## [v2.18.38] - 2026-10-13 — Blindagem Adversarial em ehPeriodoNoturno com Injeção Determinística de Horário e Fallback Gracioso (Notificador Telegram)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

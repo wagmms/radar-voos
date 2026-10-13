@@ -12,7 +12,8 @@ import {
   gerarTfs,
   gerarLinkGoogleFlightsCheapest,
   resolverCodigoParaLink,
-  encodeVarint
+  encodeVarint,
+  encodeLengthDelimited
 } from '../src/domain/rotas.js';
 
 describe('Domínio: Rotas e Resolução Aeronáutica', () => {
@@ -441,4 +442,30 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.deepStrictEqual(encodeVarint(undefined), Buffer.from([0x00]));
     assert.deepStrictEqual(encodeVarint('invalido'), Buffer.from([0x00]));
   });
+
+  it('encodeLengthDelimited: deve codificar campos length-delimited canônicos, campos >= 16 com varint e blindar entradas adversariais', () => {
+    // 1. Campo canônico padrão (tag 3, wire type 2 -> (3 << 3) | 2 = 26 = 0x1a)
+    const payloadSimples = Buffer.from([0x01, 0x02, 0x03]);
+    const esperadoTag3 = Buffer.from([0x1a, 0x03, 0x01, 0x02, 0x03]);
+    assert.deepStrictEqual(encodeLengthDelimited(3, payloadSimples), esperadoTag3);
+
+    // 2. Campo com field number >= 16 (tag 16 -> (16 << 3) | 2 = 130 = varint [0x82, 0x01])
+    const esperadoTag16 = Buffer.from([0x82, 0x01, 0x03, 0x01, 0x02, 0x03]);
+    assert.deepStrictEqual(encodeLengthDelimited(16, payloadSimples), esperadoTag16);
+
+    // 3. Resiliência adversarial: strings, Uint8Array, buffers vazios e entradas nulas/indefinidas/corrompidas
+    // String deve ser convertida para buffer utf8
+    assert.deepStrictEqual(encodeLengthDelimited(1, 'abc'), Buffer.from([0x0a, 0x03, 0x61, 0x62, 0x63]));
+    // Uint8Array deve ser aceito sem erro
+    assert.deepStrictEqual(encodeLengthDelimited(1, new Uint8Array([0x41, 0x42])), Buffer.from([0x0a, 0x02, 0x41, 0x42]));
+    // Buffer nulo, indefinido ou tipo inesperado degrada graciosamente para buffer vazio (tamanho 0) sem lançar TypeError
+    assert.deepStrictEqual(encodeLengthDelimited(2, null), Buffer.from([0x12, 0x00]));
+    assert.deepStrictEqual(encodeLengthDelimited(2, undefined), Buffer.from([0x12, 0x00]));
+    assert.deepStrictEqual(encodeLengthDelimited(2, 12345), Buffer.from([0x12, 0x00]));
+    // Tag inválida (negativa, nula, NaN) degrada para campo padrão 1 ((1 << 3) | 2 = 10 = 0x0a)
+    assert.deepStrictEqual(encodeLengthDelimited(-5, payloadSimples), Buffer.from([0x0a, 0x03, 0x01, 0x02, 0x03]));
+    assert.deepStrictEqual(encodeLengthDelimited(NaN, payloadSimples), Buffer.from([0x0a, 0x03, 0x01, 0x02, 0x03]));
+    assert.deepStrictEqual(encodeLengthDelimited(null, payloadSimples), Buffer.from([0x0a, 0x03, 0x01, 0x02, 0x03]));
+  });
 });
+
