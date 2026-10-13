@@ -4,6 +4,23 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.14.0] - 2026-10-13 — Badge de Milhas Estimadas no Cockpit PWA
+
+### ✈️🏆 Novo Recurso (Cockpit PWA · Card de Rota)
+- `src/public/js/card_rota.js`:
+  - Adicionado `COTACOES_MILHA_MILHEIRO`: dicionário canônico com cotações R$/milheiro por programa (Smiles 17,50 · LATAM 24,00 · Livelo 35,00 · Azul 20,00 · Iberia 65,00 · TAP 32,00).
+  - Adicionada `calcularMilhasEstimadas(precoAtual, paridadeMilheiro, programa)`: calcula quantas milhas seriam necessárias para emitir o voo ao preço atual via `Math.ceil((preco / cotacao) * 1000)`. Retorna `null` defensivamente para preço zero/negativo/inválido; faz fallback automático para cotação Smiles quando `paridadeMilheiro` é nulo ou programa desconhecido.
+  - Adicionada `renderizarBadgeMilhas(rota)`: renderiza HTML da badge `<div class="badge-milhas-estimadas">` com milhas formatadas em pt-BR, nome do programa capitalizado e tooltip com cotação de referência. Retorna `''` quando não há `preco_atual` válido (zero ruído).
+  - `criarCardRota`: badge integrada no `card-pricing-block`, logo abaixo do preço atual, lendo `rota.paridade_milhas` e `rota.programa_milhas`.
+- `tests/card_rota.test.js`:
+  - 5 novos testes no describe "Badge de Milhas Estimadas":
+    1. Cálculo correto com paridade customizada (R$ 1.750 / R$ 17,50 = 100.000 milhas).
+    2. Fallback para cotação Smiles quando paridade é null ou programa inválido.
+    3. `null` para preço zero, negativo ou inválido.
+    4. Badge HTML com classe, milhas formatadas e programa capitalizado.
+    5. `criarCardRota` inclui `badge-milhas-estimadas` quando rota tem paridade.
+  - Total: **331/331 testes aprovados** (🎉 100% de sucesso).
+
 ## [v2.13.5] - 2026-10-13 — Blindagem Defensiva de resolverCoordenadas (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Serviço Meteorológico e Resolução Geográfica)
