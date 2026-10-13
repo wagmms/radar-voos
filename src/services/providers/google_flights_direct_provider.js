@@ -27,6 +27,9 @@ const USER_AGENTS_STEALTH = [
 ];
 
 export function converterDuracaoParaHoras(str) {
+  if (typeof str === 'number') {
+    return (Number.isFinite(str) && str > 0) ? parseFloat(str.toFixed(3)) : 12.0;
+  }
   if (!str) return 12.0;
   const s = String(str);
 
@@ -39,7 +42,7 @@ export function converterDuracaoParaHoras(str) {
   }
 
   const matchH = s.match(/(\d+)\s*(?:h(?:r|s|ora)?s?)/i);
-  const matchM = s.match(/(\d+)\s*(?:min(?:uto)?s?)/i);
+  const matchM = s.match(/(\d+)\s*(?:min(?:uto)?s?|m(?![a-z]))/i);
   const h = matchH ? parseInt(matchH[1], 10) : 0;
   const m = matchM ? parseInt(matchM[1], 10) : 0;
   const total = h + (m / 60);

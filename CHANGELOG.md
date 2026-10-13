@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.8] - 2026-10-13 — Blindagem Adversarial de converterDuracaoParaHoras (Provedores / Google Flights Direct)
+
+### 🛡️ Correção Defensiva & Robustez (Provedor Google Flights Direct)
+- `src/services/providers/google_flights_direct_provider.js` · `converterDuracaoParaHoras`:
+  - Corrigido bug onde formatos compactos contendo apenas minutos (ex: `'45m'`, `'50 m'`) falhavam na captura de minutos e acionavam fallback indevido de 12 horas (`12.0`), distorcendo filtros de duração máxima e telemetria de voos rápidos de curta distância (como ponte aérea).
+  - Adicionado suporte a entradas numéricas diretas com validação de finitude positiva e preservação de precisão decimal de 3 casas.
+  - Implementado tratamento defensivo contra valores numéricos extremos ou inválidos (`-10`, `Infinity`, `NaN`).
+- `tests/flight_providers_adversarial.test.js`:
+  - Adicionados testes de borda adversariais para formatos compactos de minutos (`'45m'`, `'50 m'`) e entradas numéricas válidas/extremas.
+  - Suíte total: **352/352 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.7] - 2026-10-13 — Blindagem Adversarial de converterMoeda (Domínio / Calculadora)
 
 ### 🛡️ Correção Defensiva & Robustez (Conversão Monetária e Parsing de Preços)

@@ -95,6 +95,20 @@ describe('QA Adversarial: converterDuracaoParaHoras — precisão decimal', () =
     const duracao = converterDuracaoParaHoras('40 min');
     assert.ok(duracao < 0.7, `40min deveria ser < 0.7h mas foi ${duracao}`);
   });
+
+  it('deve converter formato compacto somente com minutos "45m" e "50 m" evitando fallback de 12h', () => {
+    const dur45 = converterDuracaoParaHoras('45m');
+    const dur50 = converterDuracaoParaHoras('50 m');
+    assert.ok(Math.abs(dur45 - 0.75) < 0.001, `esperado 0.75, recebeu ${dur45}`);
+    assert.ok(Math.abs(dur50 - 0.833) < 0.001, `esperado ≈0.833, recebeu ${dur50}`);
+  });
+
+  it('deve suportar entradas numéricas e lidar defensivamente com extremos (negativo, Infinity, NaN)', () => {
+    assert.equal(converterDuracaoParaHoras(2.5), 2.5);
+    assert.equal(converterDuracaoParaHoras(-10), 12.0);
+    assert.equal(converterDuracaoParaHoras(Infinity), 12.0);
+    assert.equal(converterDuracaoParaHoras(NaN), 12.0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
