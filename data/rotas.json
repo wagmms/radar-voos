@@ -12,6 +12,7 @@
     "flexibilidade_dias": 0,
     "sem_data": 0,
     "dias_estadia": 14,
+    "tipo_viagem": "round_trip",
     "ativa": 1
   }
 ]
