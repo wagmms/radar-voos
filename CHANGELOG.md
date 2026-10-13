@@ -4,6 +4,27 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.0] - 2026-10-13 — calcularMilhasRota no Backend + milhas_estimadas em escanearRota
+
+### ✈️ Novo Recurso: Estimativa de Milhas Calculada no Servidor
+
+- **`src/services/flight_scanner.js`** · `calcularMilhasRota` (nova função exportada):
+  - Espelha `calcularMilhasEstimadas` do frontend (`card_rota.js`) para uso no backend (API, Telegram, `escanearRota`)
+  - Constante `COTACOES_MILHA_MILHEIRO_BACKEND` com cotações de referência para smiles (17.50), latam/latampass (24.00), livelo (35.00), azul/tudoazul (20.00), iberia (65.00), tap (32.00)
+  - Usa `paridade_milhas` customizada da rota quando disponível; cai para cotação padrão do programa quando ausente
+  - Arredondamento `Math.ceil` para nunca subestimar milhas necessárias
+  - Parsing defensivo de preço como string numérica; retorna `null` para preços inválidos/zero/negativos
+
+- **`src/services/flight_scanner.js`** · `escanearRota` (step 6 adicionado):
+  - Calcula `milhas_estimadas` automaticamente ao final da varredura usando `paridade_milhas` e `programa_milhas` da rota
+  - Inclui `milhas_estimadas: { milhas, programa, cotacaoMilheiro } | null` no payload de retorno
+  - Elimina necessidade de recalcular no cliente (Cockpit PWA) ou no Telegram
+
+- **`tests/flight_scanner.test.js`** · 12 novos testes:
+  - 10 unitários para `calcularMilhasRota` (paridade customizada, cotação padrão, Math.ceil, null para preços inválidos, fallback smiles, latampass alias, paridade negativa ignorada, preço como string)
+  - 2 integração para `escanearRota` (milhas_estimadas com paridade padrão e com paridade customizada)
+  - Suíte: **376/376 testes aprovados (0 falhas)**
+
 ## [v2.17.1] - 2026-10-13 — Blindagem Adversarial em parsePreco (Calculadora)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
