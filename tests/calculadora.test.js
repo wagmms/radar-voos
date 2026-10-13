@@ -29,14 +29,27 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco('-Infinity'), 0);
     assert.strictEqual(parsePreco(NaN), 0);
 
-    // 2. Preços negativos numéricos ou em string retornam 0
+    // 2. Preços negativos numéricos ou em string retornam 0 (inclusive com sinal negativo antecedendo a moeda)
     assert.strictEqual(parsePreco(-500), 0);
     assert.strictEqual(parsePreco('-150.50'), 0);
     assert.strictEqual(parsePreco('R$ -800'), 0);
+    assert.strictEqual(parsePreco('-R$ 800'), 0);
+    assert.strictEqual(parsePreco('-EUR 120'), 0);
+    assert.strictEqual(parsePreco('-$50'), 0);
+    assert.strictEqual(parsePreco('- $ 500'), 0);
 
     // 3. Suporte robusto a prefixo BRL e strings vazias/espaços
     assert.strictEqual(parsePreco('BRL 1.450,20'), 1450.20);
     assert.strictEqual(parsePreco('   '), 0);
+
+    // 4. Centavos monetários sem zero à esquerda e caracteres invisíveis (zero-width / BOM)
+    assert.strictEqual(parsePreco(',50'), 0.50);
+    assert.strictEqual(parsePreco('.50'), 0.50);
+    assert.strictEqual(parsePreco('R$ ,75'), 0.75);
+    assert.strictEqual(parsePreco('USD .25'), 0.25);
+    assert.strictEqual(parsePreco('Taxa: ,50'), 0.50);
+    assert.strictEqual(parsePreco('R$\u200B1.500'), 1500);
+    assert.strictEqual(parsePreco('\uFEFF2.300'), 2300);
   });
 
   it('deve lidar com moedas internacionais, múltiplos separadores de milhar e espaços non-breaking em parsePreco', () => {

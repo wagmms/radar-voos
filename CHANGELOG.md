@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.33] - 2026-10-13 — Blindagem Adversarial em parsePreco contra Preços Negativos com Moeda, Centavos sem Zero e Caracteres Invisíveis (Domínio Calculadora)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/calculadora.js`** (`parsePreco`):
+  - Corrigido falso positivo em que strings com sinal negativo antes do símbolo monetário (ex: `"-R$ 800"`, `"-EUR 120"`, `"-$50"`, `"- $ 500"`) tinham o sinal descartado e retornavam valores positivos espúrios, assegurando agora retorno defensivo de `0` para qualquer tarifa negativa.
+  - Corrigida perda de centavos em formatos numéricos sem zero à esquerda (ex: `",50"`, `".50"`, `"Taxa: ,50"`, `"R$ ,75"`), que anteriormente tinham o separador decimal indevidamente descartado virando `50` ou `75` (fator x100), agora retornando com precisão `0.50` e `0.75`.
+  - Adicionada sanitização defensiva para caracteres invisíveis como zero-width space e byte-order mark (`\u200B-\u200D\uFEFF`), frequentes em scrapers anti-cópia e payloads HTML.
+- **`tests/calculadora.test.js`**:
+  - Adicionados testes de borda adversariais validando: (1) sinal negativo antecedendo moedas (`"-R$ 800"`, `"-EUR 120"`, `"-$50"`, `"- $ 500"`), (2) centavos decimais sem zero (`",50"`, `".50"`, `"R$ ,75"`, `"USD .25"`, `"Taxa: ,50"`), e (3) strings com zero-width spaces e BOM (`"R$\u200B1.500"`, `"\uFEFF2.300"`).
+
 ## [v2.18.32] - 2026-10-13 — Blindagem Adversarial em resolverDestinoConcreto contra Vazamento de [object Object] e Suporte a Objetos Estruturados (Domínio Aeroportos)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

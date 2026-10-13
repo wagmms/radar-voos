@@ -153,18 +153,20 @@ export function parsePreco(valor) {
   }
   let s = String(valor)
     .replace(/[\u00A0\u202F]/g, ' ')
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .trim();
   if (!s) return 0;
 
-  // Se contiver símbolo de moeda explícito, prioriza o bloco numérico adjacente à moeda
-  const regexMoeda = /(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)\s*(-?(?:\d|[.,]\d)[\d.,\s]*)/i;
+  // Se contiver símbolo de moeda explícito, prioriza o bloco numérico adjacente à moeda (inclusive com sinal negativo antes da moeda)
+  const regexMoeda = /(-?)\s*(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)\s*(-?(?:\d|[.,]\d)[\d.,\s]*)/i;
   const matchMoeda = s.match(regexMoeda);
   if (matchMoeda) {
-    s = matchMoeda[1];
+    const sinal = (matchMoeda[1] === '-' || matchMoeda[2].startsWith('-')) ? '-' : '';
+    s = sinal + matchMoeda[2].replace(/^-/, '');
   } else {
-    // Remove qualquer símbolo de moeda residual e prefixo textual que anteceda o primeiro dígito ou sinal
+    // Remove qualquer símbolo de moeda residual e prefixo textual que anteceda o primeiro dígito, sinal ou separador decimal
     s = s.replace(/(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)/gi, '');
-    s = s.replace(/^[^\d-]+/, '');
+    s = s.replace(/^[^\d.,-]+/, '');
   }
   s = s.trim();
   if (!s) return 0;
