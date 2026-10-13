@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.5] - 2026-10-13 — Blindagem Adversarial em converterDuracaoParaHoras (Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`converterDuracaoParaHoras`):
+  - Corrigido suporte a formatos de relógio digital `"HH:MM"` (ex: `"02:30"` → 2.5h, `"1:45"` → 1.75h) que antes caíam incorretamente no fallback de 12.0h, descartando indevidamente voos rápidos em filtros de duração máxima.
+  - Adicionado suporte a formatos decimais diretos com ponto ou vírgula (ex: `"2.5h"` → 2.5h, `"1,5 h"` → 1.5h), prevenindo truncamento para a parte inteira.
+  - Blindagem estrita para durações zeradas em relógio digital (ex: `"00:00"`, `"0:00"`), retornando o fallback seguro de 12.0h.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais validando formato de relógio digital `"HH:MM"`, formatos decimais com ponto/vírgula e entradas zeradas.
+
 ## [v2.18.4] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

@@ -31,7 +31,23 @@ export function converterDuracaoParaHoras(str) {
     return (Number.isFinite(str) && str > 0) ? parseFloat(str.toFixed(3)) : 12.0;
   }
   if (!str) return 12.0;
-  const s = String(str);
+  const s = String(str).trim();
+
+  // Suporte a formato relógio digital "HH:MM" (ex: "2:30", "02:30", "14:15")
+  const matchRelogio = s.match(/^(\d{1,2}):(\d{2})$/);
+  if (matchRelogio) {
+    const h = parseInt(matchRelogio[1], 10);
+    const m = parseInt(matchRelogio[2], 10);
+    const total = h + (m / 60);
+    return total > 0 ? parseFloat(total.toFixed(3)) : 12.0;
+  }
+
+  // Suporte a formatos decimais diretos como "2.5h", "2,5h", "2.5 h"
+  const matchDecimal = s.match(/^(\d+(?:[.,]\d+)?)\s*h(?:r|s|ora)?s?$/i);
+  if (matchDecimal) {
+    const num = parseFloat(matchDecimal[1].replace(',', '.'));
+    return (Number.isFinite(num) && num > 0) ? parseFloat(num.toFixed(3)) : 12.0;
+  }
 
   // Suporte a formatos compactos: "2h30m", "2h30min", "2h 30m"
   const matchCompacto = s.match(/(\d+)\s*h\s*(\d+)\s*m/i);

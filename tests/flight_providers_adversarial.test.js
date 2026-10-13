@@ -109,6 +109,25 @@ describe('QA Adversarial: converterDuracaoParaHoras — precisão decimal', () =
     assert.equal(converterDuracaoParaHoras(Infinity), 12.0);
     assert.equal(converterDuracaoParaHoras(NaN), 12.0);
   });
+
+  it('deve converter formato de relógio digital "HH:MM" (ex: "02:30" → 2.5, "1:45" → 1.75)', () => {
+    const dur230 = converterDuracaoParaHoras('02:30');
+    const dur145 = converterDuracaoParaHoras('1:45');
+    assert.equal(dur230, 2.5);
+    assert.equal(dur145, 1.75);
+  });
+
+  it('deve converter formatos decimais com ponto ou vírgula: "2.5h" → 2.5 e "1,5 h" → 1.5', () => {
+    const durPonto = converterDuracaoParaHoras('2.5h');
+    const durVirgula = converterDuracaoParaHoras('1,5 h');
+    assert.equal(durPonto, 2.5);
+    assert.equal(durVirgula, 1.5);
+  });
+
+  it('deve retornar fallback de 12.0 para tempo zerado em relógio digital ("00:00" ou "0:00")', () => {
+    assert.equal(converterDuracaoParaHoras('00:00'), 12.0);
+    assert.equal(converterDuracaoParaHoras('0:00'), 12.0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
