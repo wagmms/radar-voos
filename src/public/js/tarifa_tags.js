@@ -22,11 +22,11 @@ function escapeHtml(str) {
  * @returns {Object|null} Metadados da tarifa especial ou null se for regular
  */
 export function extrairInfoTarifaEspecial(rota) {
-  if (!rota || typeof rota !== 'object') return null;
+  if (!rota || typeof rota !== 'object' || Array.isArray(rota)) return null;
 
-  const detalhes = String(rota.detalhes_voo || '');
-  const termometro = String(rota.termometro || '');
-  const link = String(rota.link_google_flights || '');
+  const detalhes = typeof rota.detalhes_voo === 'string' ? rota.detalhes_voo : String(rota.detalhes_voo || '');
+  const termometro = typeof rota.termometro === 'string' ? rota.termometro : String(rota.termometro || '');
+  const link = typeof rota.link_google_flights === 'string' ? rota.link_google_flights : String(rota.link_google_flights || '');
 
   // 1. Detecção explícita de "Menor Tarifa (...)" nos detalhes do voo
   // Padrão gerado por SerpApiProvider e GoogleFlightsDirectProvider
@@ -108,7 +108,23 @@ export function extrairInfoTarifaEspecial(rota) {
     } catch (_) {}
   }
 
-  if (flexObj && flexObj.link && (flexObj.link.includes('tfu=EgoIABAAGAAgAigD') || flexObj.link.includes('EgoIABAAGAAgAigD'))) {
+  const flexLink = (flexObj && typeof flexObj === 'object' && typeof flexObj.link === 'string')
+    ? flexObj.link
+    : '';
+
+  if (flexLink && (flexLink.includes('tfu=EgoIABAAGAAgAigD') || flexLink.includes('EgoIABAAGAAgAigD'))) {
+    let flexPreco = null;
+    if (typeof flexObj.preco === 'number' && Number.isFinite(flexObj.preco) && flexObj.preco > 0) {
+      flexPreco = flexObj.preco;
+    } else if (flexObj.preco !== undefined && flexObj.preco !== null) {
+      const sPreco = String(flexObj.preco).replace(/[R$\s]/gi, '').trim();
+      const numStr = sPreco.includes(',') && sPreco.includes('.')
+        ? sPreco.replace(/\./g, '').replace(',', '.')
+        : (sPreco.includes('.') && /^\d{1,3}\.\d{3}/.test(sPreco) ? sPreco.replace(/\./g, '') : sPreco.replace(',', '.'));
+      const parsed = parseFloat(numStr);
+      flexPreco = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }
+
     return {
       tipo: 'cheapest',
       fonte: 'Aba Cheapest (Google Flights)',
@@ -117,7 +133,7 @@ export function extrairInfoTarifaEspecial(rota) {
       badgeClasse: 'tag-tarifa-cheapest',
       titulo: 'Aba "Mais Baratos" do Google Flights',
       descricao: 'Menor tarifa do período encontrada através da aba Cheapest.',
-      preco: flexObj.preco || null
+      preco: flexPreco
     };
   }
 

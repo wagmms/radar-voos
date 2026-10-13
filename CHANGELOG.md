@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.27] - 2026-10-13 — Blindagem Adversarial em extrairInfoTarifaEspecial contra Links Não-String, Preços Monetários e Tipos Anômalos (PWA Cockpit)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/public/js/tarifa_tags.js`** (`extrairInfoTarifaEspecial`):
+  - Blindada a checagem de link em `melhor_opcao_flexivel` (`typeof flexObj?.link === 'string'`), eliminando crash fatal por `TypeError: flexObj.link.includes is not a function` caso o objeto flexível contenha links não-string (ex: números, booleanos ou objetos aninhados).
+  - Blindada a função contra arrays (`Array.isArray(rota)`), garantindo retorno gracioso de `null` e prevenindo inspeções espúrias.
+  - Implementada extração e normalização resiliente de preço em `melhor_opcao_flexivel` para suportar tanto números primitivos quanto strings formatadas monetárias com separadores de milhar (`"R$ 1.950"`).
+- **`tests/tarifa_tags.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais verificando links não-string em `melhor_opcao_flexivel`, descarte defensivo de arrays e valores nulos/indefinidos, e normalização de strings monetárias com separador de milhar.
+
 ## [v2.18.26] - 2026-10-13 — Blindagem Adversarial em gerarCombinacoesFlexibilidade para Duração Relativa, Volta no Passado e Tipos Corrompidos (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
