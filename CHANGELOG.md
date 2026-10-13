@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.14.4] - 2026-10-13 — Blindagem Defensiva de formatarPeriodoViagem (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Aeroportos e Formatação de Período)
+- `src/domain/aeroportos.js`:
+  - `formatarPeriodoViagem`: corrigido comportamento em que instâncias de `Date` geravam strings longas em inglês com fuso horário local via `toString()`, datas no padrão brasileiro `DD/MM/AAAA` não tinham sua duração calculada (`diffDias` resultava em `NaN` em `new Date('22/12/2026')`), e expressões de duração no campo de volta (ex: `"14 dias"`) eram impressas incorretamente como `"Volta: 14 dias"`. Integrados `formatarDataParaBusca` e `calcularDataVolta` para normalização canônica UTC e cálculo preciso da data de retorno.
+- `tests/aeroportos_bug_fares.test.js`:
+  - Adicionado caso de teste adversarial cobrindo objetos `Date`, datas no formato `DD/MM/AAAA` e duração textual no campo de retorno, totalizando 334 testes com 100% de aprovação.
+
 ## [v2.14.3] - 2026-10-13 — Blindagem Defensiva de resolverDestinoConcreto (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Domínio Aeroportos e Resolução de Destinos)

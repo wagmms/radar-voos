@@ -108,6 +108,19 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(periodoComEspacos, 'Ida: 08/12/2026 ➔ Volta: 15/12/2026 (7 dias)');
   });
 
+  it('deve tratar defensivamente em formatarPeriodoViagem: objetos Date, formato brasileiro DD/MM/AAAA e duração no campo de volta', () => {
+    // 1. Objetos Date devem ser formatados como DD/MM/AAAA (sem toString nativo longo com fuso inglês)
+    const d1 = new Date(Date.UTC(2026, 11, 8)); // 08/12/2026
+    const d2 = new Date(Date.UTC(2026, 11, 22)); // 22/12/2026
+    assert.strictEqual(formatarPeriodoViagem(d1, d2), 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
+
+    // 2. Datas em formato brasileiro DD/MM/AAAA devem calcular diffDias corretamente
+    assert.strictEqual(formatarPeriodoViagem('08/12/2026', '22/12/2026'), 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
+
+    // 3. Campo de volta com duração textual ("14 dias") deve calcular data de volta e dias de estadia
+    assert.strictEqual(formatarPeriodoViagem('2026-12-08', '14 dias'), 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
+  });
+
   it('deve montar card de Bug Fare com aeroporto de chegada, país, datas e link canônico', () => {
     const card = montarCardBugFare({
       origem: 'São Paulo',
