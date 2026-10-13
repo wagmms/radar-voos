@@ -425,13 +425,23 @@ export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, d
 }
 
 /**
- * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo)
+ * Desloca uma data YYYY-MM-DD por N dias (positivo ou negativo) com validação defensiva contra erros de tempo
  */
 export function somarDiasData(dataStr, dias) {
   if (!dataStr) return null;
-  const [ano, mes, dia] = dataStr.split('-').map(Number);
+  const formatada = formatarDataParaBusca(dataStr);
+  if (!formatada) return null;
+
+  const delta = typeof dias === 'number' ? dias : parseInt(dias, 10);
+  if (!Number.isFinite(delta)) return formatada;
+
+  const [ano, mes, dia] = formatada.split('-').map(Number);
   const d = new Date(Date.UTC(ano, mes - 1, dia));
-  d.setUTCDate(d.getUTCDate() + dias);
+  if (isNaN(d.getTime())) return null;
+
+  d.setUTCDate(d.getUTCDate() + delta);
+  if (isNaN(d.getTime())) return null;
+
   return d.toISOString().split('T')[0];
 }
 

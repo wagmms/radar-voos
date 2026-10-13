@@ -18,6 +18,26 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     assert.strictEqual(somarDiasData('2026-03-01', -1), '2026-02-28');
   });
 
+  it('deve lidar defensivamente com entradas nulas, malformadas ou não finitas em somarDiasData', () => {
+    // 1. Entradas nulas, vazias, inválidas no calendário ou tipos incompatíveis
+    assert.strictEqual(somarDiasData(null, 5), null);
+    assert.strictEqual(somarDiasData(undefined, 5), null);
+    assert.strictEqual(somarDiasData('', 5), null);
+    assert.strictEqual(somarDiasData('data-invalida', 5), null);
+    assert.strictEqual(somarDiasData('2026-02-31', 5), null);
+    assert.strictEqual(somarDiasData(12345, 5), null);
+
+    // 2. Dias não finitos ou malformados não devem lançar RangeError/TypeError
+    assert.strictEqual(somarDiasData('2026-11-10', NaN), '2026-11-10');
+    assert.strictEqual(somarDiasData('2026-11-10', Infinity), '2026-11-10');
+    assert.strictEqual(somarDiasData('2026-11-10', -Infinity), '2026-11-10');
+    assert.strictEqual(somarDiasData('2026-11-10', 'invalido'), '2026-11-10');
+
+    // 3. Suporte resiliente a string numérica de dias e formato DD/MM/YYYY
+    assert.strictEqual(somarDiasData('2026-11-10', '5'), '2026-11-15');
+    assert.strictEqual(somarDiasData('10/11/2026', 2), '2026-11-12');
+  });
+
   it('deve retornar apenas 1 combinação quando a flexibilidade for 0 (data fixa)', () => {
     const combs = gerarCombinacoesFlexibilidade('2026-11-10', '2026-11-20', 0);
     assert.strictEqual(combs.length, 1);

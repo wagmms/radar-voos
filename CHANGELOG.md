@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.8] - 2026-10-13 — QA & Blindagem Adversarial em `somarDiasData`
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/rotas.js` · `somarDiasData`:
+  - Correção de vulnerabilidade a `RangeError: Invalid time value`: validação defensiva das datas de entrada via `formatarDataParaBusca`, impedindo datas inexistentes no calendário (`2026-02-31`) ou strings corrompidas de disparar exceções no `toISOString()`.
+  - Tratamento resiliente de deltas de dias (`Number.isFinite`), retornando a data original intacta e segura ao invés de quebrar em casos de `NaN`, `Infinity` ou strings malformadas.
+  - Blindagem contra `TypeError` quando a data fornecida não for do tipo string (ex: números ou objetos).
+- `tests/rotas_flexibilidade.test.js`:
+  - Adicionado caso de teste de borda adversarial cobrindo entradas nulas, vazias, malformadas, não-finitas e formatos alternativos (223/223 testes aprovados).
+
+---
+
 ## [v2.9.7] - 2026-10-13 — Decodificação Protobuf tfu na Aba Cheapest (ScraplingProvider)
 
 ### 🚀 Novas Funcionalidades & Resiliência de Scraping
