@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.36] - 2026-10-13 — Blindagem Adversarial em gerarCombinacoesFlexibilidade contra Datas Nulas/Inválidas e Deltas Fantasmas (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarCombinacoesFlexibilidade`):
+  - Corrigida anomalia onde `dataIda` nula, indefinida ou inválida combinada com `flexibilidadeDias > 0` gerava deltas fantasmas compostos por objetos com `dataIda: null`.
+  - Eliminado vazamento de strings corrompidas ou `[object Object]` quando `dataIda` não representava uma data reconhecível pelo calendário, assegurando que `idaNorm` seja validada unicamente via `formatarDataParaBusca` e retornando apenas a entrada base sanitizada.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) `dataIda: null` com flexibilidade positiva (`3`), (2) `dataIda` malformatada (`'data-invalida'`), e (3) `dataIda` como objeto `{ dia: 15 }`, assegurando retorno atômico de 1 registro base sem deltas fantasmas.
+
 ## [v2.18.35] - 2026-10-13 — Blindagem Adversarial em validarPeriodo contra Aliases de Só Ida, Espaços e Anos Fora da Faixa Civil (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

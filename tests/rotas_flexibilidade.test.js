@@ -130,6 +130,26 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     });
   });
 
+  it('gerarCombinacoesFlexibilidade: deve tratar defensivamente entradas adversariais em dataIda (nula, texto inválido, objeto) sem vazar deltas fantasmas', () => {
+    // 1. dataIda nula ou indefinida com flexibilidade positiva (> 0) deve degradar graciosamente sem deltas fantasmas
+    const combsNulaComFlex = gerarCombinacoesFlexibilidade(null, null, 3);
+    assert.strictEqual(combsNulaComFlex.length, 1);
+    assert.strictEqual(combsNulaComFlex[0].dataIda, null);
+    assert.strictEqual(combsNulaComFlex[0].deltaDias, 0);
+
+    // 2. dataIda malformatada / texto aleatório não deve vazar strings espúrias
+    const combsInvalida = gerarCombinacoesFlexibilidade('data-invalida', null, 2);
+    assert.strictEqual(combsInvalida.length, 1);
+    assert.strictEqual(combsInvalida[0].dataIda, null);
+    assert.strictEqual(combsInvalida[0].deltaDias, 0);
+
+    // 3. dataIda passada como objeto ou tipo inesperado não deve vazar [object Object]
+    const combsObjeto = gerarCombinacoesFlexibilidade({ dia: 15 }, null, 2);
+    assert.strictEqual(combsObjeto.length, 1);
+    assert.strictEqual(combsObjeto[0].dataIda, null);
+    assert.strictEqual(combsObjeto[0].deltaDias, 0);
+  });
+
   it('deve persistir e recuperar rota com flexibilidade_dias e melhor_opcao_flexivel no SQLite', () => {
     const rota = rotasRepo.criar({
       origem: 'São Paulo',
