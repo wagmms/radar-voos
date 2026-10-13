@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.40] - 2026-10-13 — Blindagem Adversarial em identificarRegiaoDestino contra Objetos Estruturados e Expansão Semântica (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`identificarRegiaoDestino`):
+  - Blindada resolução para aceitar objetos estruturados de rotas e ofertas (`{ iata }`, `{ codigo }`, `{ destino }`, `{ cidade }`, etc.) extraindo a propriedade representativa sem degradar para `'OUTRO'`.
+  - Expandida detecção semântica textual no fallback de nomes para rotas com `'Brasil'`, `'nacional'` ou `'doméstico'` (resolvendo para `'DOMESTICO'`), bem como destinos na `'Alemanha'`, `'Reino Unido'` / `'Inglaterra'` (resolvendo para `'EUROPA'`) e `'Canadá'` (resolvendo para `'AMERICA_NORTE'`).
+  - Preservada estrita imunidade a objetos vazios, primitivos falsy, nulos ou indefinidos mantendo fallback seguro `'OUTRO'`.
+- **`tests/bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) objetos estruturados com `iata`, `destino` e `cidade`, (2) menções textuais a Brasil, voos nacionais e domésticos, (3) resoluções semânticas para Alemanha, Reino Unido e Canadá.
+
 ## [v2.18.39] - 2026-10-13 — Blindagem Adversarial em encodeLengthDelimited com Suporte a Campos Protobuf >= 16 e Buffers Nulos (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

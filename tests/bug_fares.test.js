@@ -104,6 +104,23 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(identificarRegiaoDestino(Object.create(null)), 'OUTRO');
   });
 
+  it('identificarRegiaoDestino: deve suportar defensivamente objetos estruturados e novos termos semânticos (Brasil, Alemanha, Canadá)', () => {
+    // 1. Objetos estruturados com propriedades iata, codigo, destino ou cidade
+    assert.strictEqual(identificarRegiaoDestino({ iata: 'LIS' }), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino({ destino: 'Santiago' }), 'AMERICA_SUL');
+    assert.strictEqual(identificarRegiaoDestino({ cidade: 'Recife' }), 'DOMESTICO');
+
+    // 2. Destinos com menção semântica a Brasil / Nacional / Doméstico
+    assert.strictEqual(identificarRegiaoDestino('Brasil'), 'DOMESTICO');
+    assert.strictEqual(identificarRegiaoDestino('voos no brasil'), 'DOMESTICO');
+    assert.strictEqual(identificarRegiaoDestino('viagem nacional'), 'DOMESTICO');
+
+    // 3. Destinos com menção a Alemanha, Reino Unido e Canadá
+    assert.strictEqual(identificarRegiaoDestino('Alemanha'), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino('Reino Unido'), 'EUROPA');
+    assert.strictEqual(identificarRegiaoDestino('Canadá'), 'AMERICA_NORTE');
+  });
+
   it('deve detectar Bug Fares estruturais e por anomalia estatística (Z-Score)', () => {
     // Caso 1: Tarifa para Europa abaixo do piso estrutural de R$ 1.950 (ida e volta)
     const bugPiso = detectarBugFareEstatistico({

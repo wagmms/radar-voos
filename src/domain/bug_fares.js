@@ -131,8 +131,14 @@ export const PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE = {
  */
 export function identificarRegiaoDestino(destinoCod) {
   if (destinoCod === null || destinoCod === undefined) return 'OUTRO';
-  if (typeof destinoCod !== 'string' && typeof destinoCod !== 'number') return 'OUTRO';
-  const str = String(destinoCod).trim();
+
+  let entrada = destinoCod;
+  if (typeof entrada === 'object' && entrada !== null) {
+    entrada = entrada.iata || entrada.codigo || entrada.code || entrada.airport || entrada.cidade || entrada.city || entrada.destino || entrada.nome || entrada.name || '';
+  }
+
+  if (typeof entrada !== 'string' && typeof entrada !== 'number') return 'OUTRO';
+  const str = String(entrada).trim();
   if (!str) return 'OUTRO';
 
   const cod = str.toUpperCase();
@@ -208,8 +214,9 @@ export function identificarRegiaoDestino(destinoCod) {
   if (casarRegiao(brasil)) return 'DOMESTICO';
 
   // Fallback por correspondência semântica de nomes
-  if (nomeLower.includes('europa') || nomeLower.includes('portugal') || nomeLower.includes('espanha') || nomeLower.includes('franca') || nomeLower.includes('italia')) return 'EUROPA';
-  if (nomeLower.includes('estados unidos') || nomeLower.includes('eua') || nomeLower.includes('usa') || nomeLower.includes('orlando') || nomeLower.includes('miami')) return 'AMERICA_NORTE';
+  if (nomeLower.includes('brasil') || nomeLower.includes('nacional') || nomeLower.includes('domestico')) return 'DOMESTICO';
+  if (nomeLower.includes('europa') || nomeLower.includes('portugal') || nomeLower.includes('espanha') || nomeLower.includes('franca') || nomeLower.includes('italia') || nomeLower.includes('alemanha') || nomeLower.includes('reino unido') || nomeLower.includes('inglaterra')) return 'EUROPA';
+  if (nomeLower.includes('estados unidos') || nomeLower.includes('eua') || nomeLower.includes('usa') || nomeLower.includes('orlando') || nomeLower.includes('miami') || nomeLower.includes('canada')) return 'AMERICA_NORTE';
   if (nomeLower.includes('cancun') || nomeLower.includes('punta cana') || nomeLower.includes('caribe')) return 'CARIBE_AMERICA_CENTRAL';
   if (nomeLower.includes('argentina') || nomeLower.includes('chile') || nomeLower.includes('uruguai') || nomeLower.includes('peru') || nomeLower.includes('colombia')) return 'AMERICA_SUL';
   if (nomeLower.includes('japao') || nomeLower.includes('toquio') || nomeLower.includes('asia') || nomeLower.includes('australia')) return 'ASIA_OCEANIA';
