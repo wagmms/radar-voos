@@ -1,28 +1,28 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.9.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.9.2)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.9.1 100% operacional com 191/191 testes JS e 10/10 testes Python aprovados. Sprint QA Adversarial concluído: 5 bugs críticos corrigidos nos providers de voo (parsing monetário, precisão de duração, sufixos corporativos e regex da aba Cheapest) com 34 novos testes adversariais adicionados.
-- **Diretriz Prioritária**: Implementar caçador proativo de Bug Fares (`proactive-agent`) com Working Buffer de 24h, deduplicação de alertas e Z-Score estatístico, e adicionar sparklines de histórico tarifário no Cockpit PWA.
-- **Última Tarefa Concluída**: `src/services/providers/google_flights_direct_provider.js` + `scrapling_client.js` — Sprint QA Adversarial — Corrigidos 5 bugs: `extrairPrecoNumerico("0")→null`, `converterDuracaoParaHoras` com precisão `toFixed(3)` + suporte `2h30m`, `limparNomeCompanhia` com sufixos corporativos e `"Múltiplas Companhias"`, `extrairPrecoCheapestTab` tolerante a espaços e formato compacto `[null,N]` (191/191 verdes).
+- **Estado Geral**: 🟢 Radar v2.9.2 100% operacional com 202/202 testes JS e 10/10 testes Python aprovados. Sprint atual: `escanearCorredoresProativos` com Working Buffer em memória, Z-Score e deduplicação de 24h implementados e validados (11 novos testes).
+- **Diretriz Prioritária**: Adicionar sparklines de histórico tarifário no Cockpit PWA e implementar detecção de deltas com Z-Score no FlightScanner (varredura de rotas monitoradas).
+- **Última Tarefa Concluída**: `src/services/bug_fare_hunter.js` · `escanearCorredoresProativos` · Working Buffer em memória com janela deslizante de 5 leituras, Z-Score < -2.5 → BUG_FARE / < -1.5 → OPORTUNIDADE / queda > 30% → OPORTUNIDADE / INFO silencioso. Deduplicação defensiva de 24h. Retrocompatibilidade via alias. 11 novos testes (202/202 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/services/bug_fare_hunter.js`
-- **Função/Componente/Seletor**: `escanearCorredoresProativos`
-- **Comportamento Esperado / Critério de Aceite**: Integrar padrão `proactive-agent` com Working Buffer em memória de 24h por rota, deduplicação defensiva de alertas idênticos dentro da janela, cálculo de Z-Score sobre série histórica de tarifas e classificação estrita em `INFO` (sem alerta) → `OPORTUNIDADE` (queda >30%) → `BUG_FARE` (Z-score < -2.5).
+- **Arquivo/Módulo Alvo**: `src/public/app.js`
+- **Função/Componente/Seletor**: `renderizarRotas` (função que monta os cards de rota no Cockpit PWA)
+- **Comportamento Esperado / Critério de Aceite**: Adicionar sparkline SVG puro ultraleve (5–10 pontos do histórico de preços) em cada card de rota, exibindo a curva temporal de preço com marcação do ponto mínimo; e ordenação rápida por maior economia percentual em relação ao preço alvo/teto. Deve funcionar offline (dados cacheados) e não adicionar nenhuma dependência externa de biblioteca de gráficos.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Integrar padrão `proactive-agent` com Working Buffer de 24h, deduplicação de alertas e Z-score estatístico proativo.
-- [ ] `src/public/app.js` • `renderizarRotas` • Adicionar ordenação rápida por maior economia em relação ao teto e sparklines em SVG puro ultraleve (`smart-charts`).
-- [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Implementar detecção de deltas com threshold de Z-Score e supressão de ruído para oscilações normais de mercado.
+- [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Integrar detecção de deltas com Z-Score (via `rotasRepo.obterEstatisticasPreco`) e supressão de ruído para oscilações normais de mercado nas rotas monitoradas.
 - [ ] `src/services/providers/scrapling_client.js` • `extrairPrecoCheapestTab` • Adicionar 4ª camada de extração via decode base64url do parâmetro `tfu` da URL de resposta para capturar preços em respostas AJAX sem corpo HTML.
+- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Persistir Working Buffer em `data/working_buffer.json` para sobreviver a reinicializações do processo (volatilidade zero após restart).
+- [ ] `src/public/app.js` • `renderizarRotas` • Sparklines SVG puro + ordenação por economia no Cockpit PWA (`smart-charts`).
 
 ---
 

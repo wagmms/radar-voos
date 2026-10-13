@@ -3,6 +3,16 @@
 Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
+
+## [v2.9.2] - 2026-10-13 — Working Buffer + Z-Score no BugFareHunter
+
+### ✅ Entregue
+- `src/services/bug_fare_hunter.js` · `escanearCorredoresProativos` · Padrão proactive-agent zero ruído implementado: Working Buffer em memória (Map por chave `origem:destino`) com janela deslizante de 5 leituras; Z-Score < -2.5 → BUG_FARE, Z-Score < -1.5 → OPORTUNIDADE, queda > 30% (fallback sem DP) → OPORTUNIDADE, demais → INFO silencioso.
+- Deduplicação defensiva de 24h: `_ehAlertaDuplicado` suprime alertas do mesmo tipo dentro da janela; `_registrarAlertaDisparado` persiste timestamp no buffer.
+- Retrocompatibilidade: `executarVarreduraProativa` agora é alias de `escanearCorredoresProativos`.
+- `obterEstadoBuffer()` para diagnóstico do buffer em runtime.
+- 11 novos testes unitários (202/202 verdes | +11 vs sprint anterior).
+
 e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
