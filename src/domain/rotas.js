@@ -360,8 +360,12 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
  * Codifica inteiro como varint do Protocol Buffers
  */
 export function encodeVarint(num) {
+  const val = Number(num);
+  if (!Number.isFinite(val) || val <= 0) {
+    return Buffer.from([0]);
+  }
+  let n = Math.floor(val);
   const bytes = [];
-  let n = num;
   while (n > 0x7f) {
     bytes.push((n & 0x7f) | 0x80);
     n >>>= 7;

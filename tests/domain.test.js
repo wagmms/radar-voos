@@ -11,7 +11,8 @@ import {
   formatarDataParaBusca,
   gerarTfs,
   gerarLinkGoogleFlightsCheapest,
-  resolverCodigoParaLink
+  resolverCodigoParaLink,
+  encodeVarint
 } from '../src/domain/rotas.js';
 
 describe('Domínio: Rotas e Resolução Aeronáutica', () => {
@@ -340,5 +341,29 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.ok(tfsDefensivo);
     assert.strictEqual(typeof tfsDefensivo, 'string');
     assert.ok(tfsDefensivo.length > 20);
+  });
+
+  it('encodeVarint: deve codificar inteiros canônicos e blindar defensivamente contra negativos, não-finitos e decimais', () => {
+    // 1. Valores canônicos de 1 e múltiplos bytes varint
+    assert.deepStrictEqual(encodeVarint(0), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint(1), Buffer.from([0x01]));
+    assert.deepStrictEqual(encodeVarint(127), Buffer.from([0x7f]));
+    assert.deepStrictEqual(encodeVarint(128), Buffer.from([0x80, 0x01]));
+    assert.deepStrictEqual(encodeVarint(300), Buffer.from([0xac, 0x02]));
+    assert.deepStrictEqual(encodeVarint('300'), Buffer.from([0xac, 0x02]));
+    assert.deepStrictEqual(encodeVarint(300.9), Buffer.from([0xac, 0x02]));
+
+    // 2. Entradas adversariais negativas (deve degradar para varint 0 e nunca gerar bytes positivos espúrios)
+    assert.deepStrictEqual(encodeVarint(-1), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint(-50), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint('-100'), Buffer.from([0x00]));
+
+    // 3. Entradas não-finitas, nulas e strings malformadas (deve retornar varint 0 e nunca corromper com 0x80 0x00)
+    assert.deepStrictEqual(encodeVarint(Infinity), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint(-Infinity), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint(NaN), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint(null), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint(undefined), Buffer.from([0x00]));
+    assert.deepStrictEqual(encodeVarint('invalido'), Buffer.from([0x00]));
   });
 });

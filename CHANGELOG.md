@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.14] - 2026-10-13 — Blindagem Adversarial em encodeVarint (Domínio Rotas / Protobuf)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`encodeVarint`):
+  - Corrigido comportamento anômalo e corrupção silenciosa de dados em codificação protobuf varint quando entradas negativas (ex: `-1`, `-50`), decimais ou não-finitas (`Infinity`, `NaN`) eram passadas. Números negativos burlavam a condição `while (n > 0x7f)` e geravam bytes positivos espúrios (ex: `-1` gerava `Buffer.from([0x7f])` = `127`), enquanto `Infinity` gerava varint malformado (`[0x80, 0x00]`).
+  - Implementada validação defensiva estrita com coerção numérica (`Number(num)`), garantia de finitude (`Number.isFinite`), tratamento de números <= 0 retornando `Buffer.from([0])` e truncamento de inteiros via `Math.floor`.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando inteiros canônicos (0, 1, 127, 128, 300), degradação graciosa para varint 0 em números negativos e rejeição de entradas nulas, não-finitas e strings malformadas.
+
 ## [v2.18.13] - 2026-10-13 — Blindagem Adversarial em parsearTempoMinutos (Cockpit PWA / Conexões)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
