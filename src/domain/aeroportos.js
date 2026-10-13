@@ -205,23 +205,29 @@ export function obterInfoAeroporto(codigoOuNome) {
  * Resolve com precisão o Destino Concreto do voo (NUNCA genérico)
  * Mescla o destino cadastrado na rota, a oferta e o código IATA real retornado
  */
-export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = null }) {
-  // Se veio um destinoReal concreto (ex: retornado pela SerpApi ou Direct), prioriza ele
+export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = null, codigoDestinoReal = null }) {
+  // 1. Se veio codigoDestinoReal concreto (ex: retornado pela SerpApi: "SCL", "EZE"), prioridade máxima
+  if (codigoDestinoReal) {
+    const infoCodigo = obterInfoAeroporto(codigoDestinoReal);
+    if (infoCodigo) return infoCodigo;
+  }
+
+  // 2. Se veio um destinoReal concreto (ex: retornado pela SerpApi ou Direct), busca info
   if (destinoReal) {
     const infoReal = obterInfoAeroporto(destinoReal);
     if (infoReal) return infoReal;
   }
 
-  // Se o codigoDestino for um aeroporto ou metrópole concreta (ex: BUE, SCL, MAD, LIS, BEL)
+  // 3. Se o codigoDestino for um aeroporto ou metrópole concreta (ex: BUE, SCL, MAD, LIS, BEL)
   if (codigoDestino && CATALOGO_AEROPORTOS[normalizar(codigoDestino)]) {
     return { ...CATALOGO_AEROPORTOS[normalizar(codigoDestino)] };
   }
 
-  // Se destino for nome de cidade concreta (ex: "Buenos Aires", "Madrid")
+  // 4. Se destino for nome de cidade concreta (ex: "Buenos Aires", "Madrid")
   const infoNome = obterInfoAeroporto(destino);
   if (infoNome) return infoNome;
 
-  // Se for continente ou região genérica (ex: "América do Sul", "/m/06_1", "Europa")
+  // 5. Se for continente ou região genérica (ex: "América do Sul", "/m/06_1", "Europa")
   const infoHub = HUBS_REGIOES_CANONICOS[normalizar(codigoDestino)] || HUBS_REGIOES_CANONICOS[normalizar(destino)];
   if (infoHub) return infoHub;
 
@@ -288,6 +294,7 @@ export function montarCardBugFare({
   motivo,
   tipo = '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
   destinoReal = null,
+  codigoDestinoReal = null,
   linkOriginal = null
 }) {
   const origemInfo = obterInfoAeroporto(codigoOrigem) || obterInfoAeroporto(origem) || {
@@ -301,7 +308,8 @@ export function montarCardBugFare({
   const destinoInfo = resolverDestinoConcreto({
     destino,
     codigoDestino,
-    destinoReal
+    destinoReal,
+    codigoDestinoReal
   });
 
   const periodoTexto = formatarPeriodoViagem(dataIda, dataVolta);
@@ -323,8 +331,15 @@ export function montarCardBugFare({
     linkGoogleFlights = gerarLinkGoogleFlights(origemLink, destinoLink, dataIda, voltaEfetiva);
   }
 
-  // Título e subtítulo canônicos NÃO GENÉRICOS
-  const tituloCompleto = `🚨 BUG FARE: ${origemInfo.cidade} ➔ ${destinoInfo.cidade}, ${destinoInfo.pais} (${destinoInfo.iata}) por R$ ${precoFmt}!`;
+  // Se o destino cadastrado na rota foi uma macrorregião (ex: América do Sul), acrescenta o contexto
+  const destinoNorm = normalizar(destino);
+  const cidadeNorm = normalizar(destinoInfo.cidade);
+  const iataNorm = normalizar(destinoInfo.iata);
+  const ehRegiaoMacro = destino && destinoNorm !== cidadeNorm && destinoNorm !== iataNorm && !destinoNorm.includes(cidadeNorm);
+  const labelMacro = ehRegiaoMacro ? ` (${destino})` : '';
+
+  // Título canônico NÃO GENÉRICO contendo cidade, país e IATA real
+  const tituloCompleto = `🚨 BUG FARE: ${origemInfo.cidade} ➔ ${destinoInfo.cidade}, ${destinoInfo.pais} (${destinoInfo.iata})${labelMacro} por R$ ${precoFmt}!`;
 
   return {
     titulo: tituloCompleto,
