@@ -10,6 +10,17 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
     assert.equal(escaped, '&lt;b&gt;Promo &amp; Oferta &lt;teste&gt;&lt;/b&gt;');
   });
 
+  it('deve lidar defensivamente com valores numéricos (inclusive 0), falsy e aspas em atributos', () => {
+    // 1. Número zero e booleanos não devem ser convertidos em string vazia por coerção falsy
+    assert.equal(escapeHtml(0), '0');
+    assert.equal(escapeHtml(false), 'false');
+    assert.equal(escapeHtml(null), '');
+    assert.equal(escapeHtml(undefined), '');
+
+    // 2. Aspas duplas devem ser escapadas para segurança de atributos HTML
+    assert.equal(escapeHtml('Tarifa "Relâmpago" & Cia'), 'Tarifa &quot;Relâmpago&quot; &amp; Cia');
+  });
+
   it('deve registrar callback de verificação externa', () => {
     let chamada = false;
     notifierTelegram.registrarCallbackVerificacao(() => {

@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.3] - 2026-10-13 — QA & Blindagem Adversarial em `escapeHtml` (notifier_telegram)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/services/notifier_telegram.js` · `escapeHtml`:
+  - Corrigido bug de coerção falsy `texto || ''` que convertia o número `0` e o booleano `false` em strings vazias, preservando agora valores numéricos e booleanos legítimos.
+  - Adicionado escape defensivo para aspas duplas (`"` -> `&quot;`) em conformidade com as diretrizes do Telegram Bot API, prevenindo quebra e injeção em atributos HTML (como tags `<a href="...">`).
+- `tests/telegram_callbacks.test.js`:
+  - Adicionado teste adversarial validando coerção segura para zero (`0`), booleanos (`false`), valores nulos/indefinidos e strings com aspas duplas (267/267 testes aprovados).
+
+---
+
 ## [v2.10.2] - 2026-10-13 — Badges de Conexões e Stopover Noturno em Cards Móveis (Cockpit PWA)
 
 ### 🎨 Cockpit PWA & Anti-UI-Slop

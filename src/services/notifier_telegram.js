@@ -5,10 +5,12 @@ import { weatherService } from './weather_service.js';
 import { ehSoIda } from '../domain/rotas.js';
 
 export function escapeHtml(texto) {
-  return String(texto || '')
+  if (texto === null || texto === undefined) return '';
+  return String(texto)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 export function ehPeriodoNoturno() {
