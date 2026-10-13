@@ -4,6 +4,22 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.11.1] - 2026-10-13 — Botão inline 🧳 Ver Regras de Bagagem no card de Bug Fare (Telegram)
+
+### ✨ Novo Recurso
+- `src/services/notifier_telegram.js` · `enviarAlertaBugFare`:
+  - Adicionado botão inline `🧳 Ver Regras de Bagagem` no card de alerta de Bug Fare enviado pelo bot Telegram.
+  - A URL do botão é parametrizada dinamicamente com os IATAs de origem e destino da rota, apontando diretamente para o Google Flights, permitindo ao usuário consultar as políticas de bagagem da rota de forma contextual em 1 toque.
+  - Inline keyboard agora tem 2 linhas: linha 1 `⚡ Ver no Google Flights` (link canônico da oferta), linha 2 `🧳 Ver Regras de Bagagem` (apenas quando IATAs disponíveis).
+  - Degradação graciosa: sem IATAs no card → apenas botão principal. Sem URL nenhuma → fallback para envio simples (retrocompatibilidade total com chamadas legadas).
+- `src/domain/aeroportos.js` · `montarCardBugFare`:
+  - Adicionados campos `iata_origem` e `iata_destino` ao objeto retornado, expondo os códigos IATA puros (link codes) necessários para construção da URL de bagagem.
+- `tests/telegram_callbacks.test.js`:
+  - 3 novos testes: botão presente com IATAs (URL verificada com GRU e CDG), ausência graciosa sem IATAs, compatibilidade retroativa com chamada via string simples.
+  - Total: **304/304 testes** aprovados.
+
+---
+
 ## [v2.10.10] - 2026-10-13 — QA & Blindagem Adversarial em `parsePreco` (calculadora)
 
 ### 🛡️ Blindagem de QA Adversarial
