@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.6] - 2026-10-13 — Blindagem Adversarial em obterInfoAeroporto (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`obterInfoAeroporto`):
+  - Corrigido suporte a entradas fornecidas como objetos estruturados de aeroporto ou trecho (ex: `{ iata: 'GRU' }`, `{ airport: 'EZE' }`, `{ codigo: 'MIA' }`), que antes falhavam por conversão cega para `"[OBJECT OBJECT]"` e retornavam `null`.
+  - Adicionada resolução defensiva para códigos IATA de 3 letras informados entre parênteses fora do catálogo fixo (ex: `"Reykjavik (KEF)"`), preservando o código IATA e montando a estrutura canônica em vez de descartar o destino.
+  - Adicionado suporte a delimitadores por hífen e barra com código IATA de 3 letras (ex: `"AKL - Auckland"`, `"Hamad / DOH"`).
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando objetos estruturados, IATA entre parênteses fora do catálogo e delimitadores por hífen/barra.
+
 ## [v2.18.5] - 2026-10-13 — Blindagem Adversarial em converterDuracaoParaHoras (Google Flights Direct)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

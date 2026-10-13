@@ -195,4 +195,41 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(encontrado.preco, 390);
     assert.ok(encontrado.periodo_texto.includes('10/01/2027'));
   });
+
+  it('deve lidar defensivamente com casos de borda adversariais em obterInfoAeroporto (objetos, parenteses e separadores)', () => {
+    // 1. Objetos estruturados de aeroporto/trecho ({ iata, codigo, airport }) e objetos vazios/inválidos
+    const infoObjetoIata = obterInfoAeroporto({ iata: 'GRU' });
+    assert.ok(infoObjetoIata);
+    assert.strictEqual(infoObjetoIata.cidade, 'São Paulo');
+    assert.strictEqual(infoObjetoIata.iata, 'GRU');
+
+    const infoObjetoAirport = obterInfoAeroporto({ airport: 'EZE' });
+    assert.ok(infoObjetoAirport);
+    assert.strictEqual(infoObjetoAirport.cidade, 'Buenos Aires');
+
+    assert.strictEqual(obterInfoAeroporto({}), null);
+    assert.strictEqual(obterInfoAeroporto({ outroCampo: 123 }), null);
+
+    // 2. Extração de IATA entre parênteses: conhecido no catálogo (Doha (DOH)) e fora do catálogo (Reykjavik (KEF))
+    const infoDoh = obterInfoAeroporto('Doha (DOH)');
+    assert.ok(infoDoh);
+    assert.strictEqual(infoDoh.iata, 'DOH');
+    assert.strictEqual(infoDoh.cidade, 'Doha');
+
+    const infoKef = obterInfoAeroporto('Reykjavik (KEF)');
+    assert.ok(infoKef);
+    assert.strictEqual(infoKef.iata, 'KEF');
+    assert.strictEqual(infoKef.codigoLink, 'KEF');
+    assert.strictEqual(infoKef.cidade, 'Reykjavik');
+    assert.strictEqual(infoKef.nome, 'Aeroporto de Reykjavik (KEF)');
+
+    // 3. Delimitadores por hífen e barra com IATA válido (ex: "AKL - Auckland", "Hamad / DOH")
+    const infoAkl = obterInfoAeroporto('AKL - Auckland');
+    assert.ok(infoAkl);
+    assert.strictEqual(infoAkl.iata, 'AKL');
+
+    const infoBarra = obterInfoAeroporto('Hamad / DOH');
+    assert.ok(infoBarra);
+    assert.strictEqual(infoBarra.iata, 'DOH');
+  });
 });

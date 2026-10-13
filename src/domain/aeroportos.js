@@ -161,32 +161,69 @@ function normalizar(texto) {
  */
 export function obterInfoAeroporto(codigoOuNome) {
   if (!codigoOuNome) return null;
-  const limpo = normalizar(codigoOuNome);
+
+  let entrada = codigoOuNome;
+  if (typeof entrada === 'object' && entrada !== null) {
+    entrada = entrada.iata || entrada.codigo || entrada.code || entrada.airport || entrada.cidade || entrada.city || entrada.nome || entrada.name || '';
+    if (!entrada || typeof entrada !== 'string') return null;
+  }
+
+  const limpo = normalizar(entrada);
+  if (!limpo) return null;
 
   // 1. Match direto no catálogo por IATA
   if (CATALOGO_AEROPORTOS[limpo]) {
     return { ...CATALOGO_AEROPORTOS[limpo] };
   }
 
-  // 2. Extrair código de 3 letras entre parênteses (ex: "Buenos Aires (EZE)")
+  // 2. Extrair código de 3 letras entre parênteses (ex: "Buenos Aires (EZE)", "Doha (DOH)", "Reykjavik (KEF)")
   const matchParenteses = limpo.match(/\(([A-Z]{3})\)/);
-  if (matchParenteses && CATALOGO_AEROPORTOS[matchParenteses[1]]) {
-    return { ...CATALOGO_AEROPORTOS[matchParenteses[1]] };
+  if (matchParenteses) {
+    const cod = matchParenteses[1];
+    if (CATALOGO_AEROPORTOS[cod]) {
+      return { ...CATALOGO_AEROPORTOS[cod] };
+    }
+    const nomeCidade = String(entrada).replace(/\s*\([A-Za-z]{3}\).*/, '').trim();
+    return {
+      iata: cod,
+      codigoLink: cod,
+      nome: nomeCidade ? `Aeroporto de ${nomeCidade} (${cod})` : `Aeroporto ${cod}`,
+      cidade: nomeCidade || cod,
+      pais: 'Destino Internacional',
+      regiao: 'OUTRO'
+    };
   }
 
-  // 3. Match por nome da cidade no catálogo
+  // 3. Match por separadores traço ou barra com IATA de 3 letras (ex: "AKL - Auckland", "Hamad / DOH")
+  const matchSeparador = limpo.match(/^([A-Z]{3})\s*[-/]/) || limpo.match(/[-/]\s*([A-Z]{3})$/);
+  if (matchSeparador) {
+    const cod = matchSeparador[1];
+    if (CATALOGO_AEROPORTOS[cod]) {
+      return { ...CATALOGO_AEROPORTOS[cod] };
+    }
+    return {
+      iata: cod,
+      codigoLink: cod,
+      nome: `Aeroporto ${cod}`,
+      cidade: cod,
+      pais: 'Destino Internacional',
+      regiao: 'OUTRO'
+    };
+  }
+
+  // 4. Match por nome da cidade no catálogo
   for (const info of Object.values(CATALOGO_AEROPORTOS)) {
     if (normalizar(info.cidade) === limpo) {
       return { ...info };
     }
   }
 
-  // 4. Match por hub regional / continente canônico
+  // 5. Match por hub regional / continente canônico
   if (HUBS_REGIOES_CANONICOS[limpo]) {
     return { ...HUBS_REGIOES_CANONICOS[limpo] };
   }
 
-  // 5. Se for código de 3 letras desconhecido, devolve estrutura padrão defensiva
+  // 6. Se for código de 3 letras desconhecido, devolve estrutura padrão defensiva
   if (/^[A-Z]{3}$/.test(limpo)) {
     return {
       iata: limpo,
