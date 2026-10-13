@@ -228,6 +228,53 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     // 4. Rota sem data explicitamente só ida
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, data_volta: 'Só Ida' }), true);
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo: 'one_way' }), true);
+    assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo_viagem: 'one_way' }), true);
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, dias_estadia: 0, data_volta: null }), true);
+  });
+
+  it('deve alterar rota flexível de Ida e Volta para Só Ida e manter como Só Ida após sincronização Two-Way', async () => {
+    const { rotasSync } = await import('../src/services/rotas_sync.js');
+
+    // 1. Criar rota inicial como Ida e Volta
+    const rota = rotasRepo.criar({
+      origem: 'São Paulo',
+      destino: 'Roma',
+      sem_data: 1,
+      dias_estadia: 12,
+      preco_alvo: 3800
+    });
+
+    assert.ok(rota.data_volta, 'Deve possuir data de volta inicial');
+    assert.strictEqual(rotaEhSoIda(rota), false, 'Deve ser inicialmente Ida e Volta');
+
+    // 2. Alterar para Só Ida
+    const atualizada = rotasRepo.atualizar(rota.id, {
+      tipo: 'one_way',
+      tipo_viagem: 'one_way',
+      data_volta: 'Só Ida',
+      dias_estadia: null
+    });
+
+    assert.strictEqual(atualizada.data_volta, null);
+    assert.strictEqual(atualizada.dias_estadia, null);
+    assert.strictEqual(rotaEhSoIda(atualizada), true);
+
+    // 3. Serializar para data/rotas.json
+    const rotasSalvas = rotasSync.salvarArquivoRotas();
+    const rotaSerializada = rotasSalvas.find(r => r.destino === 'Roma');
+    assert.ok(rotaSerializada);
+    assert.strictEqual(rotaSerializada.data_volta, null);
+    assert.strictEqual(rotaSerializada.dias_estadia, null);
+    assert.strictEqual(rotaSerializada.tipo_viagem, 'one_way');
+
+    // 4. Sincronizar de volta com o banco (simulando F5 / sync pull do GitHub)
+    rotasSync.sincronizarRotasComBanco(rotasSalvas);
+
+    const rotaFinal = rotasRepo.buscarPorId(rota.id);
+    assert.strictEqual(rotaFinal.data_volta, null, 'data_volta deve permanecer estritamente null pós-sync');
+    assert.strictEqual(rotaFinal.dias_estadia, null, 'dias_estadia deve permanecer null');
+    assert.strictEqual(rotaEhSoIda(rotaFinal), true, 'Deve permanecer categorizada como Só Ida');
+
+    rotasRepo.excluir(rota.id);
   });
 });

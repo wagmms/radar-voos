@@ -10,7 +10,12 @@ describe('Servidor Fastify: Endpoints REST', () => {
   let app;
 
   before(async () => {
-    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    closeDb();
+    for (const f of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+      if (fs.existsSync(f)) {
+        try { fs.unlinkSync(f); } catch (_) {}
+      }
+    }
     getDb(testDbPath);
     app = await buildApp({ logger: false });
   });
@@ -18,7 +23,11 @@ describe('Servidor Fastify: Endpoints REST', () => {
   after(async () => {
     await app.close();
     closeDb();
-    if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
+    for (const f of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
+      if (fs.existsSync(f)) {
+        try { fs.unlinkSync(f); } catch (_) {}
+      }
+    }
   });
 
   it('GET /api/health deve retornar status 200 ok', async () => {

@@ -373,8 +373,11 @@ function renderizarRotas() {
       termoClass = 'low';
     }
 
-    const ehSoIda = !rota.data_volta ||
-      (typeof rota.data_volta === 'string' && (rota.data_volta.toLowerCase().includes('só ida') || rota.data_volta.toLowerCase().includes('so ida')));
+    const ehSoIda =
+      rota.tipo_viagem === 'one_way' ||
+      rota.tipo === 'one_way' ||
+      (typeof rota.data_volta === 'string' && (rota.data_volta.toLowerCase().includes('só ida') || rota.data_volta.toLowerCase().includes('so ida'))) ||
+      (!rota.data_volta && (!rota.dias_estadia || rota.sem_data !== 1));
 
     const tipoViagem = rota.sem_data === 1
       ? (ehSoIda ? '🗓️ FLEXÍVEL • SÓ IDA' : `🗓️ FLEXÍVEL • IDA E VOLTA (${rota.dias_estadia || 10}d)`)
@@ -878,9 +881,10 @@ window.abrirEdicaoRota = function(id) {
   }
 
   const ehSoIda = Boolean(
-    !rota.data_volta ||
+    rota.tipo_viagem === 'one_way' ||
+    rota.tipo === 'one_way' ||
     (typeof rota.data_volta === 'string' && (rota.data_volta.toLowerCase().includes('só ida') || rota.data_volta.toLowerCase().includes('so ida'))) ||
-    (rota.sem_data === 1 && !rota.dias_estadia && !rota.data_volta)
+    (!rota.data_volta && (!rota.dias_estadia || rota.sem_data !== 1))
   );
 
   definirTipoViagemFormulario(ehSoIda ? 'one_way' : 'round_trip');
@@ -956,6 +960,8 @@ async function criarNovaRota(e) {
       body: JSON.stringify({
         origem,
         destino,
+        tipo: ehSoIdaTexto ? 'one_way' : 'round_trip',
+        tipo_viagem: ehSoIdaTexto ? 'one_way' : 'round_trip',
         data_ida: data_ida || undefined,
         data_volta: ehSoIdaTexto ? 'Só Ida' : (sem_data ? `${dias_estadia} dias` : (data_volta || undefined)),
         preco_alvo,
@@ -963,7 +969,7 @@ async function criarNovaRota(e) {
         cabine,
         flexibilidade_dias,
         sem_data,
-        dias_estadia
+        dias_estadia: ehSoIdaTexto ? null : dias_estadia
       })
     });
 
@@ -1158,15 +1164,23 @@ async function importarRotasJson(e) {
 }
 
 async function sincronizarComGitHubRemoto() {
-  mostrarToast('🔄 Sincronizando rotas com a nuvem (GitHub)...');
+  mostrarToast('🔄 Sincronizando rotas com o repositório GitHub...');
   try {
-    const res = await fetch('/api/rotas/sync-pull', { method: 'POST' });
+    const res = await fetch('/api/rotas/sincronizar-github', { method: 'POST' });
     const data = await res.json();
-    if (res.ok && data.ok) {
-      mostrarToast(`✅ ${data.total} rotas sincronizadas com a nuvem com sucesso!`);
+    if (res.ok && (data.ok || data.commitSha)) {
+      mostrarToast(`✅ ${data.totalRotas || data.rotas?.length || ''} rotas sincronizadas com o GitHub com sucesso!`);
       await carregarDadosCompletos(true);
     } else {
-      mostrarToast(`Aviso: ${data.erro || 'Falha ao sincronizar com nuvem'}`, true);
+      // Se falhar o push, tenta pull como fallback
+      const resPull = await fetch('/api/rotas/sync-pull', { method: 'POST' });
+      const dataPull = await resPull.json();
+      if (resPull.ok && dataPull.ok) {
+        mostrarToast(`✅ ${dataPull.total} rotas sincronizadas com a nuvem com sucesso!`);
+        await carregarDadosCompletos(true);
+      } else {
+        mostrarToast(`Aviso: ${data.erro || data.mensagem || 'Falha ao sincronizar com GitHub'}`, true);
+      }
     }
   } catch (err) {
     mostrarToast('Falha na comunicação de sincronização', true);

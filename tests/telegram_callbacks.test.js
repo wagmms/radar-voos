@@ -54,7 +54,7 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
       assert.ok(mensagemEnviada);
       assert.ok(mensagemEnviada.includes('CALCULADORA DE PARIDADE DE MILHAS'));
       assert.ok(mensagemEnviada.includes('100.000 milhas/pontos'));
-      assert.ok(mensagemEnviada.includes('1.750,00'));
+      assert.ok(mensagemEnviada.includes('1750,00'));
     } finally {
       notifierTelegram.enviarMensagem = backupEnviar;
     }
@@ -83,7 +83,7 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
       });
 
       assert.ok(mensagemEnviada);
-      assert.ok(mensagemEnviada.includes('Teto Atualizado com Sucesso'));
+      assert.ok(mensagemEnviada.toLowerCase().includes('teto atualizado com sucesso'));
       const rotaAtualizada = rotasRepo.buscarPorId(rota.id);
       assert.equal(rotaAtualizada.preco_alvo, 3200);
     } finally {

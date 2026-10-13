@@ -255,18 +255,18 @@ export function rotaEhSoIda(rotaOuDados) {
 
   const campoVolta = rotaOuDados.data_volta !== undefined ? rotaOuDados.data_volta : rotaOuDados.dataVolta;
   const semData = rotaOuDados.sem_data === 1 || Boolean(rotaOuDados.sem_data);
+  const diasEstadia = rotaOuDados.dias_estadia || rotaOuDados.diasEstadia;
 
   if (semData) {
     if (typeof campoVolta === 'string') {
       if (ehSoIda(campoVolta)) return true;
       if (/\d/.test(campoVolta)) return false;
     }
-    if (campoVolta === null) return true;
-    if (campoVolta === undefined) {
-      if (rotaOuDados.dias_estadia && Number(rotaOuDados.dias_estadia) > 0) return false;
-      return true;
-    }
-    return ehSoIda(campoVolta);
+    // Se tiver dias de estadia configurados (> 0), é Ida e Volta!
+    if (diasEstadia && Number(diasEstadia) > 0) return false;
+
+    // Se campoVolta for nulo/indefinido e não tem dias de estadia
+    return true;
   }
 
   return ehSoIda(campoVolta);
