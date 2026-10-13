@@ -13,6 +13,47 @@ import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData, ehSoIda, 
 import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
 
+/**
+ * Cotações de referência R$/milheiro por programa de fidelidade (espelho do frontend card_rota.js).
+ * Fonte: valores médios de mercado brasileiro (atualizar conforme variação de mercado).
+ */
+const COTACOES_MILHA_MILHEIRO_BACKEND = {
+  smiles:    17.50,
+  latam:     24.00,
+  latampass: 24.00,
+  livelo:    35.00,
+  azul:      20.00,
+  tudoazul:  20.00,
+  iberia:    65.00,
+  tap:       32.00
+};
+
+/**
+ * Calcula a estimativa de milhas necessárias para emitir o voo pelo preço atual.
+ * Espelha `calcularMilhasEstimadas` de `src/public/js/card_rota.js` para uso no backend
+ * (Telegram, API, escanearRota), eliminando recalculo no cliente.
+ *
+ * @param {number|null} precoAtual   Preço atual em BRL (ou na moeda da rota)
+ * @param {number|null} paridadeMilheiro  Cotação R$ por milheiro customizada (ex: 17.50)
+ * @param {string}      [programa='smiles'] Chave do programa de fidelidade
+ * @returns {{ milhas: number, programa: string, cotacaoMilheiro: number } | null}
+ *   Retorna null quando preço ou paridade são inválidos.
+ */
+export function calcularMilhasRota(precoAtual, paridadeMilheiro, programa = 'smiles') {
+  const preco = typeof precoAtual === 'number' ? precoAtual : parseFloat(precoAtual);
+  if (!Number.isFinite(preco) || preco <= 0) return null;
+
+  const progKey = String(programa || 'smiles').toLowerCase().trim();
+  const cotacaoPadrao = COTACOES_MILHA_MILHEIRO_BACKEND[progKey] || COTACOES_MILHA_MILHEIRO_BACKEND.smiles;
+  const cotacao = typeof paridadeMilheiro === 'number' && Number.isFinite(paridadeMilheiro) && paridadeMilheiro > 0
+    ? paridadeMilheiro
+    : cotacaoPadrao;
+
+  // milhas = (preço / R$-por-milheiro) × 1.000
+  const milhas = Math.ceil((preco / cotacao) * 1000);
+  return { milhas, programa: progKey, cotacaoMilheiro: cotacao };
+}
+
 export class FlightScanner {
   /**
    * Consulta os provedores de voo através do gerenciador de estratégias
@@ -343,6 +384,13 @@ export class FlightScanner {
       });
     }
 
+    // 6. Cálculo automático de milhas estimadas usando paridade e programa da rota
+    const milhasEstimadas = calcularMilhasRota(
+      oferta.preco,
+      rota.paridade_milhas ?? null,
+      rota.programa_milhas || 'smiles'
+    );
+
     return {
       sucesso: true,
       encontrou: true,
@@ -352,7 +400,8 @@ export class FlightScanner {
       melhorOpcaoFlexivel,
       ehBugFare: analiseBug.ehBugFare,
       deltaEstatistico: analiseDelta,
-      moeda: moedaEfetiva
+      moeda: moedaEfetiva,
+      milhas_estimadas: milhasEstimadas
     };
   } catch (err) {
     rotasRepo.marcarFalhaChecagem(rota.id, `Erro inesperado: ${err.message}`);
