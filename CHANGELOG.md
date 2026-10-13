@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.4] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverDestino`):
+  - Corrigido reconhecimento de identificadores KGMID/Freebase para aceitar prefixos maiúsculos e identificadores mistos (ex: `"/M/02j9z"`, `"/M/02J9Z"`, `"/G/11b6"`), normalizando para o formato canônico minúsculo do Google Flights em vez de retornar `null`.
+  - Tratamento resiliente de código IATA entre parênteses com espaços internos arbitrários (ex: `"São Paulo ( GRU )"` ou `"Miami (  MIA  )"`), extraindo o código IATA corretamente.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste adversarial validando KGMIDs maiúsculos/mistos e espaços internos em parênteses IATA.
+
 ## [v2.18.3] - 2026-10-13 — Blindagem Adversarial em formatarPeriodoViagem (Aeroportos)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

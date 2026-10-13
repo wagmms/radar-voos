@@ -26,7 +26,7 @@ export function resolverDestino(texto) {
   if (!strOriginal) return null;
 
   // 1. Extração prioritária se contiver código IATA entre parênteses (ex: "São Paulo (GRU)", "Miami (MIA)")
-  const matchIata = strOriginal.match(/\(([A-Za-z]{3})\)/i);
+  const matchIata = strOriginal.match(/\(\s*([A-Za-z]{3})\s*\)/i);
   if (matchIata) {
     return matchIata[1].toUpperCase();
   }
@@ -47,8 +47,8 @@ export function resolverDestino(texto) {
   }
 
   // 5. Identificadores KGMID/Freebase (/m/ ou /g/)
-  if (strOriginal.startsWith('/m/') || strOriginal.startsWith('/g/')) {
-    return strOriginal;
+  if (/^\/[mg]\//i.test(strOriginal)) {
+    return strOriginal.toLowerCase();
   }
 
   return null;

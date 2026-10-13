@@ -67,6 +67,19 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverDestino('GRU,,GIG'), null);
   });
 
+  it('deve blindar resolverDestino para KGMIDs maiúsculos/mistos e espaços internos em parênteses IATA', () => {
+    // Caso 1: KGMIDs com prefixo maiúsculo e identificador misto normalizados para minúsculo canônico
+    assert.strictEqual(resolverDestino('/M/02j9z'), '/m/02j9z');
+    assert.strictEqual(resolverDestino('/M/02J9Z'), '/m/02j9z');
+    assert.strictEqual(resolverDestino('/G/11b6'), '/g/11b6');
+    assert.strictEqual(resolverDestino('  /m/09c7w0  '), '/m/09c7w0');
+
+    // Caso 2: Código IATA entre parênteses com espaços internos arbitrários
+    assert.strictEqual(resolverDestino('São Paulo ( GRU )'), 'GRU');
+    assert.strictEqual(resolverDestino('Miami (  MIA  )'), 'MIA');
+    assert.strictEqual(resolverDestino('Paris ( cdg )'), 'CDG');
+  });
+
   it('deve normalizar metrópoles para aeroportos físicos compatíveis com SerpAPI', () => {
     assert.strictEqual(normalizarParaSerpApi('SAO'), 'GRU,CGH');
     assert.strictEqual(normalizarParaSerpApi('RIO'), 'GIG,SDU');
