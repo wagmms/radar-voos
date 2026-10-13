@@ -176,14 +176,14 @@ export function obterInfoAeroporto(codigoOuNome) {
     return { ...CATALOGO_AEROPORTOS[limpo] };
   }
 
-  // 2. Extrair código de 3 letras entre parênteses (ex: "Buenos Aires (EZE)", "Doha (DOH)", "Reykjavik (KEF)")
-  const matchParenteses = limpo.match(/\(([A-Z]{3})\)/);
+  // 2. Extrair código de 3 letras entre parênteses (ex: "Buenos Aires (EZE)", "Santiago ( SCL )", "Reykjavik (KEF)")
+  const matchParenteses = limpo.match(/\(\s*([A-Z]{3})\s*\)/);
   if (matchParenteses) {
     const cod = matchParenteses[1];
     if (CATALOGO_AEROPORTOS[cod]) {
       return { ...CATALOGO_AEROPORTOS[cod] };
     }
-    const nomeCidade = String(entrada).replace(/\s*\([A-Za-z]{3}\).*/, '').trim();
+    const nomeCidade = String(entrada).replace(/\s*\(\s*[A-Za-z]{3}\s*\).*/, '').trim();
     return {
       iata: cod,
       codigoLink: cod,
@@ -194,8 +194,8 @@ export function obterInfoAeroporto(codigoOuNome) {
     };
   }
 
-  // 3. Match por separadores traço ou barra com IATA de 3 letras (ex: "AKL - Auckland", "Hamad / DOH")
-  const matchSeparador = limpo.match(/^([A-Z]{3})\s*[-/]/) || limpo.match(/[-/]\s*([A-Z]{3})$/);
+  // 3. Match por separadores traço, barra, pipe ou dois pontos com IATA de 3 letras (ex: "AKL - Auckland", "Hamad / DOH", "GRU | São Paulo")
+  const matchSeparador = limpo.match(/^([A-Z]{3})\s*[-/|:]/) || limpo.match(/[-/|:]\s*([A-Z]{3})$/);
   if (matchSeparador) {
     const cod = matchSeparador[1];
     if (CATALOGO_AEROPORTOS[cod]) {

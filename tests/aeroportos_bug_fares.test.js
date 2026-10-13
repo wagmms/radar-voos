@@ -25,6 +25,30 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(sao.pais, 'Brasil');
   });
 
+  it('deve extrair informações de aeroporto com espaços internos nos parênteses e separadores com pipe ou dois pontos', () => {
+    const sclEspacos = obterInfoAeroporto('Santiago ( SCL )');
+    assert.ok(sclEspacos);
+    assert.strictEqual(sclEspacos.iata, 'SCL');
+    assert.strictEqual(sclEspacos.cidade, 'Santiago');
+    assert.strictEqual(sclEspacos.pais, 'Chile');
+
+    const aklDesconhecido = obterInfoAeroporto('Auckland ( AKL )');
+    assert.ok(aklDesconhecido);
+    assert.strictEqual(aklDesconhecido.iata, 'AKL');
+    assert.strictEqual(aklDesconhecido.cidade, 'Auckland');
+    assert.strictEqual(aklDesconhecido.nome, 'Aeroporto de Auckland (AKL)');
+
+    const gruPipe = obterInfoAeroporto('GRU | São Paulo');
+    assert.ok(gruPipe);
+    assert.strictEqual(gruPipe.iata, 'GRU');
+    assert.strictEqual(gruPipe.cidade, 'São Paulo');
+
+    const ezeDoisPontos = obterInfoAeroporto('EZE: Buenos Aires');
+    assert.ok(ezeDoisPontos);
+    assert.strictEqual(ezeDoisPontos.iata, 'EZE');
+    assert.strictEqual(ezeDoisPontos.cidade, 'Buenos Aires');
+  });
+
   it('deve resolver destino concreto para América do Sul sem termos genéricos', () => {
     const concretoAmSul = resolverDestinoConcreto({
       destino: 'América do Sul',

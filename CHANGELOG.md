@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.29] - 2026-10-13 — Blindagem Adversarial em obterInfoAeroporto para Espaços Internos em Parênteses e Separadores Adicionais (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`obterInfoAeroporto`):
+  - Corrigido falso negativo em códigos IATA informados com espaços internos entre parênteses (ex: `"Santiago ( SCL )"` ou `"Auckland ( AKL )"`), tornando os regexes tolerantes a espaços em branco (`\s*`).
+  - Expandido o parser de separadores para suportar delimitadores com pipe e dois pontos (`[-/|:]`, ex: `"GRU | São Paulo"`, `"EZE: Buenos Aires"`), além do traço e barra preexistentes.
+  - Sanitizada a extração de `nomeCidade` para remover adequadamente parênteses com espaços internos, prevenindo nomes corrompidos de aeroportos não catalogados.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo entradas com espaços internos nos parênteses (`"Santiago ( SCL )"` e destino internacional `"Auckland ( AKL )"`), e separadores com pipe (`"GRU | São Paulo"`) e dois pontos (`"EZE: Buenos Aires"`).
+
 ## [v2.18.28] - 2026-10-13 — Blindagem Adversarial em classificarItemFeed contra Falsos Negativos em Bug Fares com Desconto/Cabine e Megapromoções (Domínio Bug Fares)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
