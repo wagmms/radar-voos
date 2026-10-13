@@ -335,7 +335,7 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
   const origemParam = encodeURIComponent(origemRes);
   const destinoParam = encodeURIComponent(destinoRes);
 
-  const dataIdaNorm = formatarDataParaBusca(dataIda) || (typeof dataIda === 'string' ? dataIda.trim() : null);
+  const dataIdaNorm = formatarDataParaBusca(dataIda);
 
   if (!dataIdaNorm) {
     return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
@@ -344,9 +344,10 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
   const soIda = ehSoIda(dataVolta);
   let voltaEfetiva = null;
   if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
-    voltaEfetiva = calcularDataVolta(dataIdaNorm, dataVolta)
-      || formatarDataParaBusca(dataVolta)
-      || (typeof dataVolta === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataVolta.trim()) ? dataVolta.trim() : null);
+    const voltaResolvida = calcularDataVolta(dataIdaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaResolvida && voltaResolvida >= dataIdaNorm) {
+      voltaEfetiva = voltaResolvida;
+    }
   }
 
   if (voltaEfetiva) {

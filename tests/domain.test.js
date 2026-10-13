@@ -230,6 +230,24 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
 
     const linkDiasNum = gerarLinkGoogleFlights('SAO', 'LIS', '2026-11-10', 14);
     assert.match(linkDiasNum, /returning%202026-11-24/);
+
+    // Caso 4: dataIda malformada ou inexistente no calendário degrada para busca genérica sem data
+    const linkDataInvalida = gerarLinkGoogleFlights('GRU', 'LIS', 'data-invalida', null);
+    assert.match(linkDataInvalida, /Flights%20from%20GRU%20to%20LIS/);
+    assert.doesNotMatch(linkDataInvalida, /data-invalida/);
+
+    const linkDataInexistente = gerarLinkGoogleFlights('GRU', 'LIS', '2026-02-31', null);
+    assert.match(linkDataInexistente, /Flights%20from%20GRU%20to%20LIS/);
+    assert.doesNotMatch(linkDataInexistente, /2026-02-31/);
+
+    // Caso 5: dataVolta retroativa (anterior à ida) ou inexistente descarta a volta inconsistente e gera one-way
+    const linkVoltaRetroativa = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-20', '2026-11-10');
+    assert.match(linkVoltaRetroativa, /on%202026-11-20%20one-way/);
+    assert.doesNotMatch(linkVoltaRetroativa, /returning/);
+
+    const linkVoltaInexistente = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', '2026-02-31');
+    assert.match(linkVoltaInexistente, /on%202026-11-10%20one-way/);
+    assert.doesNotMatch(linkVoltaInexistente, /returning/);
   });
 
   it('deve gerar payload Protobuf tfs e link canônico para a aba Cheapest do Google Flights', () => {

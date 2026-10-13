@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.20] - 2026-10-13 — Blindagem Adversarial em gerarLinkGoogleFlights contra Datas Malformadas e Volta Retroativa (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarLinkGoogleFlights`):
+  - Eliminado vazamento de strings malformadas ou inexistentes no calendário (ex: `"data-invalida"`, `"2026-02-31"`) na URL do Google Flights (`"on data-invalida one-way"`), forçando a normalização estrita via `formatarDataParaBusca` e degradando graciosamente para a busca genérica de rota sem data.
+  - Blindada a resolução de `dataVolta` para descartar datas de retorno retroativas (anteriores à data de ida) ou inexistentes, convertendo a rota de forma resiliente para Só Ida (`one-way`) em vez de gerar URLs com datas inconsistentes (`"returning"` anterior à ida).
+- **`tests/domain.test.js`**:
+  - Adicionados casos de teste de borda adversariais (Casos 4 e 5) validando degradação para rota sem data em datas de ida inválidas e conversão automática para one-way em voltas retroativas ou inexistentes.
+
 ## [v2.18.19] - 2026-10-13 — Blindagem Adversarial em montarCardBugFare contra Entradas Nulas, Moeda/NaN e Datas Date (Domínio Aeroportos)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
