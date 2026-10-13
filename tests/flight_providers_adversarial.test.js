@@ -13,7 +13,8 @@ import assert from 'node:assert/strict';
 import {
   extrairPrecoNumerico,
   converterDuracaoParaHoras,
-  limparNomeCompanhia
+  limparNomeCompanhia,
+  extrairInfoConexoes
 } from '../src/services/providers/google_flights_direct_provider.js';
 
 import {
@@ -244,3 +245,26 @@ describe('QA Adversarial: extrairPrecoCheapestTab — variantes de formato real'
     assert.equal(extrairPrecoCheapestTab(html), null);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('QA Adversarial: extrairInfoConexoes — casos de borda e negação de voo direto', () => {
+  it('não deve classificar voo indireto como direto por substring match ("indireto")', () => {
+    const res = extrairInfoConexoes('Voo indireto com 1 parada em Lisboa (LIS)');
+    assert.equal(res.escalas, 1);
+    assert.equal(res.aeroportoConexao, 'Lisboa (LIS)');
+    assert.equal(res.detalhesEscalas, '1 parada em Lisboa (LIS)');
+  });
+
+  it('não deve classificar como direto texto com negação ("não direto")', () => {
+    const res = extrairInfoConexoes('Voo com 1 parada (não direto)');
+    assert.equal(res.escalas, 1);
+    assert.equal(res.detalhesEscalas, '1 parada');
+  });
+
+  it('deve inferir 1 parada padrão para termo "indireto" mesmo sem quantidade explícita', () => {
+    const res = extrairInfoConexoes('Voo indireto pela KLM');
+    assert.equal(res.escalas, 1);
+    assert.equal(res.detalhesEscalas, '1 parada');
+  });
+});
+

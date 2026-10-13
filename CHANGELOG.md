@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.12] - 2026-10-13 — Blindagem Adversarial em extrairInfoConexoes (Google Flights Direct)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`extrairInfoConexoes`):
+  - Corrigido falso positivo crítico onde voos indiretos ou com paradas eram erroneamente catalogados como voos diretos (`0 escalas`), decorrente de match ingênuo por substring da palavra `direto` (que capturava `"indireto"` e `"não direto"`).
+  - Reordenada a avaliação com prioridade para detecção de escalas explícitas e termos de conexão, associada à verificação estrita de fronteira de palavra (`(?<!n[aã]o\s+)\bdireto\b`), garantindo que voos indiretos mantenham suas escalas e aeroportos de conexão catalogados com fidelidade.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados 3 casos de teste de borda adversariais validando voo indireto com conexão, voo com negação de direto e inferência padrão de parada para termo indireto.
+
 ## [v2.18.11] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

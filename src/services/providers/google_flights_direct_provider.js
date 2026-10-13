@@ -133,23 +133,24 @@ export function extrairInfoConexoes(texto) {
 
   const str = String(texto);
 
-  // 1. Detecção explícita de voo direto / sem escalas
-  if (/direto|sem\s+escalas|sem\s+paradas|nonstop|non-stop/i.test(str)) {
+  // 1. Detecção de número de paradas/escalas ou menção a voo indireto
+  let escalas = null;
+  const matchNum = str.match(/(\d+)\s*(?:parada(?:s)?|escala(?:s)?|stop(?:s)?)/i);
+  if (matchNum) {
+    escalas = parseInt(matchNum[1], 10);
+  } else if (/com\s+conexão|com\s+parada|com\s+escala|connecting|\bindireto\b/i.test(str)) {
+    escalas = 1;
+  }
+
+  // 2. Se não possui escalas explícitas e não é negado, valida voo direto (com fronteira de palavra)
+  const ehNaoDireto = /(?:n[aã]o\s+direto|\bindireto\b)/i.test(str);
+  if (escalas === null && !ehNaoDireto && (/(?<!n[aã]o\s+)\bdireto\b|sem\s+escalas|sem\s+paradas|\bnonstop\b|\bnon-stop\b/i.test(str))) {
     return {
       escalas: 0,
       detalhesEscalas: 'Direto',
       tempoConexao: null,
       aeroportoConexao: null
     };
-  }
-
-  // 2. Detecção de número de paradas/escalas
-  let escalas = null;
-  const matchNum = str.match(/(\d+)\s*(?:parada(?:s)?|escala(?:s)?|stop(?:s)?)/i);
-  if (matchNum) {
-    escalas = parseInt(matchNum[1], 10);
-  } else if (/com\s+conexão|com\s+parada|com\s+escala|connecting/i.test(str)) {
-    escalas = 1;
   }
 
   // 3. Detecção de tempo de conexão (layover)
