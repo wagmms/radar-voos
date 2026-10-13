@@ -91,4 +91,86 @@ describe('Telegram Compose & Callbacks (notifier_telegram)', () => {
       notifierTelegram.enviarMensagem = backupEnviar;
     }
   });
+
+  it('deve calcular e exibir economia em reais e porcentagem no alerta de oportunidade com botão teto_help', async () => {
+    let mensagemEnviada = null;
+    let botoesEnviados = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto, link, btnTexto, isSilent, inlineKeyboard) => {
+      mensagemEnviada = texto;
+      botoesEnviados = inlineKeyboard;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 99,
+        origem: 'São Paulo',
+        destinoReal: 'Lisboa',
+        dataIda: '2027-03-10',
+        dataVolta: '2027-03-24',
+        preco: 2400,
+        precoAlvo: 3200,
+        ehRecorde: true,
+        duracaoHoras: 10,
+        detalhes: 'Direto TAP',
+        link: 'https://google.com'
+      });
+
+      assert.ok(mensagemEnviada);
+      assert.ok(mensagemEnviada.includes('META BATIDA!'));
+      assert.ok(mensagemEnviada.includes('Economia de <b>R$ 800,00</b>'));
+      assert.ok(mensagemEnviada.includes('25% abaixo'));
+      assert.ok(mensagemEnviada.includes('RECORDE HISTÓRICO'));
+
+      assert.ok(botoesEnviados);
+      const botaoTeto = botoesEnviados.flat().find(b => b.callback_data === 'teto_help:99');
+      assert.ok(botaoTeto, 'Deve conter botão inline para alterar teto');
+      assert.equal(botaoTeto.text, '🎯 Alterar Teto');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('deve processar callback teto_help e orientar alteração de limite', async () => {
+    const rota = rotasRepo.criar({
+      origem: 'São Paulo',
+      destino: 'Roma',
+      data_ida: '2026-11-01',
+      data_volta: '2026-11-15',
+      preco_alvo: 3900
+    });
+
+    let mensagemEnviada = null;
+    let toastCb = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    const backupCb = notifierTelegram.responderCallbackQuery;
+
+    notifierTelegram.enviarMensagem = async (texto) => {
+      mensagemEnviada = texto;
+      return { ok: true };
+    };
+    notifierTelegram.responderCallbackQuery = async (id, texto) => {
+      toastCb = texto;
+      return { ok: true };
+    };
+
+    try {
+      await notifierTelegram.processarCallbackQuery({
+        id: 'cb_test_123',
+        data: `teto_help:${rota.id}`,
+        message: { chat: { id: notifierTelegram.chatId || 12345 } }
+      });
+
+      assert.ok(toastCb);
+      assert.ok(toastCb.includes(`/teto ${rota.id}`));
+      assert.ok(mensagemEnviada);
+      assert.ok(mensagemEnviada.includes('AJUSTAR TETO DE PREÇO'));
+      assert.ok(mensagemEnviada.includes(`/teto ${rota.id}`));
+    } finally {
+      rotasRepo.excluir(rota.id);
+      notifierTelegram.enviarMensagem = backupEnviar;
+      notifierTelegram.responderCallbackQuery = backupCb;
+    }
+  });
 });
