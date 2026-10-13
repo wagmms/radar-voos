@@ -313,6 +313,19 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo: 'one_way' }), true);
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, tipo_viagem: 'one_way' }), true);
     assert.strictEqual(rotaEhSoIda({ sem_data: 1, dias_estadia: 0, data_volta: null }), true);
+
+    // 5. Casos de borda adversariais: case-insensitivity, hífens, espaços e tipos não-objeto
+    assert.strictEqual(rotaEhSoIda({ tipo: 'ONE_WAY', data_volta: '2026-11-20' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo: 'one-way' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo: '  so_ida  ' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo_viagem: 'ONE-WAY' }), true);
+    assert.strictEqual(rotaEhSoIda({ tipo: 'ROUND_TRIP', data_volta: null }), false);
+    assert.strictEqual(rotaEhSoIda({ tipo: 'round-trip' }), false);
+    assert.strictEqual(rotaEhSoIda({ tipo_viagem: 'ROUND_TRIP' }), false);
+    assert.strictEqual(rotaEhSoIda(12345), false);
+    assert.strictEqual(rotaEhSoIda(true), false);
+    assert.strictEqual(rotaEhSoIda([]), false);
+    assert.strictEqual(rotaEhSoIda(['voo']), false);
   });
 
   it('deve alterar rota flexível de Ida e Volta para Só Ida e manter como Só Ida após sincronização Two-Way', async () => {

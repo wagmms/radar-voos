@@ -319,9 +319,14 @@ export function resolverCodigoParaLink(cod) {
 export function rotaEhSoIda(rotaOuDados) {
   if (!rotaOuDados) return false;
   if (typeof rotaOuDados === 'string') return ehSoIda(rotaOuDados);
+  if (typeof rotaOuDados !== 'object' || Array.isArray(rotaOuDados)) return false;
 
-  if (rotaOuDados.tipo === 'one_way' || rotaOuDados.tipo === 'so_ida' || rotaOuDados.tipo_viagem === 'one_way') return true;
-  if (rotaOuDados.tipo === 'round_trip' || rotaOuDados.tipo === 'ida_e_volta' || rotaOuDados.tipo_viagem === 'round_trip') return false;
+  const normalizarTipo = (val) => (typeof val === 'string' ? val.trim().toLowerCase().replace(/-/g, '_') : '');
+  const tipo = normalizarTipo(rotaOuDados.tipo);
+  const tipoViagem = normalizarTipo(rotaOuDados.tipo_viagem);
+
+  if (tipo === 'one_way' || tipo === 'so_ida' || tipoViagem === 'one_way' || tipoViagem === 'so_ida') return true;
+  if (tipo === 'round_trip' || tipo === 'ida_e_volta' || tipoViagem === 'round_trip' || tipoViagem === 'ida_e_volta') return false;
 
   const campoVolta = rotaOuDados.data_volta !== undefined ? rotaOuDados.data_volta : rotaOuDados.dataVolta;
   const semData = rotaOuDados.sem_data === 1 || Boolean(rotaOuDados.sem_data);

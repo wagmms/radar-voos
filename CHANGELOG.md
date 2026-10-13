@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.34] - 2026-10-13 — Blindagem Adversarial em rotaEhSoIda contra Tipos Não-Objeto, Case Sensitivity e Hífens (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`rotaEhSoIda`):
+  - Corrigido tratamento de `tipo` e `tipo_viagem` para aceitar variações case-insensitive (ex: `'ONE_WAY'`, `'ROUND_TRIP'`, `'SO_IDA'`, `'IDA_E_VOLTA'`), com suporte a hífens (ex: `'one-way'`, `'round-trip'`) e espaços extras nas pontas (`trim`).
+  - Corrigido falso positivo de Só Ida quando tipos primitivos não-objeto (números como `12345`, booleanos como `true`, ou arrays como `[]`) eram passados, assegurando agora retorno defensivo de `false`.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionados testes de borda adversariais validando: (1) `tipo: 'ONE_WAY'`, (2) `tipo: 'one-way'`, (3) `tipo: '  so_ida  '`, (4) `tipo_viagem: 'ONE-WAY'`, (5) `tipo: 'ROUND_TRIP'`, (6) `tipo: 'round-trip'`, (7) `tipo_viagem: 'ROUND_TRIP'`, e (8) tipos não-objeto (`12345`, `true`, `[]`, `['voo']`).
+
 ## [v2.18.33] - 2026-10-13 — Blindagem Adversarial em parsePreco contra Preços Negativos com Moeda, Centavos sem Zero e Caracteres Invisíveis (Domínio Calculadora)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
