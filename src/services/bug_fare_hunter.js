@@ -51,10 +51,41 @@ export const CORREDORES_GLOBAIS_SWEET_SPOT = [
   { origem: 'SAO', destino: 'FLN', labelDestino: 'Florianópolis', regiao: 'DOMESTICO', diasEstadia: 4 }
 ];
 
+/**
+ * Janela de deduplicação do Working Buffer (24 horas em ms)
+ */
+const JANELA_DEDUPLICACAO_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Tamanho máximo do buffer por corredor (últimas N leituras)
+ */
+const BUFFER_MAX_LEITURAS = 5;
+
+/**
+ * Limiar de Z-Score para classificar como OPORTUNIDADE (queda estatística significativa)
+ */
+const ZSCORE_LIMIAR_OPORTUNIDADE = -1.5;
+
+/**
+ * Limiar de Z-Score para classificar como BUG_FARE (anomalia estatística severa)
+ */
+const ZSCORE_LIMIAR_BUG_FARE = -2.5;
+
+/**
+ * Queda percentual mínima para classificar como OPORTUNIDADE (sem Z-Score disponível)
+ */
+const QUEDA_PCT_OPORTUNIDADE = 0.30;
+
 export class BugFareHunter {
   constructor() {
     this.provedorDirect = new GoogleFlightsDirectProvider();
     this.indiceRotacao = 0;
+
+    /**
+     * Working Buffer em memória: estado leve de leituras recentes por chave de corredor.
+     * Estrutura: Map<chaveCorreder, { leituras: number[], ultimoAlerta: { preco, ts, tipo } | null }>
+     */
+    this._workingBuffer = new Map();
   }
 
   /**
@@ -77,15 +108,145 @@ export class BugFareHunter {
   }
 
   /**
-   * Executa varredura proativa em lote nos corredores estratégicos
-   * @param {Object} params
-   * @param {number} params.limiteRotas Quantidade de corredores a escanear nesta rodada
-   * @param {boolean} params.notificar Se deve enviar notificações no Telegram
+   * Retorna o estado interno do Working Buffer para um corredor.
+   * Inicializa automaticamente se ainda não existir.
+   * @param {string} chave - Chave única do corredor (origem+destino)
+   * @returns {{ leituras: number[], ultimoAlerta: object|null }}
    */
-  async executarVarreduraProativa({ limiteRotas = 5, notificar = true } = {}) {
-    console.log(`🧭 [BugFareHunter] Iniciando caçada proativa global (amostra de ${limiteRotas} corredores)...`);
+  _obterBufferCorreder(chave) {
+    if (!this._workingBuffer.has(chave)) {
+      this._workingBuffer.set(chave, { leituras: [], ultimoAlerta: null });
+    }
+    return this._workingBuffer.get(chave);
+  }
+
+  /**
+   * Registra nova leitura de preço no Working Buffer do corredor.
+   * Mantém apenas as últimas BUFFER_MAX_LEITURAS leituras (janela deslizante).
+   * @param {string} chave - Chave única do corredor
+   * @param {number} preco - Preço observado nesta leitura
+   */
+  _registrarLeitura(chave, preco) {
+    const buffer = this._obterBufferCorreder(chave);
+    buffer.leituras.push(preco);
+    if (buffer.leituras.length > BUFFER_MAX_LEITURAS) {
+      buffer.leituras.shift();
+    }
+  }
+
+  /**
+   * Calcula média e desvio padrão amostral das leituras no buffer.
+   * Requer mínimo de 3 leituras para produzir desvio padrão confiável.
+   * @param {number[]} leituras
+   * @returns {{ media: number|null, desvioPadrao: number|null }}
+   */
+  _calcularEstatisticasBuffer(leituras) {
+    if (!leituras || leituras.length < 2) return { media: null, desvioPadrao: null };
+
+    const n = leituras.length;
+    const media = leituras.reduce((acc, v) => acc + v, 0) / n;
+
+    if (n < 3) return { media, desvioPadrao: null };
+
+    const variancia = leituras.reduce((acc, v) => acc + Math.pow(v - media, 2), 0) / (n - 1);
+    const desvioPadrao = Math.sqrt(variancia);
+
+    return { media, desvioPadrao };
+  }
+
+  /**
+   * Classifica um preço em relação ao Working Buffer do corredor.
+   * Aplica Z-Score quando há desvio padrão disponível; caso contrário, usa queda percentual.
+   *
+   * Categorias de classificação (padrão proactive-agent):
+   *   - INFO       → Oscilação normal de mercado (sem alerta)
+   *   - OPORTUNIDADE → Queda > 30% ou Z-Score < -1.5 (alerta moderado)
+   *   - BUG_FARE   → Z-Score < -2.5 ou validação por piso estrutural (alerta crítico)
+   *
+   * @param {string} chave - Chave única do corredor
+   * @param {number} preco - Preço atual a classificar
+   * @returns {{ categoria: 'INFO'|'OPORTUNIDADE'|'BUG_FARE', zScore: number|null, quedaPct: number|null, media: number|null }}
+   */
+  _classificarPrecoBuffer(chave, preco) {
+    const buffer = this._obterBufferCorreder(chave);
+    const { media, desvioPadrao } = this._calcularEstatisticasBuffer(buffer.leituras);
+
+    let zScore = null;
+    let quedaPct = null;
+
+    if (media !== null && media > 0) {
+      quedaPct = (media - preco) / media;
+
+      if (desvioPadrao !== null && desvioPadrao >= 30) {
+        zScore = (preco - media) / desvioPadrao;
+
+        if (zScore <= ZSCORE_LIMIAR_BUG_FARE) {
+          return { categoria: 'BUG_FARE', zScore, quedaPct, media };
+        }
+        if (zScore <= ZSCORE_LIMIAR_OPORTUNIDADE) {
+          return { categoria: 'OPORTUNIDADE', zScore, quedaPct, media };
+        }
+      } else if (quedaPct >= QUEDA_PCT_OPORTUNIDADE) {
+        // Fallback sem desvio padrão robusto: queda percentual simples
+        return { categoria: 'OPORTUNIDADE', zScore: null, quedaPct, media };
+      }
+    }
+
+    return { categoria: 'INFO', zScore, quedaPct, media };
+  }
+
+  /**
+   * Verifica se um alerta idêntico já foi disparado para este corredor na janela de 24h.
+   * Deduplicação defensiva: suprime alertas repetidos do mesmo tipo dentro da janela.
+   * @param {string} chave
+   * @param {string} tipo - Categoria do alerta ('OPORTUNIDADE' | 'BUG_FARE')
+   * @returns {boolean} true se deve suprimir (alerta recente ainda válido)
+   */
+  _ehAlertaDuplicado(chave, tipo) {
+    const buffer = this._obterBufferCorreder(chave);
+    const ultimo = buffer.ultimoAlerta;
+    if (!ultimo) return false;
+
+    const agora = Date.now();
+    const dentroJanela = (agora - ultimo.ts) < JANELA_DEDUPLICACAO_MS;
+    const mesmoTipo = ultimo.tipo === tipo;
+
+    return dentroJanela && mesmoTipo;
+  }
+
+  /**
+   * Registra um alerta disparado no Working Buffer para deduplicação futura.
+   * @param {string} chave
+   * @param {string} tipo
+   * @param {number} preco
+   */
+  _registrarAlertaDisparado(chave, tipo, preco) {
+    const buffer = this._obterBufferCorreder(chave);
+    buffer.ultimoAlerta = { tipo, preco, ts: Date.now() };
+  }
+
+  /**
+   * Executa varredura proativa com Working Buffer + Z-Score + deduplicação de 24h.
+   * Método principal: implementa o padrão proactive-agent com zero ruído.
+   *
+   * Fluxo:
+   *   1. Seleciona corredores via round-robin
+   *   2. Consulta Google Flights Direct por preço atual
+   *   3. Registra leitura no Working Buffer
+   *   4. Classifica: INFO → silêncio / OPORTUNIDADE → log / BUG_FARE → alerta
+   *   5. Valida piso estrutural via detectarBugFareEstatistico
+   *   6. Deduplica por janela de 24h antes de notificar
+   *   7. Persiste no banco e emite evento de telemetria
+   *
+   * @param {Object} params
+   * @param {number} params.limiteRotas - Quantidade de corredores a escanear nesta rodada
+   * @param {boolean} params.notificar - Se deve enviar notificações no Telegram
+   */
+  async escanearCorredoresProativos({ limiteRotas = 5, notificar = true } = {}) {
+    console.log(`🧭 [BugFareHunter] Iniciando varredura proativa com Working Buffer (${limiteRotas} corredores)...`);
 
     const bugsEncontrados = [];
+    const oportunidadesDetectadas = [];
     const corredoresAmostra = [];
 
     // Seleção em anel round-robin para cobrir todos os continentes ao longo do tempo
@@ -99,6 +260,7 @@ export class BugFareHunter {
     let totalChecados = 0;
     for (const corredor of corredoresAmostra) {
       totalChecados++;
+      const chaveCorreder = `${corredor.origem}:${corredor.destino}`;
       const { dataIda, dataVolta } = this.gerarDatasEstrategicas(
         50 + (totalChecados * 12),
         corredor.diasEstadia || 10
@@ -115,72 +277,160 @@ export class BugFareHunter {
           adultos: 1
         });
 
-        if (resultado.ok && resultado.encontrouVoos && resultado.oferta?.preco > 0) {
-          const preco = resultado.oferta.preco;
-          const destinoReal = resultado.oferta.destinoReal || corredor.labelDestino;
+        if (!resultado.ok || !resultado.encontrouVoos || !(resultado.oferta?.preco > 0)) {
+          console.log(`⚪ Sem resultado válido para ${corredor.origem} ➔ ${corredor.labelDestino}`);
+          continue;
+        }
 
-          const analise = detectarBugFareEstatistico({
-            origemCod: corredor.origem,
-            destinoCod: corredor.destino,
+        const preco = resultado.oferta.preco;
+        const destinoReal = resultado.oferta.destinoReal || corredor.labelDestino;
+
+        // --- Working Buffer: registrar leitura atual ---
+        this._registrarLeitura(chaveCorreder, preco);
+        const { categoria, zScore, quedaPct, media } = this._classificarPrecoBuffer(chaveCorreder, preco);
+
+        // --- Validação por Piso Estrutural (detectarBugFareEstatistico) ---
+        const buffer = this._obterBufferCorreder(chaveCorreder);
+        const { media: mediaBuffer, desvioPadrao: dpBuffer } = this._calcularEstatisticasBuffer(buffer.leituras);
+        const analiseEstatistica = detectarBugFareEstatistico({
+          origemCod: corredor.origem,
+          destinoCod: corredor.destino,
+          preco,
+          precoMedioHistorico: mediaBuffer,
+          desvioPadrao: dpBuffer,
+          cabine: 'economy',
+          dataVolta
+        });
+
+        // --- Determinar categoria final (piso estrutural sobrepõe classificação do buffer) ---
+        const categoriaFinal = analiseEstatistica.ehBugFare ? 'BUG_FARE' : categoria;
+        const motivoFinal = analiseEstatistica.ehBugFare
+          ? analiseEstatistica.motivo
+          : (zScore !== null
+            ? `Z-Score: ${zScore.toFixed(2)} | Queda: ${quedaPct !== null ? (quedaPct * 100).toFixed(1) : '?'}% vs média R$ ${media?.toFixed(0) ?? '?'}`
+            : (quedaPct !== null ? `Queda de ${(quedaPct * 100).toFixed(1)}% vs média R$ ${media?.toFixed(0) ?? '?'}` : 'Detecção por piso estrutural'));
+        const tipoFinal = analiseEstatistica.ehBugFare
+          ? analiseEstatistica.tipo
+          : (categoriaFinal === 'BUG_FARE' ? '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA (Z-SCORE)' : '⚡ OPORTUNIDADE DE TARIFA');
+
+        // === CLASSIFICAÇÃO INFO: silêncio absoluto (padrão proactive-agent) ===
+        if (categoriaFinal === 'INFO') {
+          console.log(`ℹ️  [INFO] ${corredor.origem} ➔ ${corredor.labelDestino}: R$ ${preco.toFixed(0)} (mercado normal)`);
+          continue;
+        }
+
+        // === CLASSIFICAÇÃO OPORTUNIDADE ===
+        if (categoriaFinal === 'OPORTUNIDADE') {
+          console.log(`⚡ [OPORTUNIDADE] ${corredor.origem} ➔ ${corredor.labelDestino}: R$ ${preco.toFixed(0)} | ${motivoFinal}`);
+          oportunidadesDetectadas.push({
+            corredor: chaveCorreder,
+            label: corredor.labelDestino,
             preco,
-            dataVolta,
-            cabine: 'economy'
+            zScore,
+            quedaPct,
+            media
+          });
+          continue;
+        }
+
+        // === CLASSIFICAÇÃO BUG_FARE ===
+        // Deduplicação defensiva: suprimir se mesmo tipo já foi alertado nas últimas 24h
+        if (this._ehAlertaDuplicado(chaveCorreder, 'BUG_FARE')) {
+          console.log(`🔇 [SUPRIMIDO] Alerta BUG_FARE duplicado dentro de 24h para ${corredor.origem} ➔ ${corredor.labelDestino}`);
+          continue;
+        }
+
+        const bugCard = montarCardBugFare({
+          origem: corredor.origem,
+          codigoOrigem: corredor.origem,
+          destino: corredor.labelDestino,
+          codigoDestino: corredor.destino,
+          dataIda,
+          dataVolta,
+          preco,
+          motivo: motivoFinal,
+          tipo: tipoFinal,
+          destinoReal: resultado.oferta.destinoReal || corredor.labelDestino,
+          codigoDestinoReal: resultado.oferta.codigoDestinoReal || null,
+          linkOriginal: resultado.oferta.link
+        });
+
+        // Persistência defensiva com deduplicação por link no banco de dados
+        const jaCadastradoBD = bugFaresRepo.linkJaExiste(bugCard.link);
+        if (!jaCadastradoBD) {
+          bugFaresRepo.inserir(bugCard);
+
+          telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
+            ...bugCard,
+            severidade: analiseEstatistica.severidade || 'CRITICA',
+            zScore,
+            quedaPct
           });
 
-          if (analise.ehBugFare) {
-            const bugCard = montarCardBugFare({
-              origem: corredor.origem,
-              codigoOrigem: corredor.origem,
-              destino: corredor.labelDestino,
-              codigoDestino: corredor.destino,
-              dataIda,
-              dataVolta,
-              preco,
-              motivo: analise.motivo,
-              tipo: analise.tipo,
-              destinoReal: resultado.oferta.destinoReal || corredor.labelDestino,
-              codigoDestinoReal: resultado.oferta.codigoDestinoReal || null,
-              linkOriginal: resultado.oferta.link
-            });
-
-            // Persistência defensiva com deduplicação por link
-            const jaCadastrado = bugFaresRepo.linkJaExiste(bugCard.link);
-            if (!jaCadastrado) {
-              bugFaresRepo.inserir(bugCard);
-
-              telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
-                ...bugCard,
-                severidade: analise.severidade || 'CRITICA'
-              });
-
-              if (notificar) {
-                await notifierTelegram.enviarAlertaBugFare(bugCard);
-              }
-
-              bugsEncontrados.push(bugCard);
-              console.log(`💥 [BUG FARE ENCONTRADO!] ${bugCard.titulo}`);
-            }
-          } else {
-            console.log(`ℹ️ Corredor ${corredor.origem} ➔ ${corredor.labelDestino}: R$ ${preco.toFixed(0)} (Normal / Sem erro)`);
+          if (notificar) {
+            await notifierTelegram.enviarAlertaBugFare(bugCard);
           }
+
+          // Registrar no Working Buffer para deduplicação futura de 24h
+          this._registrarAlertaDisparado(chaveCorreder, 'BUG_FARE', preco);
+
+          bugsEncontrados.push(bugCard);
+          console.log(`💥 [BUG FARE ENCONTRADO!] ${bugCard.titulo} | Z-Score: ${zScore?.toFixed(2) ?? 'N/A'}`);
+        } else {
+          console.log(`🔇 [SUPRIMIDO] Bug Fare já registrado no banco: ${bugCard.link}`);
         }
+
       } catch (err) {
         console.warn(`⚠️ Falha ao checar corredor ${corredor.origem} ➔ ${corredor.labelDestino}: ${err.message}`);
       }
 
-      // Pausa defensiva jitter para não levantar suspeitas no Google Flights
+      // Pausa defensiva com jitter para não levantar suspeitas no Google Flights
       if (totalChecados < corredoresAmostra.length) {
         const jitter = 1500 + Math.floor(Math.random() * 1500);
         await new Promise(r => setTimeout(r, jitter));
       }
     }
 
-    return {
+    const resumo = {
       sucesso: true,
       corredoresVarridos: totalChecados,
       totalBugsEncontrados: bugsEncontrados.length,
-      bugs: bugsEncontrados
+      totalOportunidades: oportunidadesDetectadas.length,
+      bugs: bugsEncontrados,
+      oportunidades: oportunidadesDetectadas
     };
+
+    console.log(`✅ [BugFareHunter] Varredura concluída: ${totalChecados} corredores | ${bugsEncontrados.length} Bug Fares | ${oportunidadesDetectadas.length} Oportunidades`);
+    return resumo;
+  }
+
+  /**
+   * Alias retrocompatível com o método anterior (executarVarreduraProativa).
+   * Delega para escanearCorredoresProativos sem quebrar chamadas existentes.
+   * @param {Object} params
+   */
+  async executarVarreduraProativa(params = {}) {
+    return this.escanearCorredoresProativos(params);
+  }
+
+  /**
+   * Retorna snapshot do Working Buffer atual para fins de diagnóstico.
+   * @returns {Object} Estado interno do buffer por corredor
+   */
+  obterEstadoBuffer() {
+    const estado = {};
+    for (const [chave, dados] of this._workingBuffer.entries()) {
+      const { media, desvioPadrao } = this._calcularEstatisticasBuffer(dados.leituras);
+      estado[chave] = {
+        leituras: dados.leituras.length,
+        media: media ? Math.round(media) : null,
+        desvioPadrao: desvioPadrao ? Math.round(desvioPadrao) : null,
+        ultimoAlerta: dados.ultimoAlerta
+          ? { tipo: dados.ultimoAlerta.tipo, preco: dados.ultimoAlerta.preco, horasAtras: Math.round((Date.now() - dados.ultimoAlerta.ts) / 3600000 * 10) / 10 }
+          : null
+      };
+    }
+    return estado;
   }
 }
 

@@ -159,3 +159,180 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert(datas.dataIda < datas.dataVolta);
   });
 });
+
+describe('BugFareHunter: Working Buffer + Z-Score + Deduplicação 24h', () => {
+  it('deve inicializar Working Buffer vazio e criar estado por demanda', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:LIS';
+
+    // Buffer não existe até ser acessado
+    assert(!hunter._workingBuffer.has(chave));
+
+    // Acesso cria automaticamente
+    const buffer = hunter._obterBufferCorreder(chave);
+    assert.deepStrictEqual(buffer.leituras, []);
+    assert.strictEqual(buffer.ultimoAlerta, null);
+  });
+
+  it('deve registrar leituras no buffer e respeitar limite máximo de 5 entradas', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:MIA';
+
+    // Inserir 7 leituras; apenas as últimas 5 devem persistir
+    [1000, 1100, 1200, 1050, 980, 950, 920].forEach(p => hunter._registrarLeitura(chave, p));
+
+    const buffer = hunter._obterBufferCorreder(chave);
+    assert.strictEqual(buffer.leituras.length, 5);
+    assert.deepStrictEqual(buffer.leituras, [1200, 1050, 980, 950, 920]);
+  });
+
+  it('deve calcular média e desvio padrão amostral corretos no buffer', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:CDG';
+
+    // Sem leituras suficientes
+    let stats = hunter._calcularEstatisticasBuffer([]);
+    assert.strictEqual(stats.media, null);
+    assert.strictEqual(stats.desvioPadrao, null);
+
+    // Com exatamente 2 leituras: média disponível, desvio não
+    stats = hunter._calcularEstatisticasBuffer([4000, 4400]);
+    assert.strictEqual(stats.media, 4200);
+    assert.strictEqual(stats.desvioPadrao, null);
+
+    // Com 3+ leituras: ambos disponíveis
+    stats = hunter._calcularEstatisticasBuffer([4000, 4200, 4400]);
+    assert.strictEqual(stats.media, 4200);
+    assert(stats.desvioPadrao > 150 && stats.desvioPadrao < 250);
+  });
+
+  it('deve classificar INFO quando preço é normal (sem anomalia)', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:MAD';
+
+    // Popular buffer com 4 leituras estáveis (~R$ 4.000)
+    [3900, 4000, 4100, 4000].forEach(p => hunter._registrarLeitura(chave, p));
+
+    // Preço atual dentro da normalidade
+    const resultado = hunter._classificarPrecoBuffer(chave, 4050);
+    assert.strictEqual(resultado.categoria, 'INFO');
+  });
+
+  it('deve classificar OPORTUNIDADE quando queda > 30% sem Z-Score disponível', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'RIO:MIA';
+
+    // Apenas 2 leituras: sem desvio padrão robusto, usa queda %
+    [4000, 4200].forEach(p => hunter._registrarLeitura(chave, p));
+
+    // Queda de ~35% em relação à média (R$ 4.100 → R$ 2.650)
+    const resultado = hunter._classificarPrecoBuffer(chave, 2650);
+    assert.strictEqual(resultado.categoria, 'OPORTUNIDADE');
+    assert(resultado.quedaPct > 0.30);
+    assert.strictEqual(resultado.zScore, null);
+  });
+
+  it('deve classificar BUG_FARE quando Z-Score <= -2.5', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:TYO';
+
+    // 5 leituras estáveis com desvio padrão pequeno (~R$ 8.000 ± 400)
+    [7800, 8000, 8200, 8000, 7900].forEach(p => hunter._registrarLeitura(chave, p));
+
+    // Preço absurdamente baixo: Z-Score << -2.5
+    const resultado = hunter._classificarPrecoBuffer(chave, 3000);
+    assert.strictEqual(resultado.categoria, 'BUG_FARE');
+    assert(resultado.zScore < -2.5);
+    assert(resultado.quedaPct > 0.50);
+    assert(resultado.media > 7000);
+  });
+
+  it('deve classificar OPORTUNIDADE quando Z-Score está entre -1.5 e -2.5', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'BSB:CUN';
+
+    // 5 leituras estáveis com desvio padrão bem definido
+    [3500, 3600, 3700, 3600, 3500].forEach(p => hunter._registrarLeitura(chave, p));
+
+    // Preço com Z-Score em torno de -2.0 (queda moderada)
+    // Média ≈ 3.580, DP ≈ 79 → Z = (3100 - 3580) / 79 ≈ -6 → BUG_FARE com DP pequeno
+    // Usar desvio maior: simular com leituras mais dispersas
+    const hunter2 = new BugFareHunter();
+    const chave2 = 'SAO:DXB';
+    [5000, 6000, 4500, 5800, 5200].forEach(p => hunter2._registrarLeitura(chave2, p));
+
+    // Média ≈ 5.300, DP ≈ 580 → Z = (4100 - 5300) / 580 ≈ -2.07 → OPORTUNIDADE
+    const resultado2 = hunter2._classificarPrecoBuffer(chave2, 4100);
+    assert.strictEqual(resultado2.categoria, 'OPORTUNIDADE');
+    assert(resultado2.zScore < -1.5 && resultado2.zScore > -2.5);
+  });
+
+  it('deve detectar e suprimir alertas duplicados dentro da janela de 24h', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:NYC';
+
+    // Sem alerta anterior: não é duplicata
+    assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'BUG_FARE'), false);
+
+    // Registrar alerta agora
+    hunter._registrarAlertaDisparado(chave, 'BUG_FARE', 1500);
+
+    // Mesmo tipo dentro de 24h → deve suprimir
+    assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'BUG_FARE'), true);
+
+    // Tipo diferente dentro de 24h → não deve suprimir
+    assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'OPORTUNIDADE'), false);
+  });
+
+  it('deve liberar alerta após expirar a janela de 24h (simulação via ts no passado)', () => {
+    const hunter = new BugFareHunter();
+    const chave = 'SAO:BUE';
+
+    // Registrar alerta e forçar timestamp para 25 horas atrás
+    hunter._registrarAlertaDisparado(chave, 'BUG_FARE', 900);
+    const buffer = hunter._obterBufferCorreder(chave);
+    buffer.ultimoAlerta.ts = Date.now() - (25 * 60 * 60 * 1000);
+
+    // Janela expirada → alerta não é duplicata
+    assert.strictEqual(hunter._ehAlertaDuplicado(chave, 'BUG_FARE'), false);
+  });
+
+  it('deve retornar snapshot do Working Buffer via obterEstadoBuffer', () => {
+    const hunter = new BugFareHunter();
+
+    // Buffer vazio → objeto vazio
+    const estadoVazio = hunter.obterEstadoBuffer();
+    assert.deepStrictEqual(estadoVazio, {});
+
+    // Adicionar leituras em dois corredores
+    [4000, 4200, 3800].forEach(p => hunter._registrarLeitura('SAO:LIS', p));
+    hunter._registrarAlertaDisparado('SAO:LIS', 'BUG_FARE', 1800);
+    [2000, 2100].forEach(p => hunter._registrarLeitura('RIO:BUE', p));
+
+    const estado = hunter.obterEstadoBuffer();
+    assert(estado['SAO:LIS']);
+    assert.strictEqual(estado['SAO:LIS'].leituras, 3);
+    assert.strictEqual(estado['SAO:LIS'].media, 4000);
+    assert(estado['SAO:LIS'].desvioPadrao > 0);
+    assert(estado['SAO:LIS'].ultimoAlerta !== null);
+    assert.strictEqual(estado['SAO:LIS'].ultimoAlerta.tipo, 'BUG_FARE');
+
+    assert(estado['RIO:BUE']);
+    assert.strictEqual(estado['RIO:BUE'].leituras, 2);
+    assert.strictEqual(estado['RIO:BUE'].ultimoAlerta, null);
+  });
+
+  it('deve manter retrocompatibilidade via executarVarreduraProativa (alias)', async () => {
+    const hunter = new BugFareHunter();
+    // Sobrescrever escanearCorredoresProativos para evitar chamadas reais
+    let chamado = false;
+    hunter.escanearCorredoresProativos = async (params) => {
+      chamado = true;
+      return { sucesso: true, corredoresVarridos: 0, totalBugsEncontrados: 0, bugs: [] };
+    };
+
+    const res = await hunter.executarVarreduraProativa({ limiteRotas: 2 });
+    assert.strictEqual(chamado, true);
+    assert.strictEqual(res.sucesso, true);
+  });
+});
