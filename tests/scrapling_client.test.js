@@ -6,6 +6,8 @@ import {
   decodificarPrecoDoTfu,
   construirUrlCheapest,
   extrairVoosDoHtml,
+  extrairCiaIataDoTrecho,
+  MAPA_CIAS_IATA,
   ScraplingProvider
 } from '../src/services/providers/scrapling_client.js';
 
@@ -595,3 +597,131 @@ describe('ScraplingClient: Integração com FlightProviderManager (cadeia Scrapl
     );
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+describe('ScraplingClient: extrairCiaIataDoTrecho & Fallback por Código IATA (data-*, logos, matrizes)', () => {
+  it('MAPA_CIAS_IATA deve conter mapeamentos para principais companhias aéreas', () => {
+    assert.equal(MAPA_CIAS_IATA.G3, 'GOL');
+    assert.equal(MAPA_CIAS_IATA.LA, 'LATAM');
+    assert.equal(MAPA_CIAS_IATA.AD, 'Azul');
+    assert.equal(MAPA_CIAS_IATA.TP, 'TAP Portugal');
+    assert.equal(MAPA_CIAS_IATA.AF, 'Air France');
+    assert.equal(MAPA_CIAS_IATA.AA, 'American Airlines');
+    assert.equal(MAPA_CIAS_IATA.KL, 'KLM');
+    assert.equal(MAPA_CIAS_IATA.LH, 'Lufthansa');
+    assert.equal(MAPA_CIAS_IATA.IB, 'Iberia');
+  });
+
+  it('deve extrair companhia via atributo data-airline="G3"', () => {
+    const trecho = '<div data-airline="G3" class="flight-card"><span>Preço</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'GOL');
+  });
+
+  it('deve extrair companhia via atributo data-carrier="LA"', () => {
+    const trecho = '<div data-carrier="LA" data-price="1200"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'LATAM');
+  });
+
+  it('deve extrair companhia via atributo data-marketing-carrier="AD"', () => {
+    const trecho = '<div data-marketing-carrier="AD"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'Azul');
+  });
+
+  it('deve extrair companhia via data-flight-number="TP 1234"', () => {
+    const trecho = '<div data-flight-number="TP 1234"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'TAP Portugal');
+  });
+
+  it('deve extrair companhia via URL de logo com código IATA do Google Flights', () => {
+    const trecho = '<img src="https://www.gstatic.com/flights/airline_logos/70px/AF.png" alt="logo">';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'Air France');
+  });
+
+  it('deve extrair companhia via matriz de voo JSON ["G3", 1542]', () => {
+    const trecho = '<script>{"flights": [["G3", 1542], ["G3", 1543]]}</script>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'GOL');
+  });
+
+  it('deve extrair companhia via JSON com carrier: "LA"', () => {
+    const trecho = '{"legs":[{"carrier":"LA","flightNumber":3210}]}';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'LATAM');
+  });
+
+  it('deve extrair companhia a partir de número de voo no texto auxiliar ou aria-label', () => {
+    const aria = 'Voo G3 1542 direto. Duração: 1 h 20 min.';
+    assert.equal(extrairCiaIataDoTrecho('', aria), 'GOL');
+  });
+
+  it('deve preservar código IATA não mapeado em atributo data-airline="XY"', () => {
+    const trecho = '<div data-airline="XY"><span>Voo</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), 'XY');
+  });
+
+  it('deve retornar null quando nenhum atributo ou código IATA for encontrado', () => {
+    const trecho = '<div class="card"><span>Sem dados de cia</span></div>';
+    assert.equal(extrairCiaIataDoTrecho(trecho), null);
+    assert.equal(extrairCiaIataDoTrecho(null), null);
+  });
+
+  it('extrairVoosDoHtml: Camada A deve usar fallback IATA quando aria-label não traz nome extenso', () => {
+    const htmlComDataG3 = `
+      <div data-airline="G3">
+        <div aria-label="Preço total a partir de 450 Reais brasileiros. Duração total: 1 h 15 min. Sem paradas."></div>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlComDataG3);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 450);
+    assert.equal(voos[0].cia, 'GOL');
+  });
+
+  it('extrairVoosDoHtml: Camada A deve resolver código de voo no aria-label (ex: Voo LA 3000)', () => {
+    const htmlComVooLa = `
+      <div>
+        <div aria-label="Preço total a partir de 820 Reais brasileiros. Voo LA 3000 com 1 parada. Duração total: 4 h 10 min."></div>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlComVooLa);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 820);
+    assert.equal(voos[0].cia, 'LATAM');
+  });
+
+  it('extrairVoosDoHtml: Camada A deve extrair cia via logo no trecho adjacente', () => {
+    const htmlComLogo = `
+      <div>
+        <img src="https://www.gstatic.com/flights/airline_logos/70px/TP.png" />
+        <div aria-label="Preço total a partir de 2.850 Reais brasileiros. Duração total: 9 h 40 min. Sem paradas."></div>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlComLogo);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 2850);
+    assert.equal(voos[0].cia, 'TAP Portugal');
+  });
+
+  it('extrairVoosDoHtml: Camada B (aria simples) deve usar código IATA presente no contexto adjacente', () => {
+    const htmlAriaSimplesComData = `
+      <div data-carrier="AD">
+        <button aria-label="A partir de 620 Reais brasileiros"></button>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlAriaSimplesComData);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 620);
+    assert.equal(voos[0].cia, 'Azul');
+  });
+
+  it('extrairVoosDoHtml: Camada C (BRL raw) deve usar código IATA presente no contexto adjacente', () => {
+    const htmlBrlComData = `
+      <div data-flight-number="AF 454">
+        <span>R$ 3.890</span>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlBrlComData);
+    assert.equal(voos.length, 1);
+    assert.equal(voos[0].preco, 3890);
+    assert.equal(voos[0].cia, 'Air France');
+  });
+});
+

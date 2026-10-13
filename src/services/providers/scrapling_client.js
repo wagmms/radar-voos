@@ -85,6 +85,130 @@ const HTTP_TIMEOUT_MS = 15000;
 const MAX_TENTATIVAS = 2;
 
 /**
+ * Mapa canônico de códigos IATA de 2 letras de companhias aéreas para nomes amigáveis.
+ * Utilizado para decodificação rápida a partir de atributos data-*, logos e matrizes de voos.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const MAPA_CIAS_IATA = Object.freeze({
+  // Nacionais / América do Sul
+  G3: 'GOL',
+  LA: 'LATAM',
+  JJ: 'LATAM',
+  AD: 'Azul',
+  VO: 'Voepass',
+  '2Z': 'Voepass',
+  H2: 'SKY Airline',
+  JA: 'JetSMART',
+  WJ: 'JetSMART',
+  AR: 'Aerolíneas Argentinas',
+  AV: 'Avianca',
+  CM: 'Copa Airlines',
+  // América do Norte
+  AA: 'American Airlines',
+  DL: 'Delta',
+  UA: 'United',
+  AC: 'Air Canada',
+  AM: 'Aeroméxico',
+  // Europa
+  TP: 'TAP Portugal',
+  AF: 'Air France',
+  KL: 'KLM',
+  LH: 'Lufthansa',
+  LX: 'Swiss',
+  IB: 'Iberia',
+  UX: 'Air Europa',
+  BA: 'British Airways',
+  AZ: 'ITA Airways',
+  FR: 'Ryanair',
+  U2: 'easyJet',
+  VY: 'Vueling',
+  W6: 'Wizz Air',
+  TO: 'Transavia',
+  EW: 'Eurowings',
+  OS: 'Austrian Airlines',
+  SN: 'Brussels Airlines',
+  AY: 'Finnair',
+  SK: 'SAS',
+  VS: 'Virgin Atlantic',
+  // Oriente Médio / Ásia / África / Oceania
+  QR: 'Qatar Airways',
+  EK: 'Emirates',
+  TK: 'Turkish Airlines',
+  ET: 'Ethiopian',
+  SQ: 'Singapore Airlines',
+  NH: 'ANA',
+  JL: 'Japan Airlines',
+  QF: 'Qantas',
+  NZ: 'Air New Zealand',
+  SA: 'South African Airways',
+  AT: 'Royal Air Maroc'
+});
+
+/**
+ * Extrai e resolve o nome ou código da companhia aérea a partir de códigos IATA de 2 letras
+ * em atributos data-*, logos, números de voo e matrizes JSON do Google Flights.
+ *
+ * @param {string|null} trechoHtml - Trecho HTML adjacente ao elemento do voo
+ * @param {string|null} [textoAuxiliar=''] - Texto opcional (ex: aria-label ou contexto)
+ * @returns {string|null} Nome da companhia mapeada ou código IATA, ou null se não detectado
+ */
+export function extrairCiaIataDoTrecho(trechoHtml, textoAuxiliar = '') {
+  const trecho = String(trechoHtml || '');
+  const aux = String(textoAuxiliar || '');
+
+  // 1. Atributos data-* específicos do Google Flights com código IATA de 2 letras
+  const matchDataCode = trecho.match(/\bdata-(?:airline(?:-code)?|carrier(?:-code)?|marketing-carrier|iata|flight-code)=["']([A-Za-z0-9]{2})["']/i);
+  if (matchDataCode) {
+    const cod = matchDataCode[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  // 2. Atributos data-flight-number ou data-flight com código IATA e número de voo
+  const matchDataFlt = trecho.match(/\bdata-(?:flight(?:-number)?|flt)=["']([A-Za-z0-9]{2})\s*\d{1,5}["']/i);
+  if (matchDataFlt) {
+    const cod = matchDataFlt[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  // 3. Logos de companhias aéreas do Google Flights (ex: gstatic / airline_logos)
+  const matchLogo = trecho.match(/airline_logos\/(?:(?:70px|[A-Za-z0-9_-]+)\/)?([A-Za-z0-9]{2})\.(?:png|svg|webp|gif)/i);
+  if (matchLogo) {
+    const cod = matchLogo[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  // 4. Matrizes de voo JSON ou arrays de callback do Google Flights (ex: ["G3", 1234] ou "carrier":"LA")
+  const matchJsonCarrier = trecho.match(/(?:["'](?:carrier|airline|airlineCode|carrierCode|marketingCarrier)["']\s*[:=]\s*["']([A-Za-z0-9]{2})["'])/i);
+  if (matchJsonCarrier) {
+    const cod = matchJsonCarrier[1].toUpperCase();
+    return MAPA_CIAS_IATA[cod] || cod;
+  }
+
+  const matchMatrizArray = trecho.match(/\[\s*["']([A-Za-z0-9]{2})["']\s*,\s*["']?\d{2,4}["']?\s*\]/);
+  if (matchMatrizArray) {
+    const cod = matchMatrizArray[1].toUpperCase();
+    if (MAPA_CIAS_IATA[cod]) return MAPA_CIAS_IATA[cod];
+  }
+
+  // 5. Padrão de número de voo no texto auxiliar ou aria-label (ex: "Voo G3 1542", "Flight LA 3000")
+  const matchVooTexto = aux.match(/(?:(?:Voo|Flight)\s*(?:nº|n[oº]|#)?\s*|^|\b)([A-Za-z0-9]{2})\s*\d{2,4}\b/i) ||
+                        trecho.match(/(?:(?:Voo|Flight)\s*(?:nº|n[oº]|#)?\s*)([A-Za-z0-9]{2})\s*\d{2,4}\b/i);
+  if (matchVooTexto) {
+    const cod = matchVooTexto[1].toUpperCase();
+    if (MAPA_CIAS_IATA[cod]) return MAPA_CIAS_IATA[cod];
+  }
+
+  // 6. Atributos alt ou title com código IATA conhecido
+  const matchAlt = trecho.match(/(?:alt|title)=["']([A-Za-z0-9]{2})["']/i);
+  if (matchAlt) {
+    const cod = matchAlt[1].toUpperCase();
+    if (MAPA_CIAS_IATA[cod]) return MAPA_CIAS_IATA[cod];
+  }
+
+  return null;
+}
+
+/**
  * Gera delay com jitter aleatório (comportamento humano scrapling)
  * @param {number} min
  * @param {number} max
@@ -419,7 +543,21 @@ export function extrairVoosDoHtml(html) {
     const mCia = ariaTexto.match(/(?:Voo|Flight)\s*(?:[^.]*?)\s*(?:da|with|operado por|operated by)\s*([^.]+?)(?:\.|$)/i) ||
                  ariaTexto.match(/(?:Voo|Flight)\s+([A-Za-zÀ-ÿ0-9\s]+?)(?:\.|com\s|\s+direto)/i);
     if (mCia) ciaBruta = mCia[1].trim();
-    const cia = limparNomeCompanhia(ciaBruta);
+    let cia = limparNomeCompanhia(ciaBruta);
+
+    // Se a cia for um código de voo (ex: "G3 1542" ou "LA 3210") ou código IATA isolado ("G3", "LA")
+    const matchCodVoo = cia.match(/^([A-Za-z0-9]{2})(?:\s*\d{1,4})?$/i);
+    if (matchCodVoo && MAPA_CIAS_IATA[matchCodVoo[1].toUpperCase()]) {
+      cia = MAPA_CIAS_IATA[matchCodVoo[1].toUpperCase()];
+    }
+
+    // Fallback defensivo por código IATA (data-*, logos, matrizes de voos) quando o nome for genérico
+    if (cia === 'Companhia Aérea') {
+      const ciaIata = extrairCiaIataDoTrecho(trecho, ariaTexto);
+      if (ciaIata) {
+        cia = ciaIata;
+      }
+    }
 
     // Duração
     let durTexto = '12 h';
@@ -466,9 +604,13 @@ export function extrairVoosDoHtml(html) {
     while ((ms = regexSimples.exec(html)) !== null) {
       const preco = extrairPrecoNumerico(ms[1]);
       if (preco && preco >= 80 && preco <= 60000) {
+        const posIni = Math.max(0, ms.index - 250);
+        const posFim = Math.min(html.length, ms.index + ms[0].length + 900);
+        const trecho = html.slice(posIni, posFim);
+        const cia = extrairCiaIataDoTrecho(trecho, ms[0]) || 'Companhia Aérea';
         voos.push({
           preco,
-          cia: 'Companhia Aérea',
+          cia,
           duracaoTexto: '12 h',
           duracaoHoras: 12.0,
           escalas: 0,
@@ -488,9 +630,13 @@ export function extrairVoosDoHtml(html) {
     while ((mb = regexBRL.exec(html)) !== null) {
       const num = parseFloat(mb[1].replace(/\./g, ''));
       if (num >= 80 && num <= 60000) {
+        const posIni = Math.max(0, mb.index - 250);
+        const posFim = Math.min(html.length, mb.index + mb[0].length + 900);
+        const trecho = html.slice(posIni, posFim);
+        const cia = extrairCiaIataDoTrecho(trecho, mb[0]) || 'Companhia Aérea';
         voos.push({
           preco: num,
-          cia: 'Companhia Aérea',
+          cia,
           duracaoTexto: '12 h',
           duracaoHoras: 12.0,
           escalas: 0,

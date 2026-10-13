@@ -4,6 +4,19 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.0] - 2026-10-13 — Fallback Defensivo de Extração de Companhia Aérea por Código IATA (ScraplingClient)
+
+### 🚀 Novas Funcionalidades & Resiliência de Scraping
+- `src/services/providers/scrapling_client.js` · `MAPA_CIAS_IATA` & `extrairCiaIataDoTrecho`:
+  - Implementado dicionário canônico com mapeamento de códigos IATA de 2 letras para companhias aéreas nacionais e internacionais (G3 -> GOL, LA/JJ -> LATAM, AD -> Azul, 2Z/VO -> Voepass, TP -> TAP Portugal, AF -> Air France, KL -> KLM, LH -> Lufthansa, etc.).
+  - Implementada função auxiliar `extrairCiaIataDoTrecho` com 6 níveis de resolução defensiva: atributos `data-*` (`data-airline`, `data-carrier`, `data-marketing-carrier`, `data-iata`), número de voo (`data-flight-number`), caminhos de logos em CDN (`airline_logos/70px/...`), matrizes JSON (`carrier`, `airlineCode`, arrays `["G3", 1542]`), menções de número de voo no texto e atributos `alt`/`title`.
+- `src/services/providers/scrapling_client.js` · `extrairVoosDoHtml`:
+  - Integração do fallback IATA nas Camadas A (quando aria-label não traz nome por extenso ou traz código de voo como `Voo G3 1542`), B (aria simples) e C (BRL raw), inspecionando o contexto HTML adjacente para eliminar atribuições genéricas de "Companhia Aérea".
+- `tests/scrapling_client.test.js`:
+  - Adicionada suíte de testes com 16 novos testes automatizados dedicados cobrindo atributos `data-*`, URLs de logos, matrizes JSON, regex de números de voo, persistência de códigos não-mapeados e integração nas 3 camadas de extração do HTML (totalizando 246/246 testes aprovados).
+
+---
+
 ## [v2.9.9] - 2026-10-13 — Persistência Atômica do Working Buffer em Disco (BugFareHunter)
 
 ### 🚀 Novas Funcionalidades & Arquitetura Proativa
