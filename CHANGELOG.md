@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.4] - 2026-10-13 — QA & Blindagem Adversarial em `parsePreco` (calculadora)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `parsePreco`:
+  - Corrigido vazamento de valores não-finitos (`Infinity`, `-Infinity`, `NaN` em números ou strings) que passavam pelo teste `!isNaN(valor)` e contaminavam cálculos posteriores de delta e z-score.
+  - Blindagem contra preços negativos (`< 0`), retornando `0` de forma segura.
+  - Adicionado suporte e higienização para o prefixo monetário `BRL` (além de `R$`) e strings vazias/espaços soltos.
+- `tests/calculadora.test.js`:
+  - Adicionada suíte de testes de borda adversariais validando rejeição de `Infinity`, `-Infinity`, strings malformatadas, valores negativos e parsing com prefixo `BRL` (268/268 testes aprovados).
+
+---
+
 ## [v2.10.3] - 2026-10-13 — QA & Blindagem Adversarial em `escapeHtml` (notifier_telegram)
 
 ### 🛡️ Blindagem de QA Adversarial

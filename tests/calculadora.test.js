@@ -18,6 +18,24 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco(null), 0);
   });
 
+  it('deve lidar defensivamente com casos de borda adversariais em parsePreco (infinitos, negativos e BRL)', () => {
+    // 1. Valores não-finitos (Infinity, -Infinity, NaN em número ou string) retornam 0
+    assert.strictEqual(parsePreco(Infinity), 0);
+    assert.strictEqual(parsePreco(-Infinity), 0);
+    assert.strictEqual(parsePreco('Infinity'), 0);
+    assert.strictEqual(parsePreco('-Infinity'), 0);
+    assert.strictEqual(parsePreco(NaN), 0);
+
+    // 2. Preços negativos numéricos ou em string retornam 0
+    assert.strictEqual(parsePreco(-500), 0);
+    assert.strictEqual(parsePreco('-150.50'), 0);
+    assert.strictEqual(parsePreco('R$ -800'), 0);
+
+    // 3. Suporte robusto a prefixo BRL e strings vazias/espaços
+    assert.strictEqual(parsePreco('BRL 1.450,20'), 1450.20);
+    assert.strictEqual(parsePreco('   '), 0);
+  });
+
   it('deve calcular variações percentuais e sinalizar quedas relâmpago', () => {
     // Queda de 20% (supera o gatilho de 15%)
     const resQueda = calcularVariacao(1600, 2000, 15);

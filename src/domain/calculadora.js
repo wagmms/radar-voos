@@ -5,9 +5,12 @@ import { normalizarTexto, ehSoIda } from './rotas.js';
  * Parser resiliente de preços em formato numérico ou monetário
  */
 export function parsePreco(valor) {
-  if (typeof valor === 'number' && !isNaN(valor)) return valor;
+  if (typeof valor === 'number') {
+    if (!Number.isFinite(valor) || valor < 0) return 0;
+    return valor;
+  }
   if (valor === null || valor === undefined) return 0;
-  let s = String(valor).replace(/R\$/gi, '').trim();
+  let s = String(valor).replace(/R\$|BRL/gi, '').trim();
   if (!s) return 0;
 
   if (s.includes('.') && s.includes(',')) {
@@ -21,7 +24,7 @@ export function parsePreco(valor) {
   }
 
   const num = parseFloat(s);
-  return isNaN(num) ? 0 : num;
+  return (!Number.isFinite(num) || num < 0) ? 0 : num;
 }
 
 /**
