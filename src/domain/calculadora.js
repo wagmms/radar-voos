@@ -139,8 +139,14 @@ export function parsePreco(valor) {
     return valor;
   }
   if (valor === null || valor === undefined) return 0;
-  let s = String(valor).replace(/R\$|BRL/gi, '').trim();
+  let s = String(valor)
+    .replace(/[\u00A0\u202F]/g, ' ')
+    .replace(/(?:R\$|BRL|USD|US\$|EUR|€|GBP|£|CHF|CAD|AUD|JPY|¥|ARS|CLP|UYU|COP|PEN|S\/|MXN|AED|\$)/gi, '')
+    .trim();
   if (!s) return 0;
+
+  // Normaliza espaços entre dígitos (ex: "1 500,50")
+  s = s.replace(/(\d)\s+(\d)/g, '$1$2');
 
   if (s.includes('.') && s.includes(',')) {
     if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
@@ -149,7 +155,17 @@ export function parsePreco(valor) {
       s = s.replace(/,/g, '');
     }
   } else if (s.includes(',')) {
-    s = s.replace(',', '.');
+    const virgulas = (s.match(/,/g) || []).length;
+    if (virgulas > 1) {
+      s = s.replace(/,/g, '');
+    } else {
+      s = s.replace(',', '.');
+    }
+  } else if (s.includes('.')) {
+    const pontos = (s.match(/\./g) || []).length;
+    if (pontos > 1) {
+      s = s.replace(/\./g, '');
+    }
   }
 
   const num = parseFloat(s);

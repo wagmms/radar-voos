@@ -39,6 +39,24 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(parsePreco('   '), 0);
   });
 
+  it('deve lidar com moedas internacionais, múltiplos separadores de milhar e espaços non-breaking em parsePreco', () => {
+    // 1. Moedas internacionais e símbolos monetários
+    assert.strictEqual(parsePreco('USD 150'), 150);
+    assert.strictEqual(parsePreco('$ 250.00'), 250.00);
+    assert.strictEqual(parsePreco('US$ 99.90'), 99.90);
+    assert.strictEqual(parsePreco('€ 85'), 85);
+    assert.strictEqual(parsePreco('£ 120.50'), 120.50);
+
+    // 2. Múltiplos separadores de milhar (formato brasileiro e americano)
+    assert.strictEqual(parsePreco('1.500.000'), 1500000);
+    assert.strictEqual(parsePreco('1,200,000'), 1200000);
+    assert.strictEqual(parsePreco('2.350.000,50'), 2350000.50);
+
+    // 3. Espaços non-breaking e separadores por espaço
+    assert.strictEqual(parsePreco('R$\u00A03.450,00'), 3450.00);
+    assert.strictEqual(parsePreco('1 500,50'), 1500.50);
+  });
+
   it('deve calcular variações percentuais e sinalizar quedas relâmpago', () => {
     // Queda de 20% (supera o gatilho de 15%)
     const resQueda = calcularVariacao(1600, 2000, 15);

@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.10] - 2026-10-13 — QA & Blindagem Adversarial em `parsePreco` (calculadora)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/calculadora.js` · `parsePreco`:
+  - Corrigido bug crítico onde tarifas e diárias com moedas internacionais ou símbolos estrangeiros (`USD 150`, `$ 250.00`, `US$ 99.90`, `€ 85`, `£ 120.50`) resultavam em `0` devido ao `parseFloat` falhar em caracteres não numéricos.
+  - Implementado suporte robusto a múltiplos separadores de milhar sem centavos (ex: `1.500.000` e `1,200,000`), corrigindo anomalia onde valores com múltiplos pontos eram truncados para `1.5`.
+  - Adicionada sanitização para espaços non-breaking (`\u00A0`, `\u202F`) e números com separador de milhar por espaço (ex: `1 500,50`).
+- `tests/calculadora.test.js`:
+  - Adicionado caso de testes adversariais cobrindo moedas estrangeiras, múltiplos separadores de milhar e caracteres non-breaking (100% aprovado).
+
+---
+
 ## [v2.10.9] - 2026-10-13 — QA & Blindagem Adversarial em `identificarRegiaoDestino` (bug_fares)
 
 ### 🛡️ Blindagem de QA Adversarial
