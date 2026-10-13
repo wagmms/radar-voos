@@ -216,6 +216,28 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.match(invalido.erro, /anterior/);
   });
 
+  it('validarPeriodo (adversarial): deve normalizar tipos, aceitar só-ida semântica e rejeitar anos e formatos espúrios', () => {
+    // 1. Normalização de aliases de Só Ida ('so_ida', 'one-way', 'ONE_WAY') e tolerância a espaços
+    assert.strictEqual(validarPeriodo('2026-11-10', null, 'so_ida').ok, true);
+    assert.strictEqual(validarPeriodo('2026-11-10', '   ', 'one-way').ok, true);
+    assert.strictEqual(validarPeriodo('2026-11-10', 'Só Ida', 'ONE_WAY').ok, true);
+    assert.strictEqual(validarPeriodo('2026-11-10', null).ok, true); // Inferência automática por ausência de volta
+
+    // 2. Rejeição de data de volta conflitante em voo configurado como só ida
+    const conflitoSoIda = validarPeriodo('2026-11-10', '2026-11-20', 'so_ida');
+    assert.strictEqual(conflitoSoIda.ok, false);
+    assert.match(conflitoSoIda.erro, /Só ida não deve conter data de volta/);
+
+    // 3. Rejeição rigorosa de anos espúrios fora do range civil (2000-2099) e dias inexistentes
+    const anoZero = validarPeriodo('0000-01-01', null, 'one_way');
+    assert.strictEqual(anoZero.ok, false);
+    assert.match(anoZero.erro, /inexistente no calendário/);
+
+    const dataInexistente = validarPeriodo('2026-02-30', null, 'one_way');
+    assert.strictEqual(dataInexistente.ok, false);
+    assert.match(dataInexistente.erro, /inexistente no calendário/);
+  });
+
   it('deve gerar links canônicos estruturados do Google Flights', () => {
     const linkRoundTrip = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', '2026-11-24');
     assert.match(linkRoundTrip, /google\.com\/travel\/flights/);

@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.35] - 2026-10-13 — Blindagem Adversarial em validarPeriodo contra Aliases de Só Ida, Espaços e Anos Fora da Faixa Civil (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`validarPeriodo`):
+  - Normalização defensiva de `tipo` para aceitar variações e aliases de Só Ida (`'so_ida'`, `'one-way'`, `'ONE_WAY'`, `'oneway'`), além de inferência automática quando `tipo` é omitido e `dataVoltaStr` expressa só ida (`null`, `undefined` ou `ehSoIda`).
+  - Corrigido falso positivo quando `dataVoltaStr` continha apenas espaços em branco (`'   '`) ou termos semânticos de só ida (`'Só Ida'`, `'sem volta'`), evitando rejeição indevida.
+  - Blindagem contra anos espúrios fora da faixa civil (2000-2099) e distorções de `Date.UTC` (onde ano 0 era tratado como 1900), garantindo `d.getUTCFullYear() === ano`.
+- **`tests/domain.test.js`**:
+  - Adicionado teste adversarial verificando normalização de aliases só-ida, rejeição de data de volta conflitante em voos só-ida, e rejeição estrita de ano zero (`'0000-01-01'`) e datas inexistentes (`'2026-02-30'`).
+
 ## [v2.18.34] - 2026-10-13 — Blindagem Adversarial em rotaEhSoIda contra Tipos Não-Objeto, Case Sensitivity e Hífens (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

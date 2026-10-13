@@ -217,37 +217,52 @@ export function calcularDataVolta(dataIdaStr, campoVolta) {
  * Validação rigorosa de período (ida e volta)
  */
 export function validarPeriodo(dataIdaStr, dataVoltaStr, tipo, semData = false) {
-  if (semData) {
-    if (!dataIdaStr) return { ok: true };
+  const idaTrim = typeof dataIdaStr === 'string' ? dataIdaStr.trim() : (dataIdaStr ? String(dataIdaStr).trim() : '');
+  const semDataBool = semData === 1 || Boolean(semData);
+
+  if (semDataBool) {
+    if (!idaTrim) return { ok: true };
   }
 
   const regex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dataIdaStr || !regex.test(dataIdaStr)) {
+  if (!idaTrim || !regex.test(idaTrim)) {
     return { ok: false, erro: 'Data de ida inválida ou mal formatada' };
   }
 
   function dataValida(str) {
     const [ano, mes, dia] = str.split('-').map(Number);
+    if (!Number.isFinite(ano) || ano < 2000 || ano > 2099) return false;
     const d = new Date(Date.UTC(ano, mes - 1, dia));
-    return !isNaN(d.getTime()) && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
+    return !isNaN(d.getTime()) && d.getUTCFullYear() === ano && d.getUTCMonth() === mes - 1 && d.getUTCDate() === dia;
   }
 
-  if (!dataValida(dataIdaStr)) {
+  if (!dataValida(idaTrim)) {
     return { ok: false, erro: 'Data de ida inexistente no calendário' };
   }
 
-  if (tipo === 'one_way') {
-    if (dataVoltaStr !== null && dataVoltaStr !== undefined && dataVoltaStr !== '') {
+  const tipoNorm = typeof tipo === 'string' ? tipo.trim().toLowerCase().replace(/-/g, '_') : '';
+  const ehTipoSoIda = tipoNorm === 'one_way' || tipoNorm === 'so_ida' || tipoNorm === 'oneway';
+
+  const voltaTrim = typeof dataVoltaStr === 'string' ? dataVoltaStr.trim() : (dataVoltaStr !== null && dataVoltaStr !== undefined ? String(dataVoltaStr).trim() : '');
+  const voltaSemanticaSoIda = ehSoIda(dataVoltaStr);
+
+  if (ehTipoSoIda) {
+    if (voltaTrim && !voltaSemanticaSoIda) {
       return { ok: false, erro: 'Só ida não deve conter data de volta' };
     }
     return { ok: true };
   }
 
-  if (!dataVoltaStr || !regex.test(dataVoltaStr) || !dataValida(dataVoltaStr)) {
+  // Se o tipo não foi especificado explicitamente mas o campo de volta indica Só Ida
+  if (!tipoNorm && voltaSemanticaSoIda) {
+    return { ok: true };
+  }
+
+  if (!voltaTrim || !regex.test(voltaTrim) || !dataValida(voltaTrim)) {
     return { ok: false, erro: 'Data de volta inexistente ou inválida' };
   }
 
-  if (dataVoltaStr < dataIdaStr) {
+  if (voltaTrim < idaTrim) {
     return { ok: false, erro: 'A data de volta não pode ser anterior à data de ida' };
   }
 
