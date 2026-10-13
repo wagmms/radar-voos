@@ -162,6 +162,24 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(formatarDataParaBusca('10/10/2026'), '2026-10-10');
   });
 
+  it('formatarDataParaBusca: deve suportar timestamps ISO 8601 e SQLite DateTime e rejeitar adversariais inválidos', () => {
+    // 1. Strings ISO 8601 e timestamps de bancos de dados
+    assert.strictEqual(formatarDataParaBusca('2026-11-15T00:00:00.000Z'), '2026-11-15');
+    assert.strictEqual(formatarDataParaBusca('2026-11-15 14:30:00'), '2026-11-15');
+    assert.strictEqual(formatarDataParaBusca('15/11/2026 18:00'), '2026-11-15');
+
+    // 2. Rejeição defensiva de datas inexistentes no calendário mesmo com timestamp
+    assert.strictEqual(formatarDataParaBusca('2026-02-31T00:00:00Z'), null);
+    assert.strictEqual(formatarDataParaBusca('2026-04-31 12:00:00'), null);
+    assert.strictEqual(formatarDataParaBusca('31/02/2026 10:00'), null);
+
+    // 3. Entradas adversariais nulas, vazias e não-datas
+    assert.strictEqual(formatarDataParaBusca(null), null);
+    assert.strictEqual(formatarDataParaBusca(undefined), null);
+    assert.strictEqual(formatarDataParaBusca('   '), null);
+    assert.strictEqual(formatarDataParaBusca('data-invalida'), null);
+  });
+
   it('deve validar datas de ida e volta, rejeitando volta anterior à ida', () => {
     const ok = validarPeriodo('2026-11-10', '2026-11-20', 'round_trip');
     assert.strictEqual(ok.ok, true);

@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.7] - 2026-10-13 — Blindagem Adversarial em formatarDataParaBusca (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`formatarDataParaBusca`):
+  - Corrigido suporte a datas fornecidas como strings ISO 8601 completas ou DateTime de bancos de dados SQLite (ex: `'2026-11-15T00:00:00.000Z'`, `'2026-11-15 14:30:00'` e `'15/11/2026 18:00'`), que antes retornavam `null` e quebravam links do Google Flights e queries de scanners.
+  - Preservada rigorosa validação de calendário Gregoriano via `Date.UTC`, garantindo que datas impossíveis (ex: `'2026-02-31T00:00:00Z'` ou `'2026-04-31 12:00:00'`) continuem sumariamente descartadas como `null`.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial cobrindo timestamps ISO 8601, SQLite DateTime, rejeição de datas inexistentes e entradas malformadas.
+
 ## [v2.18.6] - 2026-10-13 — Blindagem Adversarial em obterInfoAeroporto (Domínio Aeroportos)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

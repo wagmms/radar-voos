@@ -98,9 +98,12 @@ export function formatarDataParaBusca(valor) {
   const str = String(valor).trim();
   if (!str) return null;
 
-  // Formato YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-    const [ano, mes, dia] = str.split('-').map(Number);
+  // Formato YYYY-MM-DD (com ou sem timestamp ISO/SQLite: T00:00:00Z ou 00:00:00)
+  const matchIso = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (matchIso) {
+    const ano = parseInt(matchIso[1], 10);
+    const mes = parseInt(matchIso[2], 10);
+    const dia = parseInt(matchIso[3], 10);
     const data = new Date(Date.UTC(ano, mes - 1, dia));
     if (
       isNaN(data.getTime()) ||
@@ -109,11 +112,13 @@ export function formatarDataParaBusca(valor) {
     ) {
       return null;
     }
-    return str;
+    const dStr = String(dia).padStart(2, '0');
+    const mStr = String(mes).padStart(2, '0');
+    return `${ano}-${mStr}-${dStr}`;
   }
 
-  // Formato DD/MM/YYYY ou DD-MM-YYYY
-  const matchBr = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+  // Formato DD/MM/YYYY ou DD-MM-YYYY (com ou sem horário)
+  const matchBr = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(?:[T\s].*)?$/);
   if (matchBr) {
     const dia = parseInt(matchBr[1], 10);
     const mes = parseInt(matchBr[2], 10);
