@@ -4,6 +4,20 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.0] - 2026-10-13 — Cache Defensivo de 6h em Memória no WeatherService
+
+### ✨ Nova Funcionalidade & Otimização (Serviço Meteorológico)
+- `src/services/weather_service.js`:
+  - `TTL_CACHE_CLIMA_MS`: exportada constante oficial configurável com TTL de 6 horas (`21.600.000 ms`).
+  - `WeatherService`: construtor parametrizado com suporte a TTL customizado (`constructor(ttlMs = TTL_CACHE_CLIMA_MS)`), facilitando testes e políticas customizadas de retenção.
+  - `obterClimaDestino`: implementada verificação estrita de idade do cache. Se uma entrada tiver idade maior ou igual ao TTL de 6h, é imediatamente descartada da memória e uma nova consulta é realizada, nunca retornando dados > 6h desatualizados.
+  - `limparCache`: método para limpeza atômica integral do cache.
+  - `expurgarExpirados`: método defensivo para varrer e remover chaves cuja validade expirou.
+  - `obterTamanhoCache`: método para telemetria e auditoria de entradas ativas no cache.
+- `tests/weather_service.test.js`:
+  - 5 novos testes cobrindo: exportação da constante de 6h, reaproveitamento de chamadas subsequentes dentro da janela, auto-invalidação após expiração, limpeza completa com `limparCache` e expurgo seletivo de entradas vencidas.
+  - Suite total: **343/343 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.15.0] - 2026-10-13 — Mini-Tabela de Histórico de Preços nos Alertas Telegram
 
 ### ✨ Nova Funcionalidade (Telegram Notifier)

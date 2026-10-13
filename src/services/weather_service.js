@@ -94,9 +94,40 @@ export function interpretarCodigoWMO(codigo) {
   return { condicao: 'Tempo Estável', emoji: '🌤️' };
 }
 
+// Constante oficial do TTL do cache meteorológico (6 horas)
+export const TTL_CACHE_CLIMA_MS = 6 * 60 * 60 * 1000;
+
 export class WeatherService {
-  constructor() {
-    this.cache = new Map(); // cache em memória de 1 hora
+  constructor(ttlMs = TTL_CACHE_CLIMA_MS) {
+    this.ttlMs = ttlMs;
+    this.cache = new Map(); // cache em memória com TTL defensivo de 6h
+  }
+
+  /**
+   * Limpa integralmente o cache em memória
+   */
+  limparCache() {
+    this.cache.clear();
+  }
+
+  /**
+   * Remove entradas expiradas do cache (> 6h ou TTL configurado)
+   */
+  expurgarExpirados() {
+    const agora = Date.now();
+    for (const [chave, entrada] of this.cache.entries()) {
+      if (!entrada || typeof entrada.timestamp !== 'number' || (agora - entrada.timestamp >= this.ttlMs)) {
+        this.cache.delete(chave);
+      }
+    }
+  }
+
+  /**
+   * Retorna a quantidade de entradas válidas no cache
+   */
+  obterTamanhoCache() {
+    this.expurgarExpirados();
+    return this.cache.size;
   }
 
   /**
@@ -164,8 +195,13 @@ export class WeatherService {
 
     const cacheKey = `${geo.codigo}_${dataViagem || 'hoje'}`;
     const cached = this.cache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp < 3600000)) { // 1h
-      return cached.data;
+    const agora = Date.now();
+    if (cached && typeof cached.timestamp === 'number') {
+      if (agora - cached.timestamp < this.ttlMs) {
+        return cached.data;
+      }
+      // Se expirou (ultrapassou o TTL de 6h), invalida e descarta imediatamente da memória
+      this.cache.delete(cacheKey);
     }
 
     try {
