@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.24] - 2026-10-13 — Blindagem Adversarial em gerarJanelasExploracaoSemData contra Datas Não-ISO, Tipos Não-String e Estadia Negativa (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarJanelasExploracaoSemData`):
+  - Blindada a normalização de `dataBase` com `formatarDataParaBusca`, prevenindo quebras fatais por `RangeError: Invalid time value` e `TypeError: base.split is not a function` ao receber strings descritivas (`"sem data"`, `"flexivel"`, `"qualquer data"`), formato brasileiro (`"31/12/2026"`) ou tipos não-string (`20261115`, `{}`).
+  - Normalizado o parâmetro `diasEstadia` com `extrairDiasEstadia`, garantindo fallback gracioso para 10 dias caso sejam passados valores negativos ou descritivos (`"15 dias"`).
+  - Sanitizados os limites de `qtdAmostras` com `Number.isFinite` e `Math.max(0, ...)` e detecção de modalidade `soIda` via `ehSoIda`.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando entradas espúrias de `dataBase`, `diasEstadia` negativo/formatado e limites de amostras.
+
 ## [v2.18.23] - 2026-10-13 — Blindagem Adversarial em identificarRegiaoDestino contra Tipos Não-Primitivos e Strings em Branco (Domínio Bug Fares)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

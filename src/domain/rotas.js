@@ -652,15 +652,19 @@ export function gerarDataPadraoInicial(diasOffset = 30) {
  */
 export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 10, qtdAmostras = 4, soIda = false } = {}) {
   const agoraStr = gerarDataPadraoInicial(25);
-  // Se dataBase for nula ou anterior à data inicial padrão (ex: drift ou data passada), usa a base atual de hoje
-  const base = (!dataBase || dataBase < agoraStr) ? agoraStr : dataBase;
+  // Se dataBase for nula, inválida ou anterior à data inicial padrão (ex: drift ou data passada), usa a base atual de hoje
+  const dataBaseNorm = formatarDataParaBusca(dataBase);
+  const base = (!dataBaseNorm || dataBaseNorm < agoraStr) ? agoraStr : dataBaseNorm;
   const [ano, mes, dia] = base.split('-').map(Number);
   const dataReferencia = new Date(Date.UTC(ano, mes - 1, dia));
 
   const janelas = [];
   // Gera amostras estratégicas espaçadas nos próximos meses
   const offsetsDias = [0, 30, 60, 90, 120, 150];
-  const total = Math.min(qtdAmostras, offsetsDias.length);
+  const qtdNum = Number(qtdAmostras);
+  const total = Math.max(0, Math.min(Number.isFinite(qtdNum) ? Math.round(qtdNum) : 4, offsetsDias.length));
+  const estadiaDias = extrairDiasEstadia(diasEstadia, 10);
+  const ehSoIdaFinal = (typeof soIda === 'string') ? ehSoIda(soIda) : Boolean(soIda);
 
   for (let i = 0; i < total; i++) {
     const d = new Date(dataReferencia);
@@ -672,7 +676,7 @@ export function gerarJanelasExploracaoSemData({ dataBase = null, diasEstadia = 1
     d.setUTCDate(d.getUTCDate() + ajusteTerça);
 
     const dataIda = d.toISOString().split('T')[0];
-    const dataVolta = soIda ? null : somarDiasData(dataIda, diasEstadia);
+    const dataVolta = ehSoIdaFinal ? null : somarDiasData(dataIda, estadiaDias);
 
     const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
     const labelMes = `${mesesNomes[d.getUTCMonth()]}/${String(d.getUTCFullYear()).slice(2)}`;

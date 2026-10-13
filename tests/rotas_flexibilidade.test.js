@@ -327,4 +327,38 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
 
     rotasRepo.excluir(rota.id);
   });
+
+  it('QA Adversarial: deve blindar gerarJanelasExploracaoSemData contra entradas mal formatadas, tipos espúrios e dias negativos', () => {
+    // 1. Strings não-ISO, texto livre ou formato brasileiro em dataBase não devem lançar RangeError/TypeError
+    const entradasInvalidas = ['sem data', 'flexivel', 'qualquer data', '31/12/2026', 20261115, {}, []];
+    for (const entrada of entradasInvalidas) {
+      assert.doesNotThrow(() => {
+        const janelas = gerarJanelasExploracaoSemData({ dataBase: entrada, qtdAmostras: 2 });
+        assert.ok(Array.isArray(janelas));
+        assert.strictEqual(janelas.length, 2);
+        assert.match(janelas[0].dataIda, /^\d{4}-\d{2}-\d{2}$/);
+      }, `Falha ao processar dataBase adversarial: ${String(entrada)}`);
+    }
+
+    // 2. diasEstadia negativo ou string com formato descritivo não corrompe as datas
+    const janelasTextoEstadia = gerarJanelasExploracaoSemData({ diasEstadia: '15 dias', qtdAmostras: 2 });
+    assert.strictEqual(janelasTextoEstadia.length, 2);
+    assert.strictEqual(somarDiasData(janelasTextoEstadia[0].dataIda, 15), janelasTextoEstadia[0].dataVolta);
+
+    const janelasNegativo = gerarJanelasExploracaoSemData({ diasEstadia: -5, qtdAmostras: 2 });
+    assert.strictEqual(janelasNegativo.length, 2);
+    // Deve recorrer ao padrão de 10 dias de estadia
+    assert.strictEqual(somarDiasData(janelasNegativo[0].dataIda, 10), janelasNegativo[0].dataVolta);
+
+    // 3. soIda via string "Só Ida" e qtdAmostras limites (0 ou negativa)
+    const janelasSoIdaStr = gerarJanelasExploracaoSemData({ soIda: 'Só Ida', qtdAmostras: 2 });
+    assert.strictEqual(janelasSoIdaStr[0].dataVolta, null);
+
+    const janelasVazias = gerarJanelasExploracaoSemData({ qtdAmostras: 0 });
+    assert.deepStrictEqual(janelasVazias, []);
+
+    const janelasNegativas = gerarJanelasExploracaoSemData({ qtdAmostras: -3 });
+    assert.deepStrictEqual(janelasNegativas, []);
+  });
 });
+
