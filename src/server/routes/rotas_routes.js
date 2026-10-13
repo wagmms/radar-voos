@@ -69,6 +69,48 @@ export async function rotasRoutes(fastify) {
     return { ok: true, mensagem: `Rota silenciada por ${horas} horas`, rota: rotaAtualizada };
   });
 
+  // Atualizar paridade_milhas e programa_milhas de uma rota (edição inline no Cockpit)
+  fastify.patch('/api/rotas/:id/milhas', {
+    schema: {
+      params: { type: 'object', required: ['id'], properties: { id: { type: 'integer' } } },
+      body: {
+        type: 'object',
+        properties: {
+          paridade_milhas: { type: ['number', 'null'], minimum: 0 },
+          programa_milhas: { type: 'string', minLength: 1, maxLength: 32 }
+        },
+        additionalProperties: false
+      }
+    }
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const body = request.body || {};
+    const rota = rotasRepo.buscarPorId(id);
+    if (!rota) {
+      return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
+    }
+
+    // Validação da paridade: deve ser > 0 se fornecida como número
+    if (body.paridade_milhas !== undefined && body.paridade_milhas !== null) {
+      const val = Number(body.paridade_milhas);
+      if (!Number.isFinite(val) || val <= 0) {
+        return reply.code(400).send({ ok: false, erro: 'paridade_milhas deve ser um número positivo (ex: 17.50)' });
+      }
+    }
+
+    const rotaAtualizada = rotasRepo.atualizar(id, {
+      paridade_milhas: body.paridade_milhas !== undefined ? body.paridade_milhas : undefined,
+      programa_milhas: body.programa_milhas ? String(body.programa_milhas).toLowerCase().trim() : undefined
+    });
+
+    telemetryEvents.emitirAtualizacao('rota_milhas_atualizada', {
+      rotaId: id,
+      paridade_milhas: rotaAtualizada.paridade_milhas,
+      programa_milhas: rotaAtualizada.programa_milhas
+    });
+    return { ok: true, rota: rotaAtualizada };
+  });
+
   // Criar nova rota monitorada
   fastify.post('/api/rotas', async (request, reply) => {
     const body = request.body || {};

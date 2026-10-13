@@ -8,6 +8,7 @@ import {
   escapeHtml,
   calcularMilhasEstimadas,
   renderizarBadgeMilhas,
+  salvarMilhasInline,
   COTACOES_MILHA_MILHEIRO
 } from '../src/public/js/card_rota.js';
 
@@ -292,29 +293,66 @@ describe('Cockpit PWA: Card de Rota e Cópia Rápida de Link (card_rota.js)', ()
       assert.equal(calcularMilhasEstimadas('abc', 17.50), null);
     });
 
-    it('renderizarBadgeMilhas deve retornar HTML com badge quando rota tem preco_atual válido', () => {
+    it('renderizarBadgeMilhas deve retornar HTML com badge e editor inline quando rota tem id', () => {
       const rota = {
+        id: 42,
         preco_atual: 2450,
         paridade_milhas: 24.00,
         programa_milhas: 'latam'
       };
       const html = renderizarBadgeMilhas(rota);
       assert.ok(html.includes('badge-milhas-estimadas'), 'deve conter classe da badge');
-      assert.ok(html.includes('milhas'), 'deve mencionar milhas');
+      assert.ok(html.includes('id="badge-milhas-42"'), 'deve conter ID do card na badge');
+      assert.ok(html.includes('btn-milhas-editar'), 'deve conter botão de edição inline');
+      assert.ok(html.includes('toggleMilhasEditor(42)'), 'deve vincular toggle ao ID correto');
+      assert.ok(html.includes('milhas-form-42'), 'deve conter ID do formulário inline');
+      assert.ok(html.includes('milhas-prog-42'), 'deve conter ID do select de programa');
+      assert.ok(html.includes('milhas-cot-42'), 'deve conter ID do input de cotação');
+      assert.ok(html.includes('salvarMilhasInline(42)'), 'deve vincular salvar ao ID correto');
+      // Com preco_atual deve exibir estimativa
+      assert.ok(html.includes('milhas-estimativa-row'), 'deve exibir badge de estimativa');
+      assert.ok(html.includes('milhas'), 'deve mencionar milhas na estimativa');
       assert.ok(html.includes('Latam'), 'deve exibir nome do programa capitalizado');
       // 2450 / 24.00 * 1000 = ceil(102083.33) = 102084
       const milhasEsperadas = Math.ceil((2450 / 24.00) * 1000).toLocaleString('pt-BR');
-      assert.ok(html.includes(milhasEsperadas), `deve exibir ${milhasEsperadas} milhas`);
+      assert.ok(html.includes(milhasEsperadas), `deve exibir ${milhasEsperadas} milhas na estimativa`);
     });
 
-    it('renderizarBadgeMilhas deve retornar string vazia quando rota não tem preco_atual', () => {
+    it('renderizarBadgeMilhas deve exibir botão "Configurar milhas" quando paridade não definida', () => {
+      const rota = { id: 99, preco_atual: 1800, programa_milhas: 'smiles' };
+      const html = renderizarBadgeMilhas(rota);
+      assert.ok(html.includes('Configurar milhas'), 'deve sugerir configuração quando sem paridade');
+    });
+
+    it('renderizarBadgeMilhas deve exibir botão com cotação quando paridade está definida', () => {
+      const rota = { id: 55, preco_atual: 1800, paridade_milhas: 17.50, programa_milhas: 'smiles' };
+      const html = renderizarBadgeMilhas(rota);
+      assert.ok(html.includes('17,50') || html.includes('17.50'), 'deve exibir cotação atual no botão');
+    });
+
+    it('renderizarBadgeMilhas deve conter todas as opções de programa no select', () => {
+      const rota = { id: 10, preco_atual: 2000, programa_milhas: 'azul' };
+      const html = renderizarBadgeMilhas(rota);
+      assert.ok(html.includes('<option value="smiles"'), 'deve ter Smiles no select');
+      assert.ok(html.includes('<option value="latam"'), 'deve ter Latam no select');
+      assert.ok(html.includes('<option value="azul" selected'), 'deve pré-selecionar Azul');
+    });
+
+    it('renderizarBadgeMilhas deve retornar string vazia quando rota não tem id', () => {
       assert.equal(renderizarBadgeMilhas(null), '');
       assert.equal(renderizarBadgeMilhas({}), '');
-      assert.equal(renderizarBadgeMilhas({ preco_atual: 0 }), '');
-      assert.equal(renderizarBadgeMilhas({ preco_atual: null }), '');
+      assert.equal(renderizarBadgeMilhas(undefined), '');
     });
 
-    it('criarCardRota deve incluir badge-milhas-estimadas quando rota tem preco_atual e paridade', () => {
+    it('renderizarBadgeMilhas deve ocultar estimativa quando não há preco_atual mas exibir editor', () => {
+      const rota = { id: 77 };
+      const html = renderizarBadgeMilhas(rota);
+      // Deve ainda ter o widget, mas sem a linha de estimativa
+      assert.ok(html.includes('badge-milhas-estimadas'), 'deve ter a badge');
+      assert.ok(!html.includes('milhas-estimativa-row'), 'não deve ter estimativa sem preço');
+    });
+
+    it('criarCardRota deve incluir badge-milhas-estimadas quando rota tem id', () => {
       const rotaComParidade = {
         id: 200,
         origem: 'Brasília',
@@ -328,9 +366,170 @@ describe('Cockpit PWA: Card de Rota e Cópia Rápida de Link (card_rota.js)', ()
       };
       const html = criarCardRota(rotaComParidade);
       assert.ok(html.includes('badge-milhas-estimadas'), 'card deve conter badge de milhas');
+      assert.ok(html.includes('milhas-form-200'), 'card deve conter formulário inline');
       // 3500 / 17.50 * 1000 = ceil(200000) = 200.000
       assert.ok(html.includes('200.000') || html.includes('200000'), 'deve exibir 200.000 milhas');
       assert.ok(html.includes('Smiles'), 'deve identificar programa Smiles');
     });
   });
+
+  describe('salvarMilhasInline: Persistência via PATCH /api/rotas/:id/milhas', () => {
+    // Cria um mock de document com getElementById funcional
+    function criarDocMock(progVal, cotVal) {
+      const elements = {
+        [`milhas-prog-42`]: { value: progVal, classList: { add: () => {}, remove: () => {} } },
+        [`milhas-cot-42`]: { value: cotVal, classList: { add() { this._erro = true; }, remove() { this._erro = false; }, _erro: false } }
+      };
+      const formEl = { style: { display: 'block' }, _hidden: false };
+      elements[`milhas-form-42`] = formEl;
+      return { getElementById: (id) => elements[id] || null };
+    }
+
+    it('deve salvar com sucesso via PATCH e exibir toast de confirmação', async () => {
+      let fetchBody = null;
+      let toastMsg = null;
+      let toastErro = null;
+      let recarregouDados = false;
+      const formEl = { style: { display: 'block' } };
+
+      const mockDoc = {
+        getElementById: (id) => {
+          if (id === 'milhas-prog-42') return { value: 'latam', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-cot-42') return { value: '24.00', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-form-42') return formEl;
+          return null;
+        }
+      };
+
+      const mockFetch = async (url, opts) => {
+        fetchBody = JSON.parse(opts.body);
+        return { ok: true, json: async () => ({}) };
+      };
+
+      const res = await salvarMilhasInline(42, {
+        document: mockDoc,
+        fetch: mockFetch,
+        mostrarToast: (msg, erro) => { toastMsg = msg; toastErro = erro; },
+        recarregarDados: () => { recarregouDados = true; }
+      });
+
+      assert.equal(res, true, 'deve retornar true em caso de sucesso');
+      assert.equal(fetchBody.paridade_milhas, 24.00, 'deve enviar paridade correta');
+      assert.equal(fetchBody.programa_milhas, 'latam', 'deve enviar programa correto');
+      assert.ok(toastMsg.includes('salva'), 'toast deve confirmar salvamento');
+      assert.equal(toastErro, false, 'toast não deve ser erro');
+      assert.equal(recarregouDados, true, 'deve recarregar dados após salvar');
+      assert.equal(formEl.style.display, 'none', 'deve fechar o formulário após salvar');
+    });
+
+    it('deve rejeitar paridade inválida (zero ou negativa) com feedback visual', async () => {
+      let toastMsg = null;
+      let classeErroAdicionada = false;
+
+      const inputMock = {
+        value: '0',
+        classList: { add(cls) { if (cls === 'milhas-input-erro') classeErroAdicionada = true; }, remove() {} }
+      };
+
+      const mockDoc = {
+        getElementById: (id) => {
+          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-cot-42') return inputMock;
+          return null;
+        }
+      };
+
+      const res = await salvarMilhasInline(42, {
+        document: mockDoc,
+        fetch: async () => ({ ok: true }),
+        mostrarToast: (msg, _) => { toastMsg = msg; }
+      });
+
+      assert.equal(res, false, 'deve retornar false para cotação zero');
+      assert.ok(toastMsg.includes('inválida') || toastMsg.includes('positivo'), 'toast deve descrever o erro');
+      assert.equal(classeErroAdicionada, true, 'deve adicionar classe de erro ao input');
+    });
+
+    it('deve rejeitar paridade NaN com feedback visual', async () => {
+      let toastMsg = null;
+      const inputMock = {
+        value: 'abc',
+        classList: { add() {}, remove() {} }
+      };
+      const mockDoc = {
+        getElementById: (id) => {
+          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-cot-42') return inputMock;
+          return null;
+        }
+      };
+
+      const res = await salvarMilhasInline(42, {
+        document: mockDoc,
+        fetch: async () => ({ ok: true }),
+        mostrarToast: (msg) => { toastMsg = msg; }
+      });
+
+      assert.equal(res, false, 'deve retornar false para NaN');
+      assert.ok(toastMsg.length > 0, 'deve exibir toast de erro');
+    });
+
+    it('deve retornar false quando elementos do formulário não são encontrados no DOM', async () => {
+      const mockDoc = { getElementById: () => null };
+      const res = await salvarMilhasInline(42, {
+        document: mockDoc,
+        fetch: async () => ({ ok: true }),
+        mostrarToast: () => {}
+      });
+      assert.equal(res, false, 'deve retornar false quando DOM incompleto');
+    });
+
+    it('deve retornar false quando fetch lança exceção (erro de rede)', async () => {
+      let toastMsg = null;
+      const mockDoc = {
+        getElementById: (id) => {
+          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-cot-42') return { value: '17.50', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-form-42') return { style: { display: 'block' } };
+          return null;
+        }
+      };
+
+      const res = await salvarMilhasInline(42, {
+        document: mockDoc,
+        fetch: async () => { throw new Error('Network error'); },
+        mostrarToast: (msg) => { toastMsg = msg; }
+      });
+
+      assert.equal(res, false, 'deve retornar false em erro de rede');
+      assert.ok(toastMsg.includes('Falha') || toastMsg.includes('comunicação'), 'deve exibir mensagem de falha');
+    });
+
+    it('deve retornar false quando servidor retorna erro HTTP', async () => {
+      let toastMsg = null;
+      const mockDoc = {
+        getElementById: (id) => {
+          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-cot-42') return { value: '17.50', classList: { add() {}, remove() {} } };
+          if (id === 'milhas-form-42') return { style: { display: 'block' } };
+          return null;
+        }
+      };
+
+      const res = await salvarMilhasInline(42, {
+        document: mockDoc,
+        fetch: async () => ({ ok: false, json: async () => ({ erro: 'paridade_milhas inválida' }) }),
+        mostrarToast: (msg) => { toastMsg = msg; }
+      });
+
+      assert.equal(res, false, 'deve retornar false em erro do servidor');
+      assert.ok(toastMsg.includes('inválida') || toastMsg.includes('Erro'), 'deve exibir erro do servidor');
+    });
+
+    it('deve retornar false quando document ou fetch não disponíveis', async () => {
+      const res = await salvarMilhasInline(42, {});
+      assert.equal(res, false, 'deve retornar false sem document/fetch');
+    });
+  });
 });
+

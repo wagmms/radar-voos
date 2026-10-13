@@ -124,6 +124,8 @@ function initSchema(db) {
   try { db.exec('ALTER TABLE rotas ADD COLUMN dias_estadia INTEGER DEFAULT 10;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN destino_real TEXT;'); } catch (_) {}
   try { db.exec("ALTER TABLE rotas ADD COLUMN moeda TEXT DEFAULT 'BRL';"); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN paridade_milhas REAL;'); } catch (_) {}
+  try { db.exec("ALTER TABLE rotas ADD COLUMN programa_milhas TEXT DEFAULT 'smiles';"); } catch (_) {}
 
   // Migrações dinâmicas para tabela bug_fares
   try { db.exec('ALTER TABLE bug_fares ADD COLUMN aeroporto_chegada TEXT;'); } catch (_) {}
@@ -263,6 +265,14 @@ export const rotasRepo = {
     const moeda = dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL'));
     const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
 
+    // Paridade de milhas: valor numérico positivo ou null; programa: string normalizada ou fallback
+    const paridadeMilhas = dados.paridade_milhas !== undefined
+      ? (Number.isFinite(parseFloat(dados.paridade_milhas)) && parseFloat(dados.paridade_milhas) > 0 ? parseFloat(dados.paridade_milhas) : null)
+      : (rota.paridade_milhas ?? null);
+    const programaMilhas = dados.programa_milhas !== undefined
+      ? (dados.programa_milhas ? String(dados.programa_milhas).toLowerCase().trim() : 'smiles')
+      : (rota.programa_milhas || 'smiles');
+
     // Se a modalidade mudou de Ida e Volta para Só Ida (ou vice-versa), limpa cache de melhor_opcao_flexivel
     const modalidadeMudou = Boolean(rota.data_volta) !== Boolean(dataVolta);
     const melhorOpcaoFlexivel = modalidadeMudou ? null : rota.melhor_opcao_flexivel;
@@ -284,11 +294,13 @@ export const rotasRepo = {
         link_google_flights = ?,
         ativa = ?,
         melhor_opcao_flexivel = ?,
-        moeda = ?
+        moeda = ?,
+        paridade_milhas = ?,
+        programa_milhas = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, id);
     return rotasRepo.buscarPorId(id);
   },
 

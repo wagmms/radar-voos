@@ -22,7 +22,9 @@ import {
 } from './js/conexao_badges.js';
 import {
   criarCardRota,
-  copiarLinkGoogleFlights
+  copiarLinkGoogleFlights,
+  salvarMilhasInline,
+  COTACOES_MILHA_MILHEIRO
 } from './js/card_rota.js';
 
 // Registrar Service Worker PWA
@@ -91,6 +93,49 @@ window.tocarChimeCabine = tocarChimeCabine;
 window.vibrarAoTocar = vibrarAoTocar;
 window.criarCardRota = criarCardRota;
 window.copiarLinkGoogleFlights = copiarLinkGoogleFlights;
+
+/**
+ * Expõe salvarMilhasInline no window para uso nos botões inline dos cards.
+ * Delega para a função importada do card_rota.js com os callbacks do app.
+ */
+window.salvarMilhasInline = function(rotaId) {
+  return salvarMilhasInline(rotaId, {
+    mostrarToast: window.mostrarToast,
+    recarregarDados: window.carregarDadosCompletos
+  });
+};
+
+/**
+ * Alterna visibilidade do formulário inline de edição de milhas.
+ * @param {number} rotaId
+ */
+window.toggleMilhasEditor = function(rotaId) {
+  const formEl = document.getElementById(`milhas-form-${rotaId}`);
+  if (!formEl) return;
+  const visivel = formEl.style.display !== 'none';
+  formEl.style.display = visivel ? 'none' : 'block';
+  if (!visivel) {
+    // Foca no select ao abrir
+    const selectEl = document.getElementById(`milhas-prog-${rotaId}`);
+    if (selectEl) selectEl.focus();
+  }
+};
+
+/**
+ * Atualiza o placeholder do campo de cotação ao trocar o programa de milhas,
+ * sugerindo a cotação padrão daquele programa.
+ * @param {number} rotaId
+ */
+window.atualizarPlaceholderMilhas = function(rotaId) {
+  const selectEl = document.getElementById(`milhas-prog-${rotaId}`);
+  const inputEl = document.getElementById(`milhas-cot-${rotaId}`);
+  if (!selectEl || !inputEl) return;
+  const prog = selectEl.value.toLowerCase().trim();
+  const cotacaoPadrao = COTACOES_MILHA_MILHEIRO[prog] || COTACOES_MILHA_MILHEIRO.smiles;
+  inputEl.placeholder = String(cotacaoPadrao.toFixed(2));
+  // Limpa estado de erro ao trocar programa
+  inputEl.classList.remove('milhas-input-erro');
+};
 
 const state = {
   rotas: [],

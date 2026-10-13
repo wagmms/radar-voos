@@ -626,7 +626,164 @@ body {
   font-weight: 700;
 }
 
+/* BADGE DE MILHAS ESTIMADAS + EDITOR INLINE */
+.badge-milhas-estimadas {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.milhas-estimativa-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  cursor: default;
+}
+
+.milhas-icon { font-size: 0.85rem; }
+
+.milhas-valor {
+  color: #10b981;
+  font-weight: 700;
+}
+
+.milhas-programa {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+}
+
+.milhas-editor-toggle {
+  display: flex;
+}
+
+.btn-milhas-editar {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  color: var(--text-dim);
+  font-size: 0.67rem;
+  font-family: var(--font-mono);
+  padding: 3px 7px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.btn-milhas-editar:hover {
+  background: rgba(6, 182, 212, 0.1);
+  border-color: rgba(6, 182, 212, 0.3);
+  color: var(--cyan-primary);
+}
+
+.milhas-editor-form {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 7px;
+  padding: 8px 10px;
+  margin-top: 2px;
+}
+
+.milhas-form-label {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 1px;
+}
+
+.milhas-select {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--text-primary, #e2e8f0);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  padding: 3px 6px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.milhas-select:focus {
+  outline: none;
+  border-color: rgba(6, 182, 212, 0.5);
+}
+
+.milhas-input-cot {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  color: var(--text-primary, #e2e8f0);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  padding: 3px 6px;
+  width: 100%;
+}
+
+.milhas-input-cot:focus {
+  outline: none;
+  border-color: rgba(6, 182, 212, 0.5);
+}
+
+.milhas-input-cot.milhas-input-erro {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: rgba(239, 68, 68, 0.07);
+}
+
+.milhas-form-actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 2px;
+}
+
+.btn-milhas-salvar {
+  flex: 1;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 4px;
+  color: #10b981;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 4px 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-milhas-salvar:hover {
+  background: rgba(16, 185, 129, 0.28);
+}
+
+.btn-milhas-cancelar {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-milhas-cancelar:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
 /* BADGES & CALLOUTS */
+
 .thermometer-tag {
   display: inline-flex;
   align-items: center;

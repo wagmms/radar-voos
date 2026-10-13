@@ -153,29 +153,161 @@ export function calcularMilhasEstimadas(precoAtual, paridadeMilheiro, programa =
 }
 
 /**
- * Renderiza a badge visual de milhas estimadas para o card de rota.
- * Retorna string vazia se não há dados suficientes para o cálculo.
+ * Renderiza a badge visual de milhas estimadas para o card de rota,
+ * com widget de edição inline de paridade_milhas e programa_milhas.
+ * O formulário inline é exibido ao clicar no botão ✏️ e permite
+ * persistência imediata via PATCH /api/rotas/:id/milhas.
  *
  * @param {object} rota Dados da rota
- * @returns {string} HTML da badge ou ''
+ * @returns {string} HTML da badge com editor inline ou ''
  */
 export function renderizarBadgeMilhas(rota) {
-  if (!rota || !rota.preco_atual || rota.preco_atual <= 0) return '';
+  if (!rota || !rota.id) return '';
 
   const paridade = rota.paridade_milhas ?? null;
   const programa = String(rota.programa_milhas || 'smiles').toLowerCase().trim();
-  const resultado = calcularMilhasEstimadas(rota.preco_atual, paridade, programa);
-  if (!resultado) return '';
 
-  const milhasFormatadas = resultado.milhas.toLocaleString('pt-BR');
-  const nomePrograma = resultado.programa.charAt(0).toUpperCase() + resultado.programa.slice(1);
-  const cotacaoFormatada = resultado.cotacaoMilheiro.toFixed(2).replace('.', ',');
+  // Opções de programa disponíveis
+  const programasDisponiveis = Object.keys(COTACOES_MILHA_MILHEIRO);
 
-  return `<div class="badge-milhas-estimadas" title="Estimativa p/ emissão em milhas (R$ ${cotacaoFormatada}/milheiro ${nomePrograma})">
-            <span class="milhas-icon">✈️🏆</span>
-            <span class="milhas-valor">~${milhasFormatadas} milhas</span>
-            <span class="milhas-programa">${nomePrograma}</span>
-          </div>`;
+  // Monta opções do <select>
+  const opcoesSelect = programasDisponiveis.map(prog => {
+    const label = prog.charAt(0).toUpperCase() + prog.slice(1);
+    const selected = prog === programa ? ' selected' : '';
+    return `<option value="${escapeHtml(prog)}"${selected}>${escapeHtml(label)}</option>`;
+  }).join('');
+
+  // Calcula badge de estimativa quando há preço
+  let badgeEstimativaHtml = '';
+  if (rota.preco_atual && rota.preco_atual > 0) {
+    const resultado = calcularMilhasEstimadas(rota.preco_atual, paridade, programa);
+    if (resultado) {
+      const milhasFormatadas = resultado.milhas.toLocaleString('pt-BR');
+      const nomePrograma = resultado.programa.charAt(0).toUpperCase() + resultado.programa.slice(1);
+      const cotacaoFormatada = resultado.cotacaoMilheiro.toFixed(2).replace('.', ',');
+      badgeEstimativaHtml = `
+        <div class="milhas-estimativa-row" title="Estimativa p/ emissão em milhas (R$ ${cotacaoFormatada}/milheiro ${nomePrograma})">
+          <span class="milhas-icon">✈️🏆</span>
+          <span class="milhas-valor">~${milhasFormatadas} milhas</span>
+          <span class="milhas-programa">${nomePrograma}</span>
+        </div>`;
+    }
+  }
+
+  const paridadeFormatada = paridade ? paridade.toFixed(2).replace('.', ',') : '';
+  const paridadePlaceholder = COTACOES_MILHA_MILHEIRO[programa]
+    ? COTACOES_MILHA_MILHEIRO[programa].toFixed(2).replace('.', ',')
+    : '17,50';
+
+  return `<div class="badge-milhas-estimadas" id="badge-milhas-${escapeHtml(String(rota.id))}">
+    ${badgeEstimativaHtml}
+    <div class="milhas-editor-toggle">
+      <button
+        class="btn-milhas-editar"
+        onclick="toggleMilhasEditor(${rota.id})"
+        title="${paridade ? 'Editar cotação de milhas (R$/' + paridadeFormatada + '/milheiro)' : 'Configurar cotação de milhas'}"
+        aria-label="Editar cotação de milhas"
+        type="button"
+      >${paridade ? `✏️ R$&nbsp;${paridadeFormatada}` : '✏️ Configurar milhas'}</button>
+    </div>
+    <div class="milhas-editor-form" id="milhas-form-${escapeHtml(String(rota.id))}" style="display:none;" role="form" aria-label="Editor de cotação de milhas">
+      <label class="milhas-form-label" for="milhas-prog-${escapeHtml(String(rota.id))}">Programa</label>
+      <select
+        id="milhas-prog-${escapeHtml(String(rota.id))}"
+        class="milhas-select"
+        onchange="atualizarPlaceholderMilhas(${rota.id})"
+        aria-label="Programa de milhas"
+      >${opcoesSelect}</select>
+      <label class="milhas-form-label" for="milhas-cot-${escapeHtml(String(rota.id))}">R$/milheiro</label>
+      <input
+        type="number"
+        id="milhas-cot-${escapeHtml(String(rota.id))}"
+        class="milhas-input-cot"
+        value="${escapeHtml(paridadeFormatada.replace(',', '.'))}"
+        placeholder="${escapeHtml(paridadePlaceholder.replace(',', '.'))}"
+        min="1"
+        max="999"
+        step="0.01"
+        aria-label="Cotação em reais por milheiro"
+      />
+      <div class="milhas-form-actions">
+        <button
+          class="btn-milhas-salvar"
+          onclick="salvarMilhasInline(${rota.id})"
+          type="button"
+          aria-label="Salvar cotação de milhas"
+        >✓ Salvar</button>
+        <button
+          class="btn-milhas-cancelar"
+          onclick="toggleMilhasEditor(${rota.id})"
+          type="button"
+          aria-label="Cancelar edição de milhas"
+        >✕</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/**
+ * Salva paridade_milhas e programa_milhas via PATCH /api/rotas/:id/milhas.
+ * Deve ser exposta em window.salvarMilhasInline pelo app.js.
+ *
+ * @param {number} rotaId ID da rota
+ * @param {object} options Opções injetáveis para testes (fetch, mostrarToast, document)
+ * @returns {Promise<boolean>}
+ */
+export async function salvarMilhasInline(rotaId, options = {}) {
+  const doc = options.document || (typeof document !== 'undefined' ? document : null);
+  const fnFetch = options.fetch || (typeof fetch !== 'undefined' ? fetch : null);
+  const fnToast = options.mostrarToast ||
+    (typeof window !== 'undefined' && typeof window.mostrarToast === 'function' ? window.mostrarToast : null);
+  const fnRecarregar = options.recarregarDados ||
+    (typeof window !== 'undefined' && typeof window.carregarDadosCompletos === 'function' ? window.carregarDadosCompletos : null);
+
+  if (!doc || !fnFetch) return false;
+
+  const selectEl = doc.getElementById(`milhas-prog-${rotaId}`);
+  const inputEl = doc.getElementById(`milhas-cot-${rotaId}`);
+
+  if (!selectEl || !inputEl) {
+    if (fnToast) fnToast('Erro: formulário de milhas não encontrado', true);
+    return false;
+  }
+
+  const programa = selectEl.value.trim().toLowerCase();
+  const paridadeRaw = parseFloat(String(inputEl.value).replace(',', '.'));
+
+  // Validação visual defensiva
+  if (!Number.isFinite(paridadeRaw) || paridadeRaw <= 0) {
+    inputEl.classList.add('milhas-input-erro');
+    if (fnToast) fnToast('Cotação inválida. Informe um valor positivo (ex: 17.50)', true);
+    return false;
+  }
+  inputEl.classList.remove('milhas-input-erro');
+
+  try {
+    const res = await fnFetch(`/api/rotas/${rotaId}/milhas`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paridade_milhas: paridadeRaw, programa_milhas: programa })
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (fnToast) fnToast(`Erro ao salvar: ${data.erro || 'Falha no servidor'}`, true);
+      return false;
+    }
+
+    if (fnToast) fnToast('Cotação de milhas salva! ✓', false, 2000);
+    // Fecha o editor inline e recarrega cards
+    const formEl = doc.getElementById(`milhas-form-${rotaId}`);
+    if (formEl) formEl.style.display = 'none';
+    if (fnRecarregar) fnRecarregar(true);
+    return true;
+  } catch (_) {
+    if (fnToast) fnToast('Falha na comunicação com o servidor', true);
+    return false;
+  }
 }
 
 /**
