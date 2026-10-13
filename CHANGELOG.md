@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.31] - 2026-10-13 — Blindagem Adversarial em converterDuracaoParaHoras contra Formatos Compactos Zerados e Durações Negativas (Provedor Direto)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/services/providers/google_flights_direct_provider.js`** (`converterDuracaoParaHoras`):
+  - Corrigido retorno indevido de `0` em durações no formato compacto zerado (ex: `"0h 0m"`, `"0h0m"`), assegurando o retorno do fallback defensivo padrão de `12.0` horas (alinhado a `"00:00"` e `0`).
+  - Implementada rejeição defensiva para strings com prefixo de sinal negativo (ex: `"-2h 30m"`, `"-1h"`, `"-45min"`), prevenindo a extração errônea de valores positivos em durações espúrias ou corrompidas.
+- **`tests/flight_providers_adversarial.test.js`**:
+  - Adicionados testes de borda adversariais validando: (1) fallback de 12.0 para tempo zerado em formato compacto (`"0h 0m"` e `"0h0m"`), e (2) fallback de 12.0 para durações negativas em string (`"-2h 30m"`, `"-1h"`, `"-45min"`).
+
 ## [v2.18.30] - 2026-10-13 — Blindagem Adversarial em montarCardBugFare para Duração em Dias, Datas Invertidas e Sanitização Defensiva (Domínio Aeroportos)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

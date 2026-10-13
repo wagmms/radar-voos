@@ -149,6 +149,17 @@ describe('QA Adversarial: converterDuracaoParaHoras — precisão decimal', () =
     assert.equal(converterDuracaoParaHoras('00:00'), 12.0);
     assert.equal(converterDuracaoParaHoras('0:00'), 12.0);
   });
+
+  it('deve retornar fallback de 12.0 para tempo zerado em formato compacto ("0h 0m" ou "0h0m")', () => {
+    assert.equal(converterDuracaoParaHoras('0h 0m'), 12.0);
+    assert.equal(converterDuracaoParaHoras('0h0m'), 12.0);
+  });
+
+  it('deve retornar fallback de 12.0 para durações negativas em formato string ("-2h 30m", "-1h", "-45min")', () => {
+    assert.equal(converterDuracaoParaHoras('-2h 30m'), 12.0);
+    assert.equal(converterDuracaoParaHoras('-1h'), 12.0);
+    assert.equal(converterDuracaoParaHoras('-45min'), 12.0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

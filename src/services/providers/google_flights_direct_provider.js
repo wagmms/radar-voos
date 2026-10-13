@@ -33,6 +33,9 @@ export function converterDuracaoParaHoras(str) {
   if (!str) return 12.0;
   const s = String(str).trim();
 
+  // Rejeita valores negativos em formato string (ex: "-2h", "-45min", "-2h 30m")
+  if (/^[-–—]/.test(s)) return 12.0;
+
   // Suporte a formato relógio digital "HH:MM" (ex: "2:30", "02:30", "14:15")
   const matchRelogio = s.match(/^(\d{1,2}):(\d{2})$/);
   if (matchRelogio) {
@@ -54,7 +57,8 @@ export function converterDuracaoParaHoras(str) {
   if (matchCompacto) {
     const h = parseInt(matchCompacto[1], 10);
     const m = parseInt(matchCompacto[2], 10);
-    return parseFloat((h + m / 60).toFixed(3));
+    const total = h + (m / 60);
+    return total > 0 ? parseFloat(total.toFixed(3)) : 12.0;
   }
 
   const matchH = s.match(/(\d+)\s*(?:h(?:r|s|ora)?s?)/i);
