@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.9.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.9.3)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.9.2 100% operacional com 202/202 testes JS e 10/10 testes Python aprovados. Sprint atual: `escanearCorredoresProativos` com Working Buffer em memória, Z-Score e deduplicação de 24h implementados e validados (11 novos testes).
+- **Estado Geral**: 🟢 Radar v2.9.3 100% operacional com 204/204 testes JS e 10/10 testes Python aprovados. Alertas de nova queda no mesmo dia (> 5% de melhoria) liberados e deduplicação inteligente de mesmo valor implementada em `db.js`, `flight_scanner.js` e `bug_fare_hunter.js`.
 - **Diretriz Prioritária**: Adicionar sparklines de histórico tarifário no Cockpit PWA e implementar detecção de deltas com Z-Score no FlightScanner (varredura de rotas monitoradas).
-- **Última Tarefa Concluída**: `src/services/bug_fare_hunter.js` · `escanearCorredoresProativos` · Working Buffer em memória com janela deslizante de 5 leituras, Z-Score < -2.5 → BUG_FARE / < -1.5 → OPORTUNIDADE / queda > 30% → OPORTUNIDADE / INFO silencioso. Deduplicação defensiva de 24h. Retrocompatibilidade via alias. 11 novos testes (202/202 verdes).
+- **Última Tarefa Concluída**: `src/db.js` · `alertasRepo` & `src/services/flight_scanner.js` · Fim do bloqueio cego temporal: quedas de preço comprovadas no mesmo dia (> 5% em relação ao último alerta) disparam novas notificações imediatamente; enquanto mesmo valor a cada minuto é suprimido silenciosamente. 2 novos testes (204/204 verdes).
 
 ---
 

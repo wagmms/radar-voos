@@ -4,6 +4,21 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.3] - 2026-10-13 — Alertas de Nova Queda no Mesmo Dia & Deduplicação Inteligente
+
+### ✅ Entregue
+- `src/db.js` · `alertasRepo.deveDisparar` & `alertasRepo.deveDispararBugFare`:
+  - Fim do bloqueio cego de 48h/24h: quando o preço cai significativamente no mesmo dia (> 5% abaixo do último alerta enviado), o usuário é imediatamente notificado com o novo recorde mais barato.
+  - O cooldown agora se aplica estritamente à repetição de mesmo valor ou oscilações insignificantes (< 5%), garantindo silêncio absoluto sem flood minuto a minuto.
+  - Implementado `deveDispararBugFare` com registro de disparos e rastreamento de melhoria percentual.
+- `src/services/flight_scanner.js`:
+  - Integração com `alertasRepo.deveDispararBugFare`: suprime floods com o mesmo valor a cada minuto no loop de escaneamento, mas despacha alerta instantâneo se a tarifa anômala cair ainda mais.
+- `src/services/bug_fare_hunter.js`:
+  - `_ehAlertaDuplicado(chave, tipo, preco)`: permite alertas de nova queda no mesmo dia se `preco < ultimo.preco` e `queda >= 5%`.
+- 2 novos testes automatizados adicionados (+2 testes, 204/204 testes passando com 100% de sucesso).
+
+---
+
 ## [v2.9.2] - 2026-10-13 — Working Buffer + Z-Score no BugFareHunter
 
 ### ✅ Entregue
