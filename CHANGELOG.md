@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.9] - 2026-10-13 — QA & Blindagem Adversarial em `identificarRegiaoDestino` (bug_fares)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/bug_fares.js` · `identificarRegiaoDestino`:
+  - Eliminado falso positivo crítico de substring onde nomes de cidades e países (ex: `Chile`, `Santiago`, `Parnaíba`) casavam indevidamente com códigos IATA/metropolitanos de 3 letras (`CHI` de Chicago, `SAN` de San Diego, `PAR` de Paris), causando classificação geográfica distorcida (ex: `Chile` como `AMERICA_NORTE`).
+  - Integrada resolução canônica prévia via `resolverDestino` de `src/domain/rotas.js` para mapear nomes de regiões e cidades para seus IATAs/KGMIDs canônicos.
+  - Implementada verificação estrita com fronteira não-alfanumérica (`(^|[^A-Z0-9])COD([^A-Z0-9]|$)`) para permitir múltiplos aeroportos (ex: `JFK,EWR`, `GRU,CGH`) sem permitir substrings em palavras comuns.
+- `tests/bug_fares.test.js`:
+  - Adicionado caso de testes adversariais para falsos positivos de substrings (`Chile`, `Santiago`, `Parnaíba`), listas IATA compostas e entradas nulas/indefinidas/vazias (100% aprovado).
+
+---
+
 ## [v2.10.8] - 2026-10-13 — QA & Blindagem Adversarial em `calcularVariacao` (calculadora)
 
 ### 🛡️ Blindagem de QA Adversarial

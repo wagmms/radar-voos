@@ -51,6 +51,28 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(identificarRegiaoDestino('CPT'), 'AFRICA');
   });
 
+  it('deve blindar identificarRegiaoDestino contra falsos positivos de substring adversarial (Chile, Santiago, Parnaíba e listas IATA)', () => {
+    // 1. "Chile" não deve casar falsamente em "CHI" (Chicago / América do Norte)
+    assert.strictEqual(identificarRegiaoDestino('Chile'), 'AMERICA_SUL');
+    assert.strictEqual(identificarRegiaoDestino('chile'), 'AMERICA_SUL');
+
+    // 2. "Santiago" não deve casar falsamente em "SAN" (San Diego / América do Norte)
+    assert.strictEqual(identificarRegiaoDestino('Santiago'), 'AMERICA_SUL');
+
+    // 3. "Parnaíba" não deve casar falsamente em "PAR" (Paris / Europa)
+    assert.notStrictEqual(identificarRegiaoDestino('Parnaiba'), 'EUROPA');
+
+    // 4. Listas IATA e aeroportos múltiplos continuam funcionando com precisão
+    assert.strictEqual(identificarRegiaoDestino('JFK,EWR'), 'AMERICA_NORTE');
+    assert.strictEqual(identificarRegiaoDestino('GRU,CGH'), 'DOMESTICO');
+    assert.strictEqual(identificarRegiaoDestino('MAD,BCN'), 'EUROPA');
+
+    // 5. Casos de borda nulos, vazios ou numéricos
+    assert.strictEqual(identificarRegiaoDestino(null), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(''), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(undefined), 'OUTRO');
+  });
+
   it('deve detectar Bug Fares estruturais e por anomalia estatística (Z-Score)', () => {
     // Caso 1: Tarifa para Europa abaixo do piso estrutural de R$ 1.950 (ida e volta)
     const bugPiso = detectarBugFareEstatistico({

@@ -1,5 +1,5 @@
 import { TERMOS_BUG_FARE, TERMOS_MARKETING_BANIDOS } from './dicionarios.js';
-import { ehSoIda } from './rotas.js';
+import { ehSoIda, resolverDestino } from './rotas.js';
 
 /**
  * Classifica um item do feed RSS como Bug Fare autêntico, promoção comercial ou lixo de marketing
@@ -98,6 +98,9 @@ export function identificarRegiaoDestino(destinoCod) {
   const cod = String(destinoCod).toUpperCase().trim();
   const nomeLower = String(destinoCod).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+  const destinoResolvido = resolverDestino(destinoCod);
+  const codResolvido = destinoResolvido ? String(destinoResolvido).toUpperCase().trim() : null;
+
   const europa = [
     'LIS', 'OPO', 'MAD', 'BCN', 'CDG', 'ORY', 'PAR', 'LHR', 'LGW', 'LON', 'FCO', 'MXP', 'ROM', 'MIL',
     'AMS', 'FRA', 'BER', 'MUC', 'ZRH', 'VIE', 'ATH', 'DUB', 'OSL', 'CPH', 'ARN', 'HEL', 'PRG', 'BUD',
@@ -142,14 +145,27 @@ export function identificarRegiaoDestino(destinoCod) {
     'NVT', 'LDB', 'MGF', 'XAP', 'CXJ', 'JOI'
   ];
 
-  if (europa.some(e => cod.includes(e))) return 'EUROPA';
-  if (amNorte.some(e => cod.includes(e))) return 'AMERICA_NORTE';
-  if (caribe.some(e => cod.includes(e))) return 'CARIBE_AMERICA_CENTRAL';
-  if (orienteMedio.some(e => cod.includes(e))) return 'ORIENTE_MEDIO';
-  if (africa.some(e => cod.includes(e))) return 'AFRICA';
-  if (amSul.some(e => cod.includes(e))) return 'AMERICA_SUL';
-  if (asia.some(e => cod.includes(e))) return 'ASIA_OCEANIA';
-  if (brasil.some(e => cod.includes(e))) return 'DOMESTICO';
+  const casarRegiao = (lista) => {
+    return lista.some(item => {
+      if (item.startsWith('/M/') || item.startsWith('/G/')) {
+        return cod === item || (codResolvido && codResolvido === item) || cod.includes(item);
+      }
+      if (codResolvido && (codResolvido === item || codResolvido.split(',').includes(item))) return true;
+      if (cod === item) return true;
+      // Match estrito com fronteira de palavra/não-alfanumérico (evita que "CHI" case em "CHILE" ou "SAN" em "SANTIAGO")
+      const regexToken = new RegExp(`(^|[^A-Z0-9])${item}([^A-Z0-9]|$)`);
+      return regexToken.test(cod);
+    });
+  };
+
+  if (casarRegiao(europa)) return 'EUROPA';
+  if (casarRegiao(amNorte)) return 'AMERICA_NORTE';
+  if (casarRegiao(caribe)) return 'CARIBE_AMERICA_CENTRAL';
+  if (casarRegiao(orienteMedio)) return 'ORIENTE_MEDIO';
+  if (casarRegiao(africa)) return 'AFRICA';
+  if (casarRegiao(amSul)) return 'AMERICA_SUL';
+  if (casarRegiao(asia)) return 'ASIA_OCEANIA';
+  if (casarRegiao(brasil)) return 'DOMESTICO';
 
   // Fallback por correspondência semântica de nomes
   if (nomeLower.includes('europa') || nomeLower.includes('portugal') || nomeLower.includes('espanha') || nomeLower.includes('franca') || nomeLower.includes('italia')) return 'EUROPA';
