@@ -71,6 +71,24 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(extrairDiasEstadia('', 10), 10);
   });
 
+  it('extrairDiasEstadia: deve lidar defensivamente com casos de borda adversariais (não-finitos, extremos e padrão inválido)', () => {
+    // 1. Valores não-finitos numéricos (Infinity, -Infinity, NaN) devem retornar o padrão seguro
+    assert.strictEqual(extrairDiasEstadia(Infinity, 10), 10);
+    assert.strictEqual(extrairDiasEstadia(-Infinity, 10), 10);
+    assert.strictEqual(extrairDiasEstadia(NaN, 10), 10);
+
+    // 2. Teto defensivo máximo de 3650 dias para valores astronômicos (numéricos ou string)
+    assert.strictEqual(extrairDiasEstadia(99999), 3650);
+    assert.strictEqual(extrairDiasEstadia('50000 dias'), 3650);
+
+    // 3. Sanitização resiliente do parâmetro padrao quando for inválido
+    assert.strictEqual(extrairDiasEstadia(null, 'invalido'), 10);
+    assert.strictEqual(extrairDiasEstadia(null, -5), 10);
+    assert.strictEqual(extrairDiasEstadia(null, NaN), 10);
+    assert.strictEqual(extrairDiasEstadia(-10, 14), 14);
+    assert.strictEqual(extrairDiasEstadia(0, 14), 14);
+  });
+
   it('deve calcular data de volta com número de dias de estadia e sufixos de texto', () => {
     assert.strictEqual(calcularDataVolta('2026-11-10', '14'), '2026-11-24');
     assert.strictEqual(calcularDataVolta('2026-11-10', '10 dias'), '2026-11-20');

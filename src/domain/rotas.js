@@ -126,15 +126,26 @@ export function formatarDataParaBusca(valor) {
  * Extrai o número de dias de estadia de campos de texto ou números (ex: "10 dias", "10", "14d")
  */
 export function extrairDiasEstadia(valor, padrao = 10) {
-  if (valor === undefined || valor === null || valor === '') return padrao;
-  if (typeof valor === 'number' && !isNaN(valor) && valor > 0) return Math.round(valor);
+  const padraoValido = (typeof padrao === 'number' && Number.isFinite(padrao) && padrao > 0)
+    ? Math.min(Math.round(padrao), 3650)
+    : 10;
+
+  if (valor === undefined || valor === null || valor === '') return padraoValido;
+
+  if (typeof valor === 'number') {
+    if (!Number.isFinite(valor) || valor <= 0) return padraoValido;
+    return Math.min(Math.round(valor), 3650);
+  }
+
   const str = String(valor).trim();
   const match = str.match(/^(\d+)/);
   if (match) {
     const n = parseInt(match[1], 10);
-    if (n > 0) return n;
+    if (n > 0 && Number.isFinite(n)) {
+      return Math.min(n, 3650);
+    }
   }
-  return padrao;
+  return padraoValido;
 }
 
 /**

@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.5] - 2026-10-13 — Blindagem Adversarial de extrairDiasEstadia (Domínio / Rotas)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Rotas e Estadia)
+- `src/domain/rotas.js` · `extrairDiasEstadia`:
+  - Corrigido bug de validação onde valores não-finitos numéricos (ex: `Infinity`) passavam na checagem ingênua de `!isNaN(valor) && valor > 0` e retornavam `Infinity` em vez do valor padrão defensivo.
+  - Implementado teto máximo de segurança de 3650 dias (~10 anos) para valores astronômicos ou maliciosos, alinhando com a regra de integridade de `calcularDataVolta`.
+  - Sanitização do parâmetro `padrao` contra valores não numéricos, negativos ou não-finitos, com fallback seguro para 10.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial cobrindo valores não-finitos (`Infinity`, `-Infinity`, `NaN`), clamping de valores astronômicos e sanitização de `padrao` corrompido.
+  - Suite total: **347/347 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.4] - 2026-10-13 — Blindagem Adversarial de avaliarTermometro (Domínio / Calculadora)
 
 ### 🛡️ Correção Defensiva & Robustez (Termômetro de Tarifas do Google Flights)
