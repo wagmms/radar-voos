@@ -73,6 +73,24 @@ export const MULTIPLICADORES_CABINE_BUG_FARE = {
 };
 
 /**
+ * Pisos Mínimos Plausíveis de Preço (R$) para Evitar Tarifas Espúrias e Erros de Scraping
+ * Tarifas abaixo desses valores em rotas comerciais são comprovadamente irreais (ex: taxas isoladas,
+ * voos domésticos parseados por engano em rotas internacionais, moedas incorretas ou erros de scraping).
+ * Devem ser SUMARIAMENTE DESCARTADAS e JAMAIS anunciadas como Bug Fare autêntico.
+ */
+export const PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE = {
+  EUROPA: { idaEVolta: 1000, soIda: 600 },
+  AMERICA_NORTE: { idaEVolta: 900, soIda: 550 },
+  AMERICA_SUL: { idaEVolta: 450, soIda: 250 },
+  CARIBE_AMERICA_CENTRAL: { idaEVolta: 700, soIda: 400 },
+  ORIENTE_MEDIO: { idaEVolta: 1300, soIda: 750 },
+  AFRICA: { idaEVolta: 1100, soIda: 700 },
+  ASIA_OCEANIA: { idaEVolta: 1400, soIda: 850 },
+  DOMESTICO: { idaEVolta: 130, soIda: 70 },
+  OUTRO: { idaEVolta: 800, soIda: 450 }
+};
+
+/**
  * Identifica a macrorregião a partir do código do aeroporto ou nome de destino
  */
 export function identificarRegiaoDestino(destinoCod) {
@@ -164,6 +182,19 @@ export function detectarBugFareEstatistico({
   const regiao = identificarRegiaoDestino(destinoCod);
   const pisoBase = PISOS_ESTRUTURAIS_BUG_FARE[regiao];
   const multCabine = MULTIPLICADORES_CABINE_BUG_FARE[cabine] || 1.0;
+
+  // Filtro de Inviabilidade e Tarifa Espúria:
+  // Se o preço for inferior ao piso mínimo plausível de segurança da região (ajustado por cabine),
+  // trata-se de ruído/erro de extração de scraping (ex: R$ 362 para Europa quando as taxas já somam > R$ 500)
+  const pisoMinimoObj = PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE[regiao] || PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE.OUTRO;
+  const valorPisoMinimo = Math.round((ehIdaEVolta ? pisoMinimoObj.idaEVolta : pisoMinimoObj.soIda) * multCabine);
+  if (preco < valorPisoMinimo) {
+    return {
+      ehBugFare: false,
+      descartadoPorInviabilidade: true,
+      motivo: `Tarifa de R$ ${preco} abaixo do piso mínimo plausível de R$ ${valorPisoMinimo} para ${regiao} (dado espúrio/ruído de extração)`
+    };
+  }
 
   // 1. Piso estrutural de preço irreal no GDS ajustado por cabine
   if (pisoBase) {

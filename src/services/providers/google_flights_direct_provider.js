@@ -1,5 +1,6 @@
 import { FlightProviderInterface } from './flight_provider_interface.js';
 import { gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest } from '../../domain/rotas.js';
+import { identificarRegiaoDestino } from '../../domain/bug_fares.js';
 
 /**
  * Google Flights Direct Provider (v2.1)
