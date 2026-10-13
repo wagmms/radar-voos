@@ -148,43 +148,203 @@ export function detectarBloqueioBot(resp) {
 }
 
 /**
- * Extrai preço da aba Cheapest do Google Flights a partir do HTML raw.
+ * Decodifica o menor preço embutido no payload Protobuf tfu (base64url) do Google Flights.
  *
- * O Google Flights embute o menor preço da aba "Cheapest" em um array JS
- * no formato: [[null, PRECO], "...comprehensiveness_lure..."]
- * que é codificado em base64 dentro do parâmetro tfu da URL.
+ * Estrutura do Protobuf tfu:
+ * - Field 3 (length-delimited): Submensagem de moeda/tarifa
+ *   - Subfield 1 (varint): Preço em centavos (ou unidades)
+ *   - Subfield 2 (varint): Escala/casas decimais (normalmente 2 para centavos)
+ *   - Subfield 3 (string/bytes): Código ISO da moeda ("BRL", "USD", etc.)
  *
- * Regex multicamada para capturar variações de formato encontradas em campo.
+ * @param {string} tokenOuUrl - String contendo o token tfu em base64/base64url ou URL completa
+ * @returns {number|null} Menor preço inteiro em BRL ou null se não decodificável
+ */
+export function decodificarPrecoDoTfu(tokenOuUrl) {
+  if (!tokenOuUrl || typeof tokenOuUrl !== 'string') return null;
+
+  let token = tokenOuUrl.trim();
+  // Se for uma URL ou fragmento com parâmetro tfu, extrai o valor do parâmetro
+  const matchParam = token.match(/(?:[?&]tfu=|"tfu"\s*:\s*"|tfu=)([A-Za-z0-9+/=_-]{16,})/i);
+  if (matchParam) {
+    token = matchParam[1];
+  }
+
+  // Desfaz URL encoding caso esteja percent-encoded
+  try {
+    token = decodeURIComponent(token);
+  } catch {}
+
+  // Remove eventuais delimitadores residuais
+  token = token.replace(/["'\s;,].*$/, '');
+
+  try {
+    // Normaliza Base64URL (- _) para Base64 padrão (+ /) com padding
+    const base64 = token.replace(/-/g, '+').replace(/_/g, '/');
+    const pad = (4 - (base64.length % 4)) % 4;
+    const padded = base64 + '='.repeat(pad);
+    const buf = Buffer.from(padded, 'base64');
+    if (buf.length < 12) return null;
+
+    // Estratégia 1: Varredura orientada por âncoras de moedas conhecidas
+    const moedas = ['BRL', 'USD', 'EUR', 'GBP', 'ARS', 'CLP'];
+    for (const moeda of moedas) {
+      const idxMoeda = buf.indexOf(Buffer.from(moeda));
+      if (idxMoeda !== -1) {
+        const inicioJanela = Math.max(0, idxMoeda - 20);
+        for (let i = inicioJanela; i < idxMoeda; i++) {
+          if (buf[i] === 0x08) { // Tag 1 (varint do preço)
+            let val = 0;
+            let shift = 0;
+            let j = i + 1;
+            while (j < idxMoeda && j < buf.length) {
+              const b = buf[j++];
+              val |= (b & 0x7f) << shift;
+              shift += 7;
+              if ((b & 0x80) === 0) break;
+            }
+            if (val > 0) {
+              let escala = 2; // Google Flights padrão para centavos
+              if (j < idxMoeda && buf[j] === 0x10) { // Tag 2 (escala)
+                escala = buf[j + 1];
+              }
+              const precoComEscala = Math.round(val / (10 ** escala));
+              if (precoComEscala >= 80 && precoComEscala <= 60000) {
+                return precoComEscala;
+              }
+              if (val >= 80 && val <= 60000) {
+                return val;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // Estratégia 2: Decodificação estruturada do Protobuf raiz (Field 3 = Price message)
+    let offset = 0;
+    while (offset < buf.length) {
+      const tagByte = buf[offset++];
+      const wire = tagByte & 7;
+      const field = tagByte >> 3;
+      if (wire === 2) { // length-delimited
+        let len = 0;
+        let shift = 0;
+        while (offset < buf.length) {
+          const b = buf[offset++];
+          len |= (b & 0x7f) << shift;
+          shift += 7;
+          if ((b & 0x80) === 0) break;
+        }
+        if (field === 3) {
+          const sub = buf.subarray(offset, offset + len);
+          let subOff = 0;
+          let valor = null;
+          let escala = 2;
+          while (subOff < sub.length) {
+            const subTag = sub[subOff++];
+            const subWire = subTag & 7;
+            const subField = subTag >> 3;
+            if (subWire === 0) {
+              let v = 0;
+              let s = 0;
+              while (subOff < sub.length) {
+                const b = sub[subOff++];
+                v |= (b & 0x7f) << s;
+                s += 7;
+                if ((b & 0x80) === 0) break;
+              }
+              if (subField === 1) valor = v;
+              if (subField === 2) escala = v;
+            } else if (subWire === 2) {
+              let l = 0;
+              let s = 0;
+              while (subOff < sub.length) {
+                const b = sub[subOff++];
+                l |= (b & 0x7f) << s;
+                s += 7;
+                if ((b & 0x80) === 0) break;
+              }
+              subOff += l;
+            } else {
+              break;
+            }
+          }
+          if (valor !== null && valor > 0) {
+            const finalPreco = Math.round(valor / (10 ** escala));
+            if (finalPreco >= 80 && finalPreco <= 60000) return finalPreco;
+            if (valor >= 80 && valor <= 60000) return valor;
+          }
+        }
+        offset += len;
+      } else if (wire === 0) {
+        while (offset < buf.length && (buf[offset++] & 0x80) !== 0) {}
+      } else {
+        break;
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+/**
+ * Extrai preço da aba Cheapest do Google Flights a partir do HTML raw ou URL de resposta.
  *
- * @param {string} html
+ * Múltiplas camadas de extração:
+ * 1. Padrão canônico comprehensiveness_lure em array JS: [[null, PRECO], "...comprehensiveness_lure..."]
+ * 2. Padrão ampliado: [[null, PRECO], "base64long"]
+ * 3. Padrão compacto minificado: [null, PRECO], "EhZ..."
+ * 4. Decode base64url do parâmetro canônico `tfu` da URL de resposta ou embutido em respostas AJAX de redirecionamento.
+ *
+ * @param {string|null} html
+ * @param {string|null} [urlResposta=null]
  * @returns {number|null}
  */
-export function extrairPrecoCheapestTab(html) {
-  if (!html) return null;
+export function extrairPrecoCheapestTab(html, urlResposta = null) {
+  if (!html && !urlResposta) return null;
 
-  // Camada 1: Padrão canônico com comprehensiveness_lure — tolerante a espaços extras
-  const r1 = /\[\[null,\s*(\d+)\s*\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
-  const m1 = html.match(r1);
-  if (m1) {
-    const p = parseInt(m1[1], 10);
-    if (p >= 80 && p <= 60000) return p;
+  if (html) {
+    // Camada 1: Padrão canônico com comprehensiveness_lure — tolerante a espaços extras
+    const r1 = /\[\[null,\s*(\d+)\s*\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
+    const m1 = html.match(r1);
+    if (m1) {
+      const p = parseInt(m1[1], 10);
+      if (p >= 80 && p <= 60000) return p;
+    }
+
+    // Camada 2: Padrão ampliado — captura [[null,NUM],"base64long"] em qualquer contexto de callback
+    const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
+    const m2 = html.match(r2);
+    if (m2) {
+      const p = parseInt(m2[1], 10);
+      if (p >= 80 && p <= 60000) return p;
+    }
+
+    // Camada 3: Padrão compacto minificado — [null,NUM],"EhZ..." ou com palavras literais
+    // EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl = token base64 canônico de comprehensiveness_lure
+    const r3 = /\[null,\s*(\d{3,6})\s*\],\s*"(?:EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl|[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest))/i;
+    const m3 = html.match(r3);
+    if (m3) {
+      const p = parseInt(m3[1], 10);
+      if (p >= 80 && p <= 60000) return p;
+    }
   }
 
-  // Camada 2: Padrão ampliado — captura [[null,NUM],"base64long"] em qualquer contexto de callback
-  const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
-  const m2 = html.match(r2);
-  if (m2) {
-    const p = parseInt(m2[1], 10);
-    if (p >= 80 && p <= 60000) return p;
+  // Camada 4: Decode base64url do parâmetro canônico tfu da URL de resposta ou embutido em AJAX/redirect
+  if (urlResposta) {
+    const precoTfuUrl = decodificarPrecoDoTfu(urlResposta);
+    if (precoTfuUrl) return precoTfuUrl;
   }
 
-  // Camada 3: Padrão compacto minificado — [null,NUM],"EhZ..." ou com palavras literais
-  // EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl = token base64 canônico de comprehensiveness_lure
-  const r3 = /\[null,\s*(\d{3,6})\s*\],\s*"(?:EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl|[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest))/i;
-  const m3 = html.match(r3);
-  if (m3) {
-    const p = parseInt(m3[1], 10);
-    if (p >= 80 && p <= 60000) return p;
+  if (html) {
+    // Se o HTML contiver links ou redirecionamentos com tfu (ex: AJAX responses sem corpo rico)
+    const regexTfu = /(?:[?&]tfu=|"tfu"\s*:\s*"|tfu=)([A-Za-z0-9+/=_-]{20,})/gi;
+    let matchTfu;
+    while ((matchTfu = regexTfu.exec(html)) !== null) {
+      const precoTfu = decodificarPrecoDoTfu(matchTfu[1]);
+      if (precoTfu) return precoTfu;
+    }
   }
 
   return null;
@@ -436,8 +596,8 @@ export class ScraplingProvider extends FlightProviderInterface {
 
         const html = await resp.text();
 
-        // Extração do preço da aba Cheapest (camada prioritária)
-        const precoCheapest = extrairPrecoCheapestTab(html);
+        // Extração do preço da aba Cheapest (camadas 1-3 no HTML + camada 4 via URL de resposta/tfu)
+        const precoCheapest = extrairPrecoCheapestTab(html, resp.url);
 
         // Extração da lista de voos detalhados
         const voosDetalhados = extrairVoosDoHtml(html);

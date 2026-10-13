@@ -3,14 +3,18 @@ import assert from 'node:assert/strict';
 import {
   detectarBloqueioBot,
   extrairPrecoCheapestTab,
+  decodificarPrecoDoTfu,
   construirUrlCheapest,
   extrairVoosDoHtml,
   ScraplingProvider
 } from '../src/services/providers/scrapling_client.js';
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Helpers de HTML mock
+// Helpers de HTML mock e tokens de teste
 // ──────────────────────────────────────────────────────────────────────────────
+const TOKEN_CHEAPEST_CANONICO = 'CjRIMS1mNTFfb3VtQ1FBQUpjMmdCRy0tLS0tLWNlYmNyMy1uMkFBQUFBR3JOTVBBSDFrZHNBEhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsIzMoDEAIaA0JSTDgdcPtb';
+const URL_RESPOSTA_COM_TFU = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=CBwQA...&tfu=${TOKEN_CHEAPEST_CANONICO}`;
+
 const HTML_COM_CHEAPEST = `
   <html>
     <div aria-label="A partir de 890 Reais brasileiros. Voo da LATAM Airlines com 1 parada. Conexão de 2 h em Campinas (VCP). Duração total: 3 h 40 min. Mala de mão incluída."></div>
@@ -44,6 +48,17 @@ const HTML_SOMENTE_ARIA_SIMPLES = `
   </html>
 `;
 
+const HTML_AJAX_REDIRECT_SEM_CORPO = `
+  <html>
+    <head>
+      <script>
+        window.location.replace("https://www.google.com/travel/flights?tfs=CBwQA...&tfu=CjRIMS1mNTFfb3VtQ1FBQUpjMmdCRy0tLS0tLWNlYmNyMy1uMkFBQUFBR3JOTVBBSDFrZHNBEhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsIzMoDEAIaA0JSTDgdcPtb");
+      </script>
+    </head>
+    <body>Carregando voos...</body>
+  </html>
+`;
+
 // ──────────────────────────────────────────────────────────────────────────────
 describe('ScraplingClient: detectarBloqueioBot', () => {
   it('deve detectar bloqueio por status 429', () => {
@@ -72,13 +87,49 @@ describe('ScraplingClient: detectarBloqueioBot', () => {
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
+describe('ScraplingClient: decodificarPrecoDoTfu (Base64url / Protobuf tfu)', () => {
+  it('deve decodificar tarifa R$ 587 a partir do token tfu real do Google Flights', () => {
+    const preco = decodificarPrecoDoTfu(TOKEN_CHEAPEST_CANONICO);
+    assert.equal(preco, 587);
+  });
+
+  it('deve decodificar tarifa R$ 587 a partir de URL completa contendo tfu', () => {
+    const preco = decodificarPrecoDoTfu(URL_RESPOSTA_COM_TFU);
+    assert.equal(preco, 587);
+  });
+
+  it('deve decodificar token tfu em formato URL-encoded', () => {
+    const urlEncoded = encodeURIComponent(TOKEN_CHEAPEST_CANONICO);
+    const preco = decodificarPrecoDoTfu(`https://www.google.com/travel/flights?tfu=${urlEncoded}`);
+    assert.equal(preco, 587);
+  });
+
+  it('deve retornar null para token inicial EgoIABAAGAAgAigD sem preço', () => {
+    assert.equal(decodificarPrecoDoTfu('EgoIABAAGAAgAigD'), null);
+    assert.equal(decodificarPrecoDoTfu('https://www.google.com/travel/flights?tfu=EgoIABAAGAAgAigD'), null);
+  });
+
+  it('deve retornar null para strings vazias, nulas ou indefinidas', () => {
+    assert.equal(decodificarPrecoDoTfu(null), null);
+    assert.equal(decodificarPrecoDoTfu(undefined), null);
+    assert.equal(decodificarPrecoDoTfu(''), null);
+    assert.equal(decodificarPrecoDoTfu('   '), null);
+  });
+
+  it('deve retornar null para base64 inválido ou corrompido', () => {
+    assert.equal(decodificarPrecoDoTfu('!!!invalido!!!'), null);
+    assert.equal(decodificarPrecoDoTfu('AAAA'), null);
+  });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
 describe('ScraplingClient: extrairPrecoCheapestTab', () => {
   it('deve extrair preço R$ 587 da aba Cheapest via padrão comprehensiveness_lure', () => {
     const preco = extrairPrecoCheapestTab(HTML_COM_CHEAPEST);
     assert.equal(preco, 587);
   });
 
-  it('deve retornar null para HTML sem dados da aba Cheapest', () => {
+  it('deve retornar null para HTML sem dados da aba Cheapest e sem URL', () => {
     const preco = extrairPrecoCheapestTab(HTML_SEM_PRECOS);
     assert.equal(preco, null);
   });
@@ -101,8 +152,23 @@ describe('ScraplingClient: extrairPrecoCheapestTab', () => {
       AF_initDataCallback({data: [null, null, [[null, 1350], "EhZjb21wcmVoZW5zaXZlbmVzc19sdXJlGgsI"]]});
     `;
     const preco = extrairPrecoCheapestTab(htmlAf);
-    // Pode retornar null se o formato específico não for reconhecido — sem assertiva de igualdade rígida
     assert.ok(preco === null || (typeof preco === 'number' && preco >= 80 && preco <= 60000));
+  });
+
+  it('deve extrair preço R$ 587 via Camada 4 (URL de resposta com parâmetro tfu) quando HTML é vazio', () => {
+    const preco = extrairPrecoCheapestTab(HTML_SEM_PRECOS, URL_RESPOSTA_COM_TFU);
+    assert.equal(preco, 587);
+  });
+
+  it('deve extrair preço R$ 587 via Camada 4 quando HTML é resposta AJAX de redirecionamento', () => {
+    const preco = extrairPrecoCheapestTab(HTML_AJAX_REDIRECT_SEM_CORPO);
+    assert.equal(preco, 587);
+  });
+
+  it('deve manter prioridade das Camadas 1-3 do HTML quando disponíveis', () => {
+    // HTML com R$ 587 e URL com o mesmo valor ou fornecida
+    const preco = extrairPrecoCheapestTab(HTML_COM_CHEAPEST, URL_RESPOSTA_COM_TFU);
+    assert.equal(preco, 587);
   });
 });
 
@@ -395,6 +461,34 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
 
       assert.ok(res.ok);
       assert.equal(res.oferta.tipoViagem, 'one_way', '"Só Ida" deve resultar em One-Way');
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+
+  it('deve capturar tarifa Cheapest R$ 587 via URL de redirecionamento com parâmetro tfu quando HTML é esparso', async () => {
+    const provider = new ScraplingProvider();
+
+    const fetchOriginal = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: URL_RESPOSTA_COM_TFU,
+      text: async () => '<html><body>Carregando voos...</body></html>'
+    });
+
+    try {
+      const res = await provider.buscarOfertas({
+        origemCod: 'GRU',
+        destinoCod: 'SSA',
+        dataIda: '2027-02-10'
+      });
+
+      assert.ok(res.ok, 'Deve retornar ok: true');
+      assert.ok(res.encontrouVoos, 'Deve encontrar voos via URL tfu');
+      assert.equal(res.oferta.preco, 587, 'Tarifa R$ 587 deve ser extraída do parâmetro tfu da URL de resposta');
+      assert.ok(res.oferta.cheapestTabAtivada, 'Flag cheapestTabAtivada deve ser true');
+      assert.ok(res.oferta.detalhes.includes('Cheapest'), 'Detalhes devem mencionar Cheapest');
     } finally {
       globalThis.fetch = fetchOriginal;
     }

@@ -4,6 +4,21 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.7] - 2026-10-13 — Decodificação Protobuf tfu na Aba Cheapest (ScraplingProvider)
+
+### 🚀 Novas Funcionalidades & Resiliência de Scraping
+- `src/services/providers/scrapling_client.js` · `decodificarPrecoDoTfu`:
+  - Implementada função especializada de decodificação de payload binário Protobuf do parâmetro canônico `tfu` (Base64/Base64URL).
+  - Extração de menor tarifa com detecção automática de moeda (`BRL`, `USD`, `EUR`, etc.) e resolução de escala decimal (centavos/unidades).
+  - Tolerância defensiva para strings URL-encoded, ausência de padding Base64 e validação estrita no intervalo [80, 60.000].
+- `src/services/providers/scrapling_client.js` · `extrairPrecoCheapestTab`:
+  - Adicionada 4ª camada de extração para inspecionar URLs de resposta (`urlResposta`) e ocorrências do parâmetro `tfu` embutidas em tags de redirecionamento ou chamadas AJAX sem corpo HTML rico.
+  - Conexão em `ScraplingProvider.buscarOfertas` passando `resp.url` para garantir captura da tarifa em redirecionamentos.
+- `tests/scrapling_client.test.js`:
+  - 10 novos testes cobrindo tokens reais do Google Flights, URLs completas, redirects AJAX sem corpo rico e edge cases (222/222 testes JS e 10/10 Python aprovados).
+
+---
+
 ## [v2.9.6] - 2026-10-13 — QA & Blindagem Adversarial em `classificarDeltaPreco`
 
 ### 🛡️ Blindagem de QA Adversarial

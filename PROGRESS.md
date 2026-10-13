@@ -1,28 +1,28 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.9.5)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.9.7)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.9.5 100% operacional com 211/211 testes JS e 10/10 testes Python aprovados. Detecção de deltas com Z-Score implementada no FlightScanner com supressão de ruído para oscilações normais (INFO) em `alertasRepo` e orquestração modular de varredura em `FlightScanner.executarCicloVarredura`.
+- **Estado Geral**: 🟢 Radar v2.9.7 100% operacional com 222/222 testes JS e 10/10 testes Python aprovados. Decodificação de payload Protobuf `tfu` (Base64URL) implementada no ScraplingProvider com extração multicamada (4ª camada) cobrindo respostas AJAX e URLs de redirecionamento para a aba Cheapest do Google Flights.
 - **Diretriz Prioritária**: Aumentar a taxa de sucesso de extração da aba Cheapest do Google Flights via decodificação de payload `tfu` e persistência do Working Buffer.
-- **Última Tarefa Concluída**: `src/services/flight_scanner.js` · `executarCicloVarredura` & `src/domain/calculadora.js` · `classificarDeltaPreco` · Detecção de deltas estatísticos com Z-Score, supressão de ruído INFO em rotas monitoradas e orquestração limpa de ciclo de varredura LRU integrada ao scheduler. 6 novos testes (211/211 verdes).
+- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` · `extrairPrecoCheapestTab` & `decodificarPrecoDoTfu` · Implementada 4ª camada de extração via decode Base64URL do payload Protobuf canônico `tfu` (moeda e escala de centavos), capturando tarifas mínimas em respostas AJAX e URLs de redirecionamento sem corpo HTML rico. 10 novos testes adicionados (222/222 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/services/providers/scrapling_client.js`
-- **Função/Componente/Seletor**: `extrairPrecoCheapestTab` (motor de extração de tarifas da aba Cheapest)
-- **Comportamento Esperado / Critério de Aceite**: Adicionar 4ª camada de extração via decode base64url do parâmetro canônico `tfu` da URL de resposta para capturar tarifas mínimas em respostas AJAX de redirecionamento que retornam sem corpo HTML rico, prevenindo perda de ofertas baratas.
+- **Arquivo/Módulo Alvo**: `src/services/bug_fare_hunter.js`
+- **Função/Componente/Seletor**: `escanearCorredoresProativos` (com métodos auxiliares `salvarWorkingBufferDisco` / `carregarWorkingBufferDisco`)
+- **Comportamento Esperado / Critério de Aceite**: Persistir o cache do Working Buffer em disco (`data/working_buffer.json`) de forma atômica após cada ciclo de varredura e recarregá-lo no boot da classe, garantindo retenção de memória e volatilidade zero após reinicializações do processo.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Persistir Working Buffer em `data/working_buffer.json` para sobreviver a reinicializações do processo (volatilidade zero após restart).
 - [ ] `src/services/providers/scrapling_client.js` • `extrairVoosDoHtml` • Adicionar fallback de extração de companhia aérea por código IATA de 2 letras diretamente da matriz de voos do Google Flights.
 - [ ] `src/public/app.js` • `renderizarRotas` • Refinar renderização de badges de conexões com exibição de escala noturna / stopover em cards móveis.
 - [ ] `src/domain/calculadora.js` • `avaliarCustoDestinoComTotal` • Suporte a moedas dinâmicas e conversão de diárias internacionais para destinos fora do dicionário base.
+- [ ] `src/domain/rotas.js` • `gerarLinkGoogleFlightsCheapest` • Suporte a múltiplos passageiros e seleção de cabine (Premium Economy / Business) no payload tfs.
 
 ---
 
