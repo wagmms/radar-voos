@@ -33,8 +33,8 @@ export function resolverDestino(texto) {
 
   // 2. Resolução por dicionários canônicos (regiões e metrópoles)
   const limpo = normalizarTexto(strOriginal);
-  if (DICIONARIO_REGIOES[limpo]) return DICIONARIO_REGIOES[limpo];
-  if (DICIONARIO_CIDADES[limpo]) return DICIONARIO_CIDADES[limpo];
+  if (Object.hasOwn(DICIONARIO_REGIOES, limpo) && typeof DICIONARIO_REGIOES[limpo] === 'string') return DICIONARIO_REGIOES[limpo];
+  if (Object.hasOwn(DICIONARIO_CIDADES, limpo) && typeof DICIONARIO_CIDADES[limpo] === 'string') return DICIONARIO_CIDADES[limpo];
 
   // 3. Código IATA único de 3 letras
   if (strOriginal.length === 3 && /^[A-Za-z]{3}$/.test(strOriginal)) {

@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.11] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverDestino`):
+  - Blindada a resolução de cidades e regiões por dicionários (`DICIONARIO_REGIOES` e `DICIONARIO_CIDADES`) contra prototype pollution e colisão com propriedades herdadas de `Object.prototype` (ex: `"constructor"`, `"__proto__"`, `"valueOf"`, `"toString"`).
+  - Implementada verificação estrita via `Object.hasOwn(...)` e garantia de tipo string primitivo, impedindo o retorno inadvertido de funções nativas ou protótipos de objeto quando chaves reservadas forem consultadas como destinos.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando a rejeição e retorno defensivo de `null` para `"constructor"`, `"__proto__"`, `"valueOf"` e `"toString"`.
+
 ## [v2.18.10] - 2026-10-13 — Blindagem Adversarial em avaliarCustoDestinoComTotal (Domínio Calculadora)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

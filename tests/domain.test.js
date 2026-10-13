@@ -80,6 +80,14 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverDestino('Paris ( cdg )'), 'CDG');
   });
 
+  it('deve blindar resolverDestino contra prototype pollution e propriedades herdadas de Object', () => {
+    // Entradas adversariais que colidem com propriedades de Object.prototype
+    assert.strictEqual(resolverDestino('constructor'), null);
+    assert.strictEqual(resolverDestino('__proto__'), null);
+    assert.strictEqual(resolverDestino('valueOf'), null);
+    assert.strictEqual(resolverDestino('toString'), null);
+  });
+
   it('deve normalizar metrópoles para aeroportos físicos compatíveis com SerpAPI', () => {
     assert.strictEqual(normalizarParaSerpApi('SAO'), 'GRU,CGH');
     assert.strictEqual(normalizarParaSerpApi('RIO'), 'GIG,SDU');
