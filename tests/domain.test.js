@@ -91,6 +91,12 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     // Formato brasileiro DD/MM/YYYY suportado graciosamente
     assert.strictEqual(calcularDataVolta('10/05/2026', '10 dias'), '2026-05-20');
     assert.strictEqual(calcularDataVolta('10/05/2026', 14), '2026-05-24');
+    assert.strictEqual(calcularDataVolta('2026-11-10', '7 noites'), '2026-11-17');
+
+    // Casos adversariais extremos: números astronômicos e não finitos sem RangeError
+    assert.strictEqual(calcularDataVolta('2026-11-10', 100000000), null);
+    assert.strictEqual(calcularDataVolta('2026-11-10', '99999999 dias'), null);
+    assert.strictEqual(calcularDataVolta('2026-11-10', Infinity), null);
   });
 
   it('não deve converter números soltos em datas arbitrárias no formato de busca', () => {

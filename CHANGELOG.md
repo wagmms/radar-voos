@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.14.2] - 2026-10-13 — Blindagem Defensiva de calcularDataVolta (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Rotas e Calendário Aeronáutico)
+- `src/domain/rotas.js`:
+  - `calcularDataVolta`: corrigido bug crítico de overflow temporal em que valores de estadia astronômicos ou não finitos (ex: `100000000`, `99999999 dias`, `Number.MAX_SAFE_INTEGER`, `Infinity`) disparavam `RangeError: Invalid time value` não tratado em `Date.toISOString()`. Implementada trava defensiva com `Number.isFinite(dias)` e teto de permanência razoável (`dias <= 3650`), validação pós-`setUTCDate` contra datas inválidas, e adicionado suporte a durações com sufixo de estadia `"noites"` / `"n"` (ex: `"7 noites"`).
+- `tests/domain.test.js`:
+  - Adicionadas asserções adversariais cobrindo valores numéricos astronômicos, strings com permanência excessiva, `Infinity` e formato `"7 noites"`, mantendo 100% de sucesso nos gates de validação.
+
 ## [v2.14.1] - 2026-10-13 — Blindagem Defensiva de parsePreco (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Domínio Calculadora de Preços)

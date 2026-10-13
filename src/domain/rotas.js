@@ -144,17 +144,18 @@ export function calcularDataVolta(dataIdaStr, campoVolta) {
   if (ehSoIda(campoVolta)) return null;
 
   const strTrim = String(campoVolta).trim();
-  // Reconhece formatos de duração como: "10", "10 dias", "10d", "14 (dias)", etc.
-  const matchDias = strTrim.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)))?$/i);
+  // Reconhece formatos de duração como: "10", "10 dias", "10d", "14 (dias)", "7 noites", "7n", etc.
+  const matchDias = strTrim.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)|noites?|n))?$/i);
   if ((!isNaN(campoVolta) && typeof campoVolta === 'number') || matchDias) {
     const dias = matchDias ? parseInt(matchDias[1], 10) : parseInt(strTrim, 10);
-    if (dias > 0 && dataIdaStr) {
+    if (dias > 0 && Number.isFinite(dias) && dias <= 3650 && dataIdaStr) {
       const dataIdaNorm = formatarDataParaBusca(dataIdaStr);
       if (!dataIdaNorm) return null;
       const [ano, mes, dia] = dataIdaNorm.split('-').map(Number);
       const dataIda = new Date(Date.UTC(ano, mes - 1, dia));
       if (isNaN(dataIda.getTime())) return null;
       dataIda.setUTCDate(dataIda.getUTCDate() + dias);
+      if (isNaN(dataIda.getTime())) return null;
       return dataIda.toISOString().split('T')[0];
     }
     return null;
