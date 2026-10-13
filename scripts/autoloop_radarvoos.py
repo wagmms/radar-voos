@@ -370,7 +370,7 @@ def obter_credenciais_telegram(token_override=None, chat_override=None):
                 pass
     return token, chat_id
 
-def enviar_notificacao_telegram(texto_html, token=None, chat_id=None):
+def enviar_notificacao_telegram(texto_html, token=None, chat_id=None, inline_keyboard=None):
     t, c = obter_credenciais_telegram(token, chat_id)
     if not t or not c:
         return False
@@ -382,6 +382,9 @@ def enviar_notificacao_telegram(texto_html, token=None, chat_id=None):
         "parse_mode": "HTML",
         "disable_web_page_preview": True
     }
+    if inline_keyboard:
+        payload["reply_markup"] = {"inline_keyboard": inline_keyboard}
+
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
 
@@ -441,7 +444,10 @@ def enviar_relatorio_ciclo_telegram(token=None, chat_id=None, branch_alvo=BRANCH
         f"🎯 <b>Próxima Tarefa em Foco:</b>\n<i>{html.escape(proxima_tarefa)}</i>\n\n"
         f"💡 <i>Gerenciado via IA HUB no monitor visível do PC.</i>"
     )
-    enviou = enviar_notificacao_telegram(msg_html, token, chat_id)
+    inline_keyboard = [
+        [{"text": "🚀 Fazer Deploy no Render", "callback_data": "deploy:now"}]
+    ]
+    enviou = enviar_notificacao_telegram(msg_html, token, chat_id, inline_keyboard=inline_keyboard)
     if enviou:
         salvar_estado_notificacao(commit_hash, agora_ts)
         log("TELEGRAM", f"📲 Relatório do commit {commit_hash} enviado com sucesso ao Telegram.")
