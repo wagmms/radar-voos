@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.13.2] - 2026-10-13 — Blindagem Defensiva de resolverCodigoParaLink (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Resolução de Aeroportos e Links)
+- `src/domain/rotas.js`:
+  - `resolverCodigoParaLink`: adicionada sanitização defensiva contra entradas nulas (`null`, `undefined`), strings vazias (`""`) e strings com apenas espaços (`"   "`, `"\t\n  "`), garantindo o retorno consistente do fallback padrão `'SAO'`. Adicionado suporte case-insensitive para extração de códigos IATA entre parênteses (ex: `'São Paulo (gru)'` -> `'GRU'`), prevenindo geração de URLs quebradas ou descontextualizadas no Google Flights.
+- `tests/domain.test.js`:
+  - Adicionado caso de teste adversarial validando resiliência a nulos, strings vazias, espaços em branco e IATA minúsculo entre parênteses (suíte com 323 testes aprovados com 100% de sucesso).
+
 ## [v2.13.1] - 2026-10-13 — Blindagem Defensiva de Cabine em detectarBugFareEstatistico (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Detecção de Bug Fares)

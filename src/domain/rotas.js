@@ -232,10 +232,13 @@ export const KGMID_PARA_NOME = {
  * Converte códigos IATA, KGMIDs, regiões ou nomes com parênteses em termos aceitos e funcionais no Google Flights
  */
 export function resolverCodigoParaLink(cod) {
-  if (!cod) return 'SAO';
+  if (cod === null || cod === undefined) return 'SAO';
   const str = String(cod).trim();
-  const matchIata = str.match(/\(([A-Z]{3})\)/);
-  if (matchIata) return matchIata[1];
+  if (!str) return 'SAO';
+
+  const matchIata = str.match(/\(([A-Za-z]{3})\)/i);
+  if (matchIata) return matchIata[1].toUpperCase();
+
   if (KGMID_PARA_NOME[str]) return KGMID_PARA_NOME[str];
   const limpoLower = normalizarTexto(str);
   if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'South America';

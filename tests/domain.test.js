@@ -10,7 +10,8 @@ import {
   extrairDiasEstadia,
   formatarDataParaBusca,
   gerarTfs,
-  gerarLinkGoogleFlightsCheapest
+  gerarLinkGoogleFlightsCheapest,
+  resolverCodigoParaLink
 } from '../src/domain/rotas.js';
 
 describe('Domínio: Rotas e Resolução Aeronáutica', () => {
@@ -144,5 +145,24 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.match(linkCheapestRoundTrip, /tfs=/);
     assert.match(linkCheapestRoundTrip, /tfu=EgoIABAAGAAgAigD/);
     assert.match(linkCheapestRoundTrip, /gl=BR/);
+  });
+
+  it('resolverCodigoParaLink: deve lidar defensivamente com nulos, strings vazias, espaços e IATA minúsculo entre parênteses', () => {
+    // Entradas nulas, vazias e somente espaços devem retornar fallback seguro 'SAO'
+    assert.strictEqual(resolverCodigoParaLink(null), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink(undefined), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink(''), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink('   '), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink('\t\n  '), 'SAO');
+
+    // Código IATA entre parênteses minúsculo ou com espaços deve ser normalizado para maiúsculo
+    assert.strictEqual(resolverCodigoParaLink('São Paulo (gru)'), 'GRU');
+    assert.strictEqual(resolverCodigoParaLink('(gig)'), 'GIG');
+    assert.strictEqual(resolverCodigoParaLink('Buenos Aires (eze)'), 'EZE');
+
+    // KGMID e nomes canônicos de regiões
+    assert.strictEqual(resolverCodigoParaLink('/m/02j9z'), 'Europe');
+    assert.strictEqual(resolverCodigoParaLink('europa'), 'Europe');
+    assert.strictEqual(resolverCodigoParaLink('eua'), 'United States');
   });
 });
