@@ -58,7 +58,7 @@ export function ehSoIda(campoVolta) {
   const str = String(campoVolta).trim();
   if (str === '') return true;
 
-  const limpo = normalizarTexto(str);
+  const limpo = normalizarTexto(str).replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
   return (
     limpo === 'so ida' ||
     limpo === 'soida' ||

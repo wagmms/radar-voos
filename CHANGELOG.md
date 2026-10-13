@@ -4,6 +4,23 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.5] - 2026-10-13 — Suporte a Moedas Dinâmicas e Conversão de Diárias Internacionais (calculadora)
+
+### 🚀 Funcionalidades & Inteligência de Domínio
+- `src/domain/calculadora.js` · `avaliarCustoDestinoComTotal`:
+  - Implementado suporte completo a moedas dinâmicas (`moeda: 'USD'`, `'EUR'`, `'GBP'`, etc.) com conversão de voo e diária para a moeda alvo.
+  - Implementada inferência geográfica inteligente para destinos internacionais fora do dicionário base (`DICIONARIO_CUSTO_DESTINO`), com resolução de região via `obterInfoAeroporto` e moeda/diária nativa de referência (`DIARIAS_REGIONAIS_PADRAO`).
+  - Adicionado suporte a ajustes específicos de custo por país (`AJUSTES_PAIS_CUSTO`) para destinos de alto custo (Reino Unido com GBP, Suíça com CHF, Japão com JPY, Canadá com CAD, Austrália com AUD).
+  - Adicionada detecção automática de cidades nacionais e aeroportos brasileiros via `DICIONARIO_CIDADES` (`DOMESTICO`), evitando fallback genérico internacional.
+  - Adicionado suporte à injeção de cotações personalizadas (`cotacoes`) e diárias customizadas (`diariaCustomizada`).
+  - Implementada função utilitária `converterMoeda` com cotações padrão de 15 moedas (`COTACOES_PADRAO`) e fallback defensivo contra valores não-finitos.
+- `src/domain/rotas.js` · `ehSoIda`:
+  - Normalização de strings com underscores (`SO_IDA`), assegurando classificação precisa de voos só ida.
+- `tests/calculadora.test.js`:
+  - Adicionados 5 novos testes cobrindo conversão de moedas cruzadas, destinos internacionais fora do dicionário (Viena, Sydney, Toronto), cidades nacionais (Joinville), moedas dinâmicas e robustez contra casos de borda (totalizando 273/273 testes aprovados).
+
+---
+
 ## [v2.10.4] - 2026-10-13 — QA & Blindagem Adversarial em `parsePreco` (calculadora)
 
 ### 🛡️ Blindagem de QA Adversarial

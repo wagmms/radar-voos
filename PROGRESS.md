@@ -1,27 +1,27 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.10.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.10.5)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.10.2 100% operacional com 266/266 testes JS e 10/10 testes Python aprovados. Badges visuais de conexões e stopover noturno implementadas no Cockpit PWA com detecção de 5 modalidades de escala.
-- **Diretriz Prioritária**: Aumentar a precisão de extração de dados de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
-- **Última Tarefa Concluída**: `src/public/js/conexao_badges.js` & `src/public/app.js` · `renderizarRotas` & `conexao_badges` · Implementado módulo de badges visuais de conexões e stopover com detecção de 5 modalidades (Voo Direto, Conexão Rápida <=3h, Conexão Moderada, Escala Prolongada >8h e Escala Noturna/Pernoite), com tags no cabeçalho e callout de stopover 2-em-1 responsivo para cards móveis. 19 novos testes dedicados (266/266 verdes).
+- **Estado Geral**: 🟢 Radar v2.10.5 100% operacional com 273/273 testes JS e 10/10 testes Python aprovados. Suporte a moedas dinâmicas e estimativas realistas para destinos internacionais fora do dicionário ativo.
+- **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
+- **Última Tarefa Concluída**: `src/domain/calculadora.js` · `avaliarCustoDestinoComTotal` · Implementado suporte a moedas dinâmicas (USD, EUR, GBP), cotações customizadas, diárias customizadas e estimativa de diárias para destinos fora do dicionário base via inferência geográfica de aeroportos/regiões e cidades nacionais (`DOMESTICO`), com função `converterMoeda` e blindagem de `ehSoIda` contra underscores (`SO_IDA`). 5 novos testes dedicados (273/273 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/domain/calculadora.js`
-- **Função/Componente/Seletor**: `avaliarCustoDestinoComTotal`
-- **Comportamento Esperado / Critério de Aceite**: Adicionar suporte a moedas dinâmicas e conversão de diárias internacionais para destinos fora do dicionário base, garantindo fallback defensivo e estimativa realista de custo total da viagem.
+- **Arquivo/Módulo Alvo**: `src/domain/rotas.js`
+- **Função/Componente/Seletor**: `gerarLinkGoogleFlightsCheapest`
+- **Comportamento Esperado / Critério de Aceite**: Adicionar suporte a múltiplos passageiros (adultos, crianças) e seleção de classe de cabine (Premium Economy / Business / First) na construção do payload Protobuf tfs do Google Flights, garantindo links canônicos navegáveis e coerentes.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/domain/rotas.js` • `gerarLinkGoogleFlightsCheapest` • Suporte a múltiplos passageiros e seleção de cabine (Premium Economy / Business) no payload tfs.
 - [ ] `src/services/notifier_telegram.js` • `enviarAlertaBugFare` • Adicionar botão inline com atalho de consulta direta de regras de bagagem da rota.
 - [ ] `src/public/app.js` • `criarCardRota` • Adicionar botão de cópia rápida do link do Google Flights para a área de transferência com feedback toast.
+- [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Suporte à passagem de moeda configurada pelo usuário nas checagens de rota.
 
 ---
 

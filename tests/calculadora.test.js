@@ -6,7 +6,10 @@ import {
   avaliarCustoDestinoComTotal,
   avaliarTermometro,
   analisarLayoversEStopover,
-  classificarDeltaPreco
+  classificarDeltaPreco,
+  converterMoeda,
+  COTACOES_PADRAO,
+  DIARIAS_REGIONAIS_PADRAO
 } from '../src/domain/calculadora.js';
 
 describe('Domínio: Calculadora e Inteligência de Preços', () => {
@@ -169,6 +172,144 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(stringNumerica.categoria, 'OPORTUNIDADE');
     assert.strictEqual(stringNumerica.zScore, -1.17);
     assert.strictEqual(stringNumerica.quedaPct, 35);
+  });
+
+  it('deve converter valores entre moedas com precisão e fallback defensivo', () => {
+    // 1. Conversão padrão BRL -> USD e USD -> BRL
+    // Cotação USD: 5.50
+    assert.strictEqual(converterMoeda(550, 'BRL', 'USD'), 100);
+    assert.strictEqual(converterMoeda(100, 'USD', 'BRL'), 550);
+
+    // 2. Mesma moeda retorna o próprio valor
+    assert.strictEqual(converterMoeda(150, 'EUR', 'EUR'), 150);
+
+    // 3. Conversão cruzada USD -> EUR
+    // 100 USD = 550 BRL -> 550 / 6.00 = 91.67 EUR
+    assert.strictEqual(converterMoeda(100, 'USD', 'EUR'), 91.67);
+
+    // 4. Cotação personalizada injetada
+    assert.strictEqual(converterMoeda(100, 'USD', 'BRL', { USD: 6.00 }), 600);
+
+    // 5. Casos de borda: valores negativos, nulos, NaN e moedas desconhecidas
+    assert.strictEqual(converterMoeda(-50, 'USD', 'BRL'), 0);
+    assert.strictEqual(converterMoeda(0, 'USD', 'BRL'), 0);
+    assert.strictEqual(converterMoeda(null, 'USD', 'BRL'), 0);
+    assert.strictEqual(converterMoeda(NaN, 'USD', 'BRL'), 0);
+    assert.strictEqual(converterMoeda(100, 'MOEDA_DESCONHECIDA', 'BRL'), 100);
+  });
+
+  it('deve estimar custo diário de destinos internacionais fora do dicionário base via inferência geográfica', () => {
+    // 1. Viena (VIE) - Áustria, Europa: não está no dicionário base, deve inferir EUROPA (~€85 | ~R$ 510/dia)
+    const custoViena = avaliarCustoDestinoComTotal('VIE', 'Viena (VIE)', 2500, '2026-11-01', '2026-11-08');
+    assert.strictEqual(custoViena.diasViagem, 7);
+    assert.strictEqual(custoViena.origemEstimativa, 'REGIAO_AEROPORTO');
+    assert.strictEqual(custoViena.regiaoEstimada, 'EUROPA');
+    assert.strictEqual(custoViena.moedaOrigem, 'EUR');
+    assert.strictEqual(custoViena.valorDiarioMoedaOrigem, 85);
+    assert.strictEqual(custoViena.valorDiarioBrl, 510);
+    assert.strictEqual(custoViena.custoTerrestre, 7 * 510);
+    assert.strictEqual(custoViena.custoTotalEstimado, 2500 + (7 * 510));
+    assert.match(custoViena.textoBase, /€85/);
+
+    // 2. Sydney (SYD) - Austrália: inferência específica de país via AJUSTES_PAIS_CUSTO
+    const custoSydney = avaliarCustoDestinoComTotal('SYD', 'Sydney (SYD)', 4000, '2026-12-01', '2026-12-11');
+    assert.strictEqual(custoSydney.diasViagem, 10);
+    assert.strictEqual(custoSydney.moedaOrigem, 'AUD');
+    assert.strictEqual(custoSydney.valorDiarioMoedaOrigem, 170);
+    assert.strictEqual(custoSydney.valorDiarioBrl, 612);
+    assert.strictEqual(custoSydney.custoTerrestre, 6120);
+    assert.strictEqual(custoSydney.custoTotalEstimado, 10120);
+    assert.match(custoSydney.textoBase, /A\$170/);
+
+    // 3. Toronto (YYZ) - Canadá: inferência de país com CAD
+    const custoToronto = avaliarCustoDestinoComTotal('YYZ', 'Toronto (YYZ)', 2800, '2026-11-10', '2026-11-15');
+    assert.strictEqual(custoToronto.diasViagem, 5);
+    assert.strictEqual(custoToronto.moedaOrigem, 'CAD');
+    assert.strictEqual(custoToronto.valorDiarioMoedaOrigem, 160);
+    assert.strictEqual(custoToronto.valorDiarioBrl, 640);
+  });
+
+  it('deve estimar destinos nacionais fora do dicionário base com diária doméstica realista', () => {
+    // Joinville (JOI): não está no DICIONARIO_CUSTO_DESTINO, mas está catalogado
+    const custoJoinville = avaliarCustoDestinoComTotal('JOI', 'Joinville (JOI)', 600, '2026-10-05', '2026-10-09');
+    assert.strictEqual(custoJoinville.diasViagem, 4);
+    assert.strictEqual(custoJoinville.valorDiarioBrl, 180);
+    assert.strictEqual(custoJoinville.custoTerrestre, 720);
+    assert.strictEqual(custoJoinville.custoTotalEstimado, 1320);
+    assert.strictEqual(custoJoinville.moedaOrigem, 'BRL');
+    assert.match(custoJoinville.textoBase, /Nacional/);
+  });
+
+  it('deve suportar cálculo de custo total com moedas dinâmicas e cotações personalizadas', () => {
+    // 1. Solicitação em USD para destino em Paris (que custa R$ 700/dia no dicionário)
+    // Preço voo: R$ 3.300 -> em USD (cotacao 5.50): 600 USD
+    // Diária: R$ 700 -> em USD: 127.27 USD
+    // 6 dias: custoTerrestre = 6 * 127.27 = 764 USD
+    // custoTotal = 600 + 764 = 1364 USD
+    const custoParisUsd = avaliarCustoDestinoComTotal(
+      'Paris',
+      'Paris',
+      3300,
+      '2026-10-10',
+      '2026-10-16',
+      { moeda: 'USD' }
+    );
+    assert.strictEqual(custoParisUsd.moeda, 'USD');
+    assert.strictEqual(custoParisUsd.simboloMoeda, '$');
+    assert.strictEqual(custoParisUsd.diasViagem, 6);
+    assert.strictEqual(custoParisUsd.valorDiario, 127.27);
+    assert.strictEqual(custoParisUsd.custoTotalEstimado, 1364);
+    assert.match(custoParisUsd.textoResumo, /Total 6d: ~\$ 1364/);
+
+    // 2. Parâmetro simples de string 'USD' como opções
+    const custoStringOpcao = avaliarCustoDestinoComTotal('Paris', 'Paris', 3300, '2026-10-10', '2026-10-16', 'USD');
+    assert.strictEqual(custoStringOpcao.moeda, 'USD');
+
+    // 3. Cotação dinâmica customizada (ex: EUR a R$ 6.50)
+    const custoCotacaoCustom = avaliarCustoDestinoComTotal(
+      'Lisboa',
+      'Lisboa',
+      3000,
+      '2026-10-10',
+      '2026-10-15',
+      { moeda: 'EUR', cotacoes: { EUR: 6.00 } }
+    );
+    assert.strictEqual(custoCotacaoCustom.moeda, 'EUR');
+    assert.strictEqual(custoCotacaoCustom.simboloMoeda, '€');
+
+    // 4. Diária customizada sobreposta
+    const custoCustomizado = avaliarCustoDestinoComTotal(
+      'Qualquer Destino',
+      'Qualquer Destino',
+      1000,
+      '2026-10-10',
+      '2026-10-13',
+      { diariaCustomizada: 450 }
+    );
+    assert.strictEqual(custoCustomizado.origemEstimativa, 'CUSTOMIZADA');
+    assert.strictEqual(custoCustomizado.valorDiarioBrl, 450);
+    assert.strictEqual(custoCustomizado.custoTerrestre, 3 * 450);
+  });
+
+  it('deve lidar defensivamente com casos de borda e entradas adversariais em avaliarCustoDestinoComTotal', () => {
+    // 1. Destinos nulos/indefinidos
+    const resNulo = avaliarCustoDestinoComTotal(null, null, 1000);
+    assert.strictEqual(resNulo.origemEstimativa, 'FALLBACK_PADRAO');
+    assert.strictEqual(resNulo.valorDiario, 300);
+
+    // 2. Datas invertidas (volta antes da ida) -> diasViagem = 0
+    const resDataInvertida = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 2000, '2026-10-20', '2026-10-10');
+    assert.strictEqual(resDataInvertida.diasViagem, 0);
+    assert.strictEqual(resDataInvertida.custoTerrestre, 0);
+
+    // 3. Preço de voo negativo ou string corrompida
+    const resPrecoNegativo = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', -500, '2026-10-10', '2026-10-15');
+    assert.strictEqual(resPrecoNegativo.custoTotalEstimado, 5 * 380);
+
+    // 4. Só ida
+    const resSoIda = avaliarCustoDestinoComTotal('Lisboa', 'Lisboa', 1500, '2026-10-10', 'SO_IDA');
+    assert.strictEqual(resSoIda.diasViagem, 0);
+    assert.match(resSoIda.textoResumo, /Só Ida/);
   });
 });
 
