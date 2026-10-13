@@ -5,7 +5,8 @@ import {
   calcularVariacao,
   avaliarCustoDestinoComTotal,
   avaliarTermometro,
-  analisarLayoversEStopover
+  analisarLayoversEStopover,
+  classificarDeltaPreco
 } from '../src/domain/calculadora.js';
 
 describe('Domínio: Calculadora e Inteligência de Preços', () => {
@@ -92,5 +93,38 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     });
     assert.strictEqual(resStringValida.layoversValidos.length, 1);
     assert.match(resStringValida.dicaStopover, /9h em PTY/);
+  });
+
+  it('deve classificar deltas estatísticos com Z-Score (padrão proactive-agent)', () => {
+    // 1. Z-Score <= -2.5 (BUG_FARE anômalo)
+    // Média = 4000, DP = 500, Preço = 2600 -> Z-Score = (2600-4000)/500 = -2.8
+    const bugFareDelta = classificarDeltaPreco({ preco: 2600, media: 4000, desvioPadrao: 500 });
+    assert.strictEqual(bugFareDelta.categoria, 'BUG_FARE');
+    assert.strictEqual(bugFareDelta.zScore, -2.8);
+    assert.strictEqual(bugFareDelta.quedaPct, 35);
+
+    // 2. Z-Score <= -1.5 (OPORTUNIDADE comprovada)
+    // Média = 4000, DP = 500, Preço = 3100 -> Z-Score = (3100-4000)/500 = -1.8
+    const oportunidadeZ = classificarDeltaPreco({ preco: 3100, media: 4000, desvioPadrao: 500 });
+    assert.strictEqual(oportunidadeZ.categoria, 'OPORTUNIDADE');
+    assert.strictEqual(oportunidadeZ.zScore, -1.8);
+
+    // 3. Queda >= 30% sem desvio padrão robusto (OPORTUNIDADE)
+    // Média = 3000, DP = null, Preço = 2000 -> queda = 33.3%
+    const oportunidadePct = classificarDeltaPreco({ preco: 2000, media: 3000, desvioPadrao: null });
+    assert.strictEqual(oportunidadePct.categoria, 'OPORTUNIDADE');
+    assert.strictEqual(oportunidadePct.zScore, null);
+    assert.strictEqual(oportunidadePct.quedaPct, 33.3);
+
+    // 4. Oscilação normal de mercado (INFO)
+    // Média = 4000, DP = 500, Preço = 3800 -> Z-Score = -0.4, queda = 5%
+    const normalDelta = classificarDeltaPreco({ preco: 3800, media: 4000, desvioPadrao: 500 });
+    assert.strictEqual(normalDelta.categoria, 'INFO');
+    assert.strictEqual(normalDelta.zScore, -0.4);
+
+    // 5. Entradas inválidas ou nulas retornam INFO seguro
+    const nuloDelta = classificarDeltaPreco({ preco: 0, media: null });
+    assert.strictEqual(nuloDelta.categoria, 'INFO');
+    assert.strictEqual(nuloDelta.zScore, null);
   });
 });

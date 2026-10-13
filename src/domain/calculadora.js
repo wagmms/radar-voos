@@ -163,3 +163,50 @@ export function analisarLayoversEStopover(voo) {
 
   return { layoversValidos, dicaStopover };
 }
+
+export const ZSCORE_LIMIAR_BUG_FARE = -2.5;
+export const ZSCORE_LIMIAR_OPORTUNIDADE = -1.5;
+export const QUEDA_PCT_OPORTUNIDADE = 30; // 30%
+
+/**
+ * Classifica a variação estatística de uma tarifa frente à série histórica da rota monitorada.
+ * Padrão proactive-agent (Zero Ruído):
+ * - BUG_FARE: Z-Score <= -2.5 (anomalia estatística severa)
+ * - OPORTUNIDADE: Z-Score <= -1.5 OU queda >= 30% em relação à média recente
+ * - INFO: Oscilação normal de mercado (sem anomalia)
+ *
+ * @param {Object} params
+ * @param {number} params.preco Preço atual obtido
+ * @param {number|null} [params.media] Média de preço histórica
+ * @param {number|null} [params.desvioPadrao] Desvio padrão amostral
+ * @returns {{ categoria: 'INFO'|'OPORTUNIDADE'|'BUG_FARE', zScore: number|null, quedaPct: number, media: number|null, desvioPadrao: number|null }}
+ */
+export function classificarDeltaPreco({ preco, media = null, desvioPadrao = null } = {}) {
+  if (!preco || preco <= 0 || !media || media <= 0) {
+    return {
+      categoria: 'INFO',
+      zScore: null,
+      quedaPct: 0,
+      media: media || null,
+      desvioPadrao: desvioPadrao || null
+    };
+  }
+
+  const quedaPct = ((media - preco) / media) * 100;
+  let zScore = null;
+
+  if (desvioPadrao && desvioPadrao >= 30) {
+    zScore = Number(((preco - media) / desvioPadrao).toFixed(2));
+    if (zScore <= ZSCORE_LIMIAR_BUG_FARE) {
+      return { categoria: 'BUG_FARE', zScore, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+    }
+    if (zScore <= ZSCORE_LIMIAR_OPORTUNIDADE) {
+      return { categoria: 'OPORTUNIDADE', zScore, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+    }
+  } else if (quedaPct >= QUEDA_PCT_OPORTUNIDADE) {
+    // Sem desvio padrão robusto: queda >= 30% em relação à média recente
+    return { categoria: 'OPORTUNIDADE', zScore: null, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+  }
+
+  return { categoria: 'INFO', zScore, quedaPct: Number(quedaPct.toFixed(1)), media, desvioPadrao };
+}

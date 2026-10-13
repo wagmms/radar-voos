@@ -546,7 +546,7 @@ export const bugFaresRepo = {
  * Operações de Alertas (Deduplicação Inteligente)
  */
 export const alertasRepo = {
-  deveDisparar: (chaveAlerta, precoAtual, precoAnterior, precoAlvo, ehRecordeMinimo, nivelPreco, pctVariacao) => {
+  deveDisparar: (chaveAlerta, precoAtual, precoAnterior, precoAlvo, ehRecordeMinimo, nivelPreco, pctVariacao, options = {}) => {
     // 1. REGRA ABSOLUTA DE DEPLOY / INICIALIZAÇÃO:
     // Nunca disparar alerta na primeira checagem de uma rota. A primeira checagem serve estritamente para registrar baseline.
     if (!precoAnterior || precoAnterior <= 0) {
@@ -563,10 +563,24 @@ export const alertasRepo = {
       return { deve: false, motivo: 'acima_preco_alvo' };
     }
 
+    // 2b. SUPRESSÃO DE RUÍDO & DETECÇÃO DE DELTA (proactive-agent):
+    const cruzouMetaAbaixo = temPrecoAlvo && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
+    const ehOportunidadeDelta = options.classificacaoDelta === 'OPORTUNIDADE' ||
+      (typeof options.zScore === 'number' && options.zScore <= -1.5) ||
+      (typeof options.deltaMediaPct === 'number' && options.deltaMediaPct >= 30);
+
     // Se NÃO tem preço alvo definido pelo usuário:
-    // Só pode alertar se for uma oportunidade comprovada (nível LOW do Google Flights E queda expressiva).
-    if (!temPrecoAlvo && (nivelPreco !== 'LOW' || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
-      return { deve: false, motivo: 'sem_meta_e_fora_dos_criterios_estritos' };
+    // Só pode alertar se for uma oportunidade comprovada:
+    // - Oportunidade estatística (Z-Score <= -1.5 ou queda >= 30% da média móvel)
+    // - OU nível LOW do Google Flights E queda expressiva
+    if (!temPrecoAlvo) {
+      if (options.classificacaoDelta === 'INFO' && !ehOportunidadeDelta) {
+        return { deve: false, motivo: 'oscilacao_normal_mercado_info' };
+      }
+
+      if (!ehOportunidadeDelta && (nivelPreco !== 'LOW' || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
+        return { deve: false, motivo: 'sem_meta_e_fora_dos_criterios_estritos' };
+      }
     }
 
     const db = getDb();
@@ -602,7 +616,6 @@ export const alertasRepo = {
     }
 
     // 4. IDENTIFICAÇÃO DO GATILHO VÁLIDO DENTRO DOS CRITÉRIOS DO USUÁRIO:
-    const cruzouMetaAbaixo = temPrecoAlvo && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
     const ehQuedaExpressiva = pctVariacao <= -config.radar.gatilhoQuedaRelampagoPct;
     const ehNovoRecordeReal = ehRecordeMinimo && (!ultimo || precoAtual < ultimo.preco);
 
@@ -612,6 +625,9 @@ export const alertasRepo = {
     if (cruzouMetaAbaixo) {
       deveAlertar = true;
       tipoAlerta = 'ATINGIU_META';
+    } else if (ehOportunidadeDelta) {
+      deveAlertar = true;
+      tipoAlerta = 'OPORTUNIDADE_ESTATISTICA';
     } else if (ehQuedaExpressiva) {
       deveAlertar = true;
       tipoAlerta = 'QUEDA_RELAMPAGO';

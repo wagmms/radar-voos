@@ -4,6 +4,28 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.9.5] - 2026-10-13 — Detecção de Deltas com Z-Score no FlightScanner & ExecutarCicloVarredura
+
+### 🚀 Novas Funcionalidades & Arquitetura Proativa
+- `src/domain/calculadora.js` · `classificarDeltaPreco`:
+  - Implementada função pura de análise estatística de tarifas e cálculo de Z-Score sobre histórico amostral.
+  - Classificação estrita de deltas conforme o padrão proactive-agent (Zero Ruído):
+    - `BUG_FARE`: $Z \le -2.5$ (anomalia tarifária crítica).
+    - `OPORTUNIDADE`: $Z \le -1.5$ ou queda comprovada $\ge 30\%$ em relação à média recente.
+    - `INFO`: Oscilação normal de mercado (sem anomalia).
+- `src/db.js` · `alertasRepo.deveDisparar`:
+  - Supressão de ruído para oscilações normais de mercado (`INFO`) quando o usuário não possui preço alvo ou quando não há cruzamento de meta.
+  - Disparo de oportunidade estatística comprovada (`OPORTUNIDADE_ESTATISTICA`) em tempo hábil com respeito a cooldowns e deduplicação inteligente.
+- `src/services/flight_scanner.js`:
+  - Integração da telemetria de deltas em `escanearRota`, enriquecendo os resultados com `deltaEstatistico`.
+  - Implementado `FlightScanner.executarCicloVarredura({ forcarTodas, limite, aplicarJitter })` para orquestração modular da fila LRU.
+- `src/services/scheduler.js`:
+  - Refatoração limpa do ciclo periódico delegando a varredura para `FlightScanner.executarCicloVarredura`.
+- `tests/flight_scanner.test.js`, `tests/calculadora.test.js` & `tests/alertas_criterios.test.js`:
+  - 6 novos testes cobrindo Z-Score, supressão de ruído INFO, disparo de oportunidade e ciclo de varredura (211/211 testes passando com 100% de sucesso).
+
+---
+
 ## [v2.9.4] - 2026-10-13 — QA & Blindagem Defensiva em `analisarLayoversEStopover`
 
 ### 🛡️ Blindagem de QA Adversarial

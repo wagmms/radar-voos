@@ -51,37 +51,26 @@ class Scheduler {
 
     try {
       // Fila justa LRU de rotas (varre voos diretamente no motor com detecção de Bug Fares)
-      const rotas = forcarTodas
-        ? rotasRepo.listarTodas(true)
-        : rotasRepo.obterFilaLru(1);
+      const resultadoVarredura = await FlightScanner.executarCicloVarredura({
+        forcarTodas,
+        limite: 1,
+        aplicarJitter: true
+      });
 
-      if (rotas.length === 0) {
+      const processadas = resultadoVarredura.processadas;
+      if (processadas === 0) {
         console.log('ℹ️ Nenhuma rota ativa aguardando checagem.');
-        return { ok: true, processadas: 0 };
-      }
-
-      let processadas = 0;
-      for (const rota of rotas) {
-        try {
-          console.log(`🛫 Verificando rota: ${rota.origem} ➔ ${rota.destino} (${rota.data_ida})`);
-          const res = await FlightScanner.escanearRota(rota);
-
-          if (res.sucesso && res.encontrou) {
-            console.log(`✅ Preço obtido: R$ ${res.oferta.preco.toFixed(2)} (${res.oferta.termometro})`);
-          } else if (res.sucesso && !res.encontrou) {
-            console.log(`⚪ Sem voos no filtro: ${res.mensagem}`);
-          } else {
-            console.log(`⚠️ Falha na checagem: ${res.erro}`);
+      } else {
+        for (const item of resultadoVarredura.resultados) {
+          if (item.res?.sucesso && item.res.encontrou) {
+            console.log(`✅ [${item.rota}] Preço obtido: R$ ${item.res.oferta.preco.toFixed(2)} (${item.res.oferta.termometro})`);
+          } else if (item.res?.sucesso && !item.res.encontrou) {
+            console.log(`⚪ [${item.rota}] Sem voos no filtro: ${item.res.mensagem}`);
+          } else if (item.res && !item.res.sucesso) {
+            console.log(`⚠️ [${item.rota}] Falha na checagem: ${item.res.erro}`);
+          } else if (item.erro) {
+            console.error(`❌ [${item.rota}] Erro inesperado:`, item.erro);
           }
-        } catch (err) {
-          console.error(`❌ Erro inesperado ao escanear rota ${rota.origem} ➔ ${rota.destino}:`, err.message);
-        }
-
-        processadas++;
-        // Pausa defensiva com jitter pseudo-aleatório (2.5s a 4.5s) para simular comportamento humano e quebrar cadência de bot
-        if (rotas.length > 1) {
-          const jitterMs = 2500 + Math.floor(Math.random() * 2000);
-          await new Promise(r => setTimeout(r, jitterMs));
         }
       }
 

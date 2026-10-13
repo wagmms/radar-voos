@@ -3,7 +3,8 @@ import { weatherService } from './weather_service.js';
 import {
   parsePreco,
   calcularVariacao,
-  avaliarCustoDestinoComTotal
+  avaliarCustoDestinoComTotal,
+  classificarDeltaPreco
 } from '../domain/calculadora.js';
 import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
@@ -271,6 +272,13 @@ export class FlightScanner {
       melhor_opcao_flexivel: melhorOpcaoFlexivel
     });
 
+    // 4b. Análise de Delta e Z-Score da Rota Monitorada (padrão proactive-agent)
+    const analiseDelta = classificarDeltaPreco({
+      preco: oferta.preco,
+      media: statsPreco.media,
+      desvioPadrao: statsPreco.desvioPadrao
+    });
+
     // 5. Inteligência de Alertas Regulares
     const chaveAlerta = rota.sem_data === 1
       ? `${rota.codigo_origem}_${rota.codigo_destino}_FLEXIVEL`
@@ -284,8 +292,18 @@ export class FlightScanner {
       rota.preco_alvo,
       ehRecorde,
       oferta.nivelPreco,
-      variacao.pct
+      variacao.pct,
+      {
+        zScore: analiseDelta.zScore,
+        deltaMediaPct: analiseDelta.quedaPct,
+        classificacaoDelta: analiseBug.ehBugFare ? 'BUG_FARE' : analiseDelta.categoria,
+        statsPreco
+      }
     );
+
+    if (!decisaoAlerta.deve && decisaoAlerta.motivo === 'oscilacao_normal_mercado_info') {
+      console.log(`🔇 [Zero Ruído / proactive-agent] ${rota.origem} ➔ ${rota.destino}: R$ ${oferta.preco.toFixed(2)} classificado como INFO (oscilação normal). Alerta suprimido.`);
+    }
 
     const rotaSilenciada = rotasRepo.estaSilenciada(rotaAtualizada);
 
@@ -318,7 +336,8 @@ export class FlightScanner {
       rotaAtualizada,
       clima,
       melhorOpcaoFlexivel,
-      ehBugFare: analiseBug.ehBugFare
+      ehBugFare: analiseBug.ehBugFare,
+      deltaEstatistico: analiseDelta
     };
   } catch (err) {
     rotasRepo.marcarFalhaChecagem(rota.id, `Erro inesperado: ${err.message}`);
@@ -328,4 +347,46 @@ export class FlightScanner {
     };
   }
 }
+
+  /**
+   * Executa ciclo de varredura orquestrado nas rotas monitoradas
+   * Fila justa anti-inanição (LRU) por padrão ou todas as rotas ativas.
+   *
+   * @param {Object} [params]
+   * @param {boolean} [params.forcarTodas=false] Varre todas as rotas ativas ou apenas o próximo lote
+   * @param {number} [params.limite=1] Quantidade de rotas da fila LRU a escanear
+   * @param {boolean} [params.aplicarJitter=false] Se deve aplicar jitter defensivo entre requisições
+   * @returns {Promise<{ ok: boolean, processadas: number, resultados: Array<{ rotaId: number, rota: string, res?: Object, erro?: string }> }>}
+   */
+  static async executarCicloVarredura({ forcarTodas = false, limite = 1, aplicarJitter = false } = {}) {
+    const rotas = forcarTodas
+      ? rotasRepo.listarTodas(true)
+      : rotasRepo.obterFilaLru(limite);
+
+    if (!rotas || rotas.length === 0) {
+      return { ok: true, processadas: 0, resultados: [] };
+    }
+
+    const resultados = [];
+    for (let i = 0; i < rotas.length; i++) {
+      const rota = rotas[i];
+      try {
+        const res = await FlightScanner.escanearRota(rota);
+        resultados.push({ rotaId: rota.id, rota: `${rota.origem} ➔ ${rota.destino}`, res });
+      } catch (err) {
+        resultados.push({ rotaId: rota.id, rota: `${rota.origem} ➔ ${rota.destino}`, erro: err.message });
+      }
+
+      if (aplicarJitter && rotas.length > 1 && i < rotas.length - 1) {
+        const jitterMs = 2500 + Math.floor(Math.random() * 2000);
+        await new Promise(r => setTimeout(r, jitterMs));
+      }
+    }
+
+    return {
+      ok: true,
+      processadas: resultados.length,
+      resultados
+    };
+  }
 }
