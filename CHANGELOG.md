@@ -4,6 +4,27 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.12.0] - 2026-10-13 — Botão de Cópia Rápida do Link Google Flights com Feedback Toast no Cockpit PWA
+
+### ✨ Novo Recurso (Cockpit PWA Anti-UI-Slop)
+- `src/public/js/card_rota.js`:
+  - Extração modular da função `criarCardRota(rota)` para geração componentizada dos cards de voo do Cockpit PWA.
+  - Implementação do botão de ação rápida `.btn-copy-link` no bloco `.card-actions` com ícone SVG de prancheta/cópia, tooltip e `aria-label="Copiar link do Google Flights"`.
+  - Implementação de `copiarLinkGoogleFlights(event, link, options)` com uso de `navigator.clipboard.writeText`, impedimento de propagação de clique (`event.stopPropagation()`), vibração táctil iOS/Android (`vibrarAoTocar`) e fallback defensivo com `document.execCommand('copy')`.
+  - Exibição de feedback toast visual temporário de 2s ("Link copiado! ✓") com tratamento de erros para links vazios ou permissão negada.
+  - Suporte a classes múltiplas acumuladas no card (ex: rota flexível que também atingiu a meta).
+- `src/public/app.js`:
+  - Integração limpa e concisa de `criarCardRota` e `copiarLinkGoogleFlights`, simplificando `renderizarRotas` de 170 linhas de template inline para mapeamento modular direto.
+  - Aprimoramento de `mostrarToast(mensagem, erro = false, duracaoMs = 4000)` para suportar duração customizável e aplicar classe `.fade-out` 300ms antes da remoção, garantindo transição visual suave.
+  - Exportação e vinculação global em `window` para suporte total a handlers de eventos inline.
+- `src/public/styles.css`:
+  - Adicionados estados `:hover` e `:active` refinados para `.btn-icon-action.btn-copy-link` com realce na cor primária ciano e feedback de pressão tátil (`scale(0.92)`).
+  - Adicionada animação `.toast.fade-out` com transição suave de opacidade e translação vertical.
+- `tests/card_rota.test.js`:
+  - Nova suíte de 12 testes unitários cobrindo estrutura do card, botão de cópia rápida, atributos de acessibilidade, escape defensivo de URLs adversariais, testes de cópia bem-sucedida, rejeição de erros, links vazios, identificação de cabine/tipo de viagem e utilitários de formatação (316/316 testes JS verdes).
+
+---
+
 ## [v2.11.1] - 2026-10-13 — Botão inline 🧳 Ver Regras de Bagagem no card de Bug Fare (Telegram)
 
 ### ✨ Novo Recurso

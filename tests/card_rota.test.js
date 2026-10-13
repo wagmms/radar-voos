@@ -1,0 +1,258 @@
+import { describe, it } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  criarCardRota,
+  copiarLinkGoogleFlights,
+  formatarCodigoBadge,
+  formatarDataBr,
+  escapeHtml
+} from '../src/public/js/card_rota.js';
+
+describe('Cockpit PWA: Card de Rota e Cópia Rápida de Link (card_rota.js)', () => {
+  const rotaPadrao = {
+    id: 101,
+    origem: 'São Paulo',
+    destino: 'Lisboa',
+    codigo_origem: 'GRU',
+    codigo_destino: 'LIS',
+    data_ida: '2026-11-15',
+    data_volta: '2026-11-28',
+    preco_atual: 2450.00,
+    preco_alvo: 2800.00,
+    menor_preco_historico: 2200.00,
+    termometro: '🟢 Preço Excelente',
+    detalhes_voo: 'TAP Air Portugal • Direto • 10h',
+    link_google_flights: 'https://www.google.com/travel/flights?tfs=CBEMA...&curr=BRL',
+    historico_recente: [2900, 2750, 2600, 2450]
+  };
+
+  it('deve gerar a estrutura HTML do card com botão de cópia rápida do Google Flights', () => {
+    const html = criarCardRota(rotaPadrao);
+
+    assert.ok(html.includes('id="card-rota-101"'), 'deve conter o ID do card');
+    assert.ok(html.includes('GRU'), 'deve exibir código de origem');
+    assert.ok(html.includes('LIS'), 'deve exibir código de destino');
+    assert.ok(html.includes('R$ 2450,00'), 'deve formatar preço atual');
+
+    // Botão de link externo tradicional
+    assert.ok(html.includes('class="btn-flights-external"'));
+    assert.ok(html.includes('target="_blank"'));
+    assert.ok(html.includes('rel="noopener noreferrer"'));
+
+    // Novo botão de cópia rápida
+    assert.ok(html.includes('btn-copy-link'), 'deve conter classe do botão de cópia rápida');
+    assert.ok(html.includes('title="Copiar link do Google Flights"'), 'deve ter tooltip de cópia rápida');
+    assert.ok(html.includes('aria-label="Copiar link do Google Flights"'), 'deve ser acessível');
+    assert.ok(html.includes('onclick="copiarLinkGoogleFlights(event,'), 'deve vincular evento onclick');
+    assert.ok(html.includes(escapeHtml(rotaPadrao.link_google_flights)), 'deve passar o link escapado para a função');
+  });
+
+  it('deve escapar atributos HTML defensivamente para evitar quebras por aspas ou caracteres especiais', () => {
+    const rotaComLinkEspecial = {
+      ...rotaPadrao,
+      id: 102,
+      link_google_flights: 'https://www.google.com/travel/flights?q="Lisboa"&destino=\'LIS\'&promo=1<2'
+    };
+
+    const html = criarCardRota(rotaComLinkEspecial);
+    assert.ok(html.includes('&quot;Lisboa&quot;'));
+    assert.ok(html.includes('&#39;LIS&#39;'));
+    assert.ok(!html.includes('onclick="copiarLinkGoogleFlights(event, \'https://www.google.com/travel/flights?q="Lisboa"'));
+  });
+
+  it('deve lidar graciosamente com rota vazia ou propriedades ausentes', () => {
+    assert.equal(criarCardRota(null), '');
+    assert.equal(criarCardRota(undefined), '');
+
+    const rotaMinima = {
+      id: 99,
+      origem: 'Rio de Janeiro',
+      destino: 'Madrid'
+    };
+
+    const html = criarCardRota(rotaMinima);
+    assert.ok(html.includes('id="card-rota-99"'));
+    assert.ok(html.includes('btn-copy-link'));
+    assert.ok(html.includes('Aguardando'));
+  });
+
+  it('deve aplicar status visual apropriado (meta atingida, promoção, flexível)', () => {
+    // Meta atingida (preço atual <= alvo)
+    const cardMeta = criarCardRota({
+      ...rotaPadrao,
+      preco_atual: 1500,
+      preco_alvo: 1600
+    });
+    assert.ok(cardMeta.includes('status-meta'));
+
+    // Flexível (sem data fixa)
+    const cardFlex = criarCardRota({
+      ...rotaPadrao,
+      sem_data: 1
+    });
+    assert.ok(cardFlex.includes('status-flexivel'));
+
+    // Promoção
+    const cardPromo = criarCardRota({
+      ...rotaPadrao,
+      preco_atual: 3000,
+      preco_alvo: 2000,
+      termometro: '🟢 Super Barato'
+    });
+    assert.ok(cardPromo.includes('status-promo'));
+  });
+
+  it('deve identificar Só Ida vs Ida e Volta e tags de cabine', () => {
+    const cardSoIda = criarCardRota({
+      ...rotaPadrao,
+      tipo_viagem: 'one_way',
+      data_volta: 'Só Ida'
+    });
+    assert.ok(cardSoIda.includes('SÓ IDA'));
+    assert.ok(cardSoIda.includes('➡️ Apenas Ida'));
+
+    const cardBusiness = criarCardRota({
+      ...rotaPadrao,
+      cabine: 'business'
+    });
+    assert.ok(cardBusiness.includes('BUSINESS'));
+  });
+
+  describe('copiarLinkGoogleFlights: Lógica de Cópia e Feedback Toast', () => {
+    it('deve copiar com sucesso via navigator.clipboard e exibir toast de 2s ("Link copiado! ✓")', async () => {
+      let textoCopiado = null;
+      let toastMensagem = null;
+      let toastErro = null;
+      let toastDuracao = null;
+      let vibracaoChamada = false;
+
+      const mockClipboard = {
+        writeText: async (txt) => {
+          textoCopiado = txt;
+        }
+      };
+
+      const mockToast = (msg, err, duracao) => {
+        toastMensagem = msg;
+        toastErro = err;
+        toastDuracao = duracao;
+      };
+
+      const mockVibrar = () => {
+        vibracaoChamada = true;
+      };
+
+      const fakeEvent = {
+        stopPropagation: () => {}
+      };
+
+      const url = 'https://www.google.com/travel/flights?tfs=CBEMA123';
+      const sucesso = await copiarLinkGoogleFlights(fakeEvent, url, {
+        clipboard: mockClipboard,
+        mostrarToast: mockToast,
+        vibrar: mockVibrar
+      });
+
+      assert.equal(sucesso, true);
+      assert.equal(textoCopiado, url);
+      assert.equal(toastMensagem, 'Link copiado! ✓');
+      assert.equal(toastErro, false);
+      assert.equal(toastDuracao, 2000, 'o feedback toast deve durar 2000ms (2s)');
+      assert.equal(vibracaoChamada, true);
+    });
+
+    it('deve impedir propagação do evento para não acionar cliques indesejados no card', async () => {
+      let propagacaoParada = false;
+      const fakeEvent = {
+        stopPropagation: () => {
+          propagacaoParada = true;
+        }
+      };
+
+      await copiarLinkGoogleFlights(fakeEvent, 'https://flights.google.com', {
+        clipboard: { writeText: async () => {} },
+        mostrarToast: () => {}
+      });
+
+      assert.equal(propagacaoParada, true);
+    });
+
+    it('deve retornar falso e notificar erro quando o link for vazio, nulo ou inválido', async () => {
+      let toastMensagem = null;
+      let toastErro = null;
+
+      const mockToast = (msg, err) => {
+        toastMensagem = msg;
+        toastErro = err;
+      };
+
+      // String vazia
+      const resVazio = await copiarLinkGoogleFlights(null, '', { mostrarToast: mockToast });
+      assert.equal(resVazio, false);
+      assert.equal(toastMensagem, 'Link não disponível para cópia');
+      assert.equal(toastErro, true);
+
+      // Null
+      const resNull = await copiarLinkGoogleFlights(null, null, { mostrarToast: mockToast });
+      assert.equal(resNull, false);
+
+      // '#'
+      const resHash = await copiarLinkGoogleFlights(null, '#', { mostrarToast: mockToast });
+      assert.equal(resHash, false);
+    });
+
+    it('deve capturar falhas na API de clipboard defensivamente sem lançar erro não tratado', async () => {
+      let toastMensagem = null;
+      let toastErro = null;
+
+      const mockClipboardComErro = {
+        writeText: async () => {
+          throw new Error('NotAllowedError: Permission denied');
+        }
+      };
+
+      const mockToast = (msg, err) => {
+        toastMensagem = msg;
+        toastErro = err;
+      };
+
+      const sucesso = await copiarLinkGoogleFlights(null, 'https://test.com', {
+        clipboard: mockClipboardComErro,
+        mostrarToast: mockToast
+      });
+
+      assert.equal(sucesso, false);
+      assert.equal(toastMensagem, 'Erro ao copiar link');
+      assert.equal(toastErro, true);
+    });
+  });
+
+  describe('Funções Utilitárias: Formatação e Escape', () => {
+    it('formatarCodigoBadge deve mapear códigos especiais de continentes', () => {
+      assert.equal(formatarCodigoBadge('/m/06_1'), 'AMSUL');
+      assert.equal(formatarCodigoBadge('/m/02j9z'), 'EUROPA');
+      assert.equal(formatarCodigoBadge('/m/02j1x'), 'ÁSIA');
+      assert.equal(formatarCodigoBadge('/m/02_286'), 'AMNORTE');
+      assert.equal(formatarCodigoBadge('/m/056_y'), 'AMCENTRAL');
+      assert.equal(formatarCodigoBadge('/m/0164v'), 'ÁFRICA');
+      assert.equal(formatarCodigoBadge('/m/05h_p'), 'OCEANIA');
+      assert.equal(formatarCodigoBadge('gru'), 'GRU');
+      assert.equal(formatarCodigoBadge(null), 'DEST');
+    });
+
+    it('formatarDataBr deve formatar datas ISO para padrão brasileiro DD/MM/AAAA', () => {
+      assert.equal(formatarDataBr('2026-12-25'), '25/12/2026');
+      assert.equal(formatarDataBr('2026-01-01'), '01/01/2026');
+      assert.equal(formatarDataBr(null), '-');
+      assert.equal(formatarDataBr(''), '-');
+    });
+
+    it('escapeHtml deve escapar todos os caracteres perigosos', () => {
+      assert.equal(escapeHtml('<script>alert("xss")</script>'), '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
+      assert.equal(escapeHtml('Tom & Jerry'), 'Tom &amp; Jerry');
+      assert.equal(escapeHtml("it's"), 'it&#39;s');
+      assert.equal(escapeHtml(null), '');
+      assert.equal(escapeHtml(undefined), '');
+    });
+  });
+});

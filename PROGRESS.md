@@ -1,27 +1,27 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.11.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.12.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.11.1 100% operacional com 304/304 testes JS e 10/10 testes Python aprovados. Botão contextual de regras de bagagem (`🧳 Ver Regras de Bagagem`) adicionado ao card de alerta de Bug Fare no Telegram, com URL parametrizada pelos IATAs da rota e degradação graciosa quando IATAs não disponíveis.
+- **Estado Geral**: 🟢 Radar v2.12.0 100% operacional com 316/316 testes JS e 10/10 testes Python aprovados. Cockpit PWA aprimorado com botão de cópia rápida do link do Google Flights (`.btn-copy-link`) com feedback toast de 2s ("Link copiado! ✓"), animação fade-out suave e fallback gracioso de área de transferência.
 - **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
-- **Última Tarefa Concluída**: `src/services/notifier_telegram.js` · `enviarAlertaBugFare` · Adicionado botão inline `🧳 Ver Regras de Bagagem` com URL parametrizada por IATAs da rota. `montarCardBugFare` em `src/domain/aeroportos.js` agora expõe `iata_origem` e `iata_destino`. 3 novos testes (304/304 verdes).
+- **Última Tarefa Concluída**: `src/public/js/card_rota.js` e `src/public/app.js` · `criarCardRota` & `copiarLinkGoogleFlights` · Adicionado botão de cópia rápida do link do Google Flights no card de rota do Cockpit PWA com toast animado temporário (2s) e feedback tátil. 12 novos testes unitários (316/316 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/public/app.js`
-- **Função/Componente/Seletor**: `criarCardRota`
-- **Comportamento Esperado / Critério de Aceite**: Adicionar botão de cópia rápida do link do Google Flights para a área de transferência (via `navigator.clipboard.writeText`) com feedback toast visual temporário ("Link copiado! ✓") que aparece 2s e desaparece com animação, integrado ao card de rota no Cockpit PWA.
+- **Arquivo/Módulo Alvo**: `src/services/flight_scanner.js`
+- **Função/Componente/Seletor**: `executarCicloVarredura`
+- **Comportamento Esperado / Critério de Aceite**: Suporte à passagem de moeda configurada pelo usuário (`moeda` ou `curr`, ex: 'BRL', 'USD', 'EUR') nas checagens de rota enviadas aos provedores de busca, garantindo consistência em cotações multimoeda.
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/notifier_telegram.js` • `enviarAlertaBugFare` • Adicionar botão inline com atalho de consulta direta de regras de bagagem da rota.
-- [ ] `src/public/app.js` • `criarCardRota` • Adicionar botão de cópia rápida do link do Google Flights para a área de transferência com feedback toast.
 - [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Suporte à passagem de moeda configurada pelo usuário nas checagens de rota.
+- [ ] `src/public/js/card_rota.js` • `criarCardRota` • Exibir badge informativa de emissão em milhas estimadas calculadas pela paridade configurada da rota.
+- [ ] `src/services/notifier_telegram.js` • `formatarAlertaTelegram` • Adicionar mini-tabela com histórico dos últimos 3 preços registrados da rota no corpo do alerta.
 
 ---
 

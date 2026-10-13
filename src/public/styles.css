@@ -791,6 +791,15 @@ body {
   border-color: var(--rose);
 }
 
+.btn-icon-action.btn-copy-link:hover {
+  color: var(--cyan-primary);
+  border-color: var(--cyan-primary);
+}
+
+.btn-icon-action.btn-copy-link:active {
+  transform: scale(0.92);
+}
+
 /* FEED BUG FARES */
 .section-header-box {
   display: flex;
@@ -1078,6 +1087,12 @@ body {
   font-size: 0.85rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
   animation: slideInRight 0.25s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast.fade-out {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 @keyframes slideInRight {
