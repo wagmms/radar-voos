@@ -623,32 +623,36 @@ def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, mod
         prompt_agents = f"\n### DIRETRIZES TÉCNICAS DO REPOSITÓRIO (AGENTS.md):\n{bloco_agents}\n" if bloco_agents else ""
 
         if modo_ciclo == "QA_ADVERSARIAL":
-            diretriz_modo = f"""
-### 🕵️ MODO ATIVO DESTE TURNO: QA ADVERSARIAL (CAÇADOR DE BUGS & REFINADOR DE EXPERIÊNCIA)
-Você está atuando como Engenheiro Chefe de QA, Fuzzing e Usabilidade do Radar de Voos.
-Sua missão primordial neste ciclo NÃO é criar novas grandes features do backlog, mas sim AUDITAR, TESTAR IMPLACAVELMENTE E POLIR AS FUNÇÕES EXISTENTES:
-1. SELECIONE UMA ÁREA EXISTENTE PARA AUDITAR E CAÇAR ERROS:
-   - Domínio Aeronáutico & Datas (src/domain/rotas.js, bug_fares.js, aeroportos.js):
-     * Datas extremas, anos bissextos, viradas de ano/mês, fusos UTC/BRT, viagens Só Ida vs Ida e Volta, KGMIDs, pisos de Bug Fare.
-   - Banco de Dados SQLite & Concorrência (src/db.js):
-     * Transações, WAL mode, limites de teto (preco_alvo), integridade de rotas, limpeza de arquivos de teste órfãos.
-   - Provedores & Resiliência (src/services/providers/):
-     * Tratamento de timeouts, parsing de HTML dinâmico, formato monetário brasileiro (milhares e centavos), failover.
-   - Bot do Telegram (src/services/notifier_telegram.js):
-     * Comandos (/teto, /verificar, /paridade, /rotas), botões inline, callbacks, sanitização HTML, destaque de economia real.
-   - Cockpit PWA (src/public/app.js):
-     * Renderização, formatação de datas, responsividade mobile, feedback ao usuário, filtros.
-2. CRIE TESTES DE ESTRESSE / ADVERSARIAIS em tests/:
-   - Crie casos de teste agressivos simulando entradas inválidas, datas de borda, concorrência e formatos inesperados.
-3. IDENTIFICOU UM BUG, INCONSISTÊNCIA OU COMPORTAMENTO INDESEJADO?
-   - CORRIJA A FUNÇÃO IMEDIATAMENTE no código-fonte da aplicação.
-4. IDENTIFICOU OPORTUNIDADE DE MELHORIA NA EXPERIÊNCIA DO USUÁRIO?
-   - APRIMORE A FUNÇÃO EXISTENTE (mensagens mais claras, formatação visual refinada, atalhos mais rápidos, validações amigáveis).
-5. EXECUTE OBRIGATORIAMENTE `./validate.sh fast` para certificar 100% de aprovação.
-6. CRIE UM COMMIT SEMÂNTICO (ex: `test:`, `fix:`, `refactor:`) descrevendo o teste adversarial e a blindagem/melhoria realizada.
+            prompt = f"""Você é o Engenheiro de QA & Testes Adversariais Cirúrgicos do Radar de Voos.
+Sua missão primordial é AUDITAR UMA ÚNICA FUNÇÃO ESPECÍFICA de forma rápida, atômica e cirúrgica (meta: menos de 3 minutos e poucas chamadas de ferramentas):
+
+🎯 REGRAS E DIRETRIZES DO TURNO DE QA:
+1. ESCOPO CIRÚRGICO ATÔMICO (PROIBIDO AUDITAR VÁRIOS ARQUIVOS):
+   - Escolha APENAS 1 função existente em 1 arquivo (ex: um parser em `src/services/providers/`, uma regra em `src/domain/`, uma query em `src/db.js`, ou sanitização no Telegram/frontend).
+   - NUNCA tente auditar o projeto todo nem múltiplos módulos de uma vez.
+2. CRIE DE 1 A 3 CASOS DE TESTE DE BORDA em `tests/`:
+   - Teste entradas nulas/indefinidas, strings mal formatadas, números extremos ou concorrência.
+3. SE ENCONTRAR UM BUG REAL:
+   - Aplique correção defensiva MÍNIMA ESTRITAMENTE na função auditada.
+   - É TERMINANTEMENTE PROIBIDO refatorar outros módulos ou iniciar grandes reescritas.
+4. VALIDAÇÃO RÁPIDA:
+   - Execute OBRIGATORIAMENTE `./validate.sh fast` para certificar 100% de aprovação.
+5. COMMIT SEMÂNTICO LIMPO:
+   - Faça commit semântico (`test:` ou `fix:`) na branch {branch_alvo}.
+   - Registre resumidamente a blindagem em CHANGELOG.md se houver correção relevante.
+   - NÃO altere a tarefa em andamento no PROGRESS.md (ela pertence ao modo BUILDER).
+
+⚠️ SALVAGUARDAS CRÍTICAS DE VELOCIDADE:
+- NUNCA suba daemons, servidores web ou processos em background.
+- NUNCA faça requisições externas sem mock.
+- Conclua a tarefa de forma direta em poucos passos e termine o turno rapidamente.
+{prompt_agents}
+{montar_bloco_skills_radar()}
 """
         else:
-            diretriz_modo = f"""
+            prompt = f"""Você é um engenheiro sênior e arquiteto de software trabalhando no projeto Radar de Voos (RadarVoos - Travel Hacking Engine, Fastify 4, SQLite Nativo WAL, PWA Cockpit e Telegram Bot).
+Objetivo Geral: {objetivo}
+
 ### 🏗️ MODO ATIVO DESTE TURNO: BUILDER (DESENVOLVIMENTO DE RECURSOS)
 Você está atuando como Engenheiro Construtor do Radar de Voos.
 1. Verifique PROGRESS.md e o status do git para compreender o contexto imediato.
@@ -657,12 +661,6 @@ Você está atuando como Engenheiro Construtor do Radar de Voos.
 4. Crie novos testes automatizados em tests/ cobrindo as novas funcionalidades.
 5. Execute OBRIGATORIAMENTE `./validate.sh fast` para certificar 100% de aprovação.
 6. Ao finalizar, atualize PROGRESS.md (arquivando detalhes em CHANGELOG.md) e faça commit semântico (ex: `feat:` para entregas ao usuário).
-"""
-
-        prompt = f"""Você é um engenheiro sênior e arquiteto de software trabalhando no projeto Radar de Voos (RadarVoos - Travel Hacking Engine, Fastify 4, SQLite Nativo WAL, PWA Cockpit e Telegram Bot).
-Objetivo Geral: {objetivo}
-
-{diretriz_modo}
 
 DIRETRIZES ABSOLUTAS DE SEGURANÇA E EXECUÇÃO:
 1. Verifique PROGRESS.md e o status do git (git status / git log -n 5) para compreender o contexto imediato.
@@ -838,13 +836,15 @@ def main():
         else:
             modo_ciclo = "BUILDER" if (ciclo_atual % 2 == 1) else "QA_ADVERSARIAL"
 
-        tarefa_ativa = obter_tarefa_ativa_progress() or ""
-        perfil, desc_perfil, modelos_candidatos = classificar_perfil_tarefa(tarefa_ativa)
-
-        if args.modelo:
-            modelos_execucao = [MAPA_MODELOS.get(args.modelo, ("Personalizado", args.modelo))]
+        if modo_ciclo == "QA_ADVERSARIAL":
+            perfil = "QA_ADVERSARIAL_CIRURGICO"
+            desc_perfil = "QA Adversarial Cirúrgico & Blindagem Ágil (Gemini Flash High ➔ Pro)"
+            tarefa_ativa = "Auditoria Cirúrgica de Borda e Testes Unitários de Resiliência"
+            modelos_execucao = [MAPA_MODELOS["gemini-pro"], MAPA_MODELOS["pro"]] if not args.modelo else [MAPA_MODELOS.get(args.modelo, ("Personalizado", args.modelo))]
         else:
-            modelos_execucao = modelos_candidatos
+            tarefa_ativa = obter_tarefa_ativa_progress() or ""
+            perfil, desc_perfil, modelos_candidatos = classificar_perfil_tarefa(tarefa_ativa)
+            modelos_execucao = [MAPA_MODELOS.get(args.modelo, ("Personalizado", args.modelo))] if args.modelo else modelos_candidatos
 
         num_conta, nome_mod, id_mod = obter_proximo_alvo(modelos_execucao)
 
