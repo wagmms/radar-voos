@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.25] - 2026-10-13 — Blindagem Adversarial em gerarDataPadraoInicial contra Coerção de Strings, Valores Nulos e Extremos (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`gerarDataPadraoInicial`):
+  - Blindada a recepção de `diasOffset` com parsing defensivo (`parseInt(diasOffset, 10)`), prevenindo bug clássico de coerção acidental de tipos do JavaScript (`13 + '30' = '1330'`) onde strings numéricas resultavam em deslocamento espúrio de anos no calendário.
+  - Adicionado fallback seguro para 30 dias em caso de valores nulos, não finitos (`NaN`), tipos espúrios ou offsets negativos, além de salvaguarda de limite superior (`Math.min(parsed, 3650)`) para evitar `RangeError: Invalid time value` em `toISOString()`.
+- **`tests/rotas_flexibilidade.test.js`**:
+  - Adicionados testes de borda adversariais validando strings numéricas (`"30"`), tipos inválidos (`null`, `NaN`, `"invalido"`, `{}`, `[]`), números negativos e valores extremos.
+
 ## [v2.18.24] - 2026-10-13 — Blindagem Adversarial em gerarJanelasExploracaoSemData contra Datas Não-ISO, Tipos Não-String e Estadia Negativa (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

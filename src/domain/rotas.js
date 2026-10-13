@@ -637,8 +637,11 @@ export function somarDiasData(dataStr, dias) {
  * Gera data inicial padrão (ex: D+30 dias, preferencialmente terça-feira)
  */
 export function gerarDataPadraoInicial(diasOffset = 30) {
+  const parsed = typeof diasOffset === 'number' ? diasOffset : parseInt(diasOffset, 10);
+  const offsetFinal = (Number.isFinite(parsed) && parsed >= 0) ? Math.min(parsed, 3650) : 30;
+
   const agora = new Date();
-  agora.setUTCDate(agora.getUTCDate() + diasOffset);
+  agora.setUTCDate(agora.getUTCDate() + offsetFinal);
   // Se cair no sábado (6) ou domingo (0), ajusta para terça-feira (+2 ou +3 dias)
   const diaSemana = agora.getUTCDay();
   if (diaSemana === 0) agora.setUTCDate(agora.getUTCDate() + 2); // Domingo -> Terça

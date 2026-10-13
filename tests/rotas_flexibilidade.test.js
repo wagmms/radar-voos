@@ -4,6 +4,7 @@ import {
   somarDiasData,
   gerarCombinacoesFlexibilidade,
   gerarJanelasExploracaoSemData,
+  gerarDataPadraoInicial,
   ehSoIda,
   rotaEhSoIda
 } from '../src/domain/rotas.js';
@@ -359,6 +360,30 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
 
     const janelasNegativas = gerarJanelasExploracaoSemData({ qtdAmostras: -3 });
     assert.deepStrictEqual(janelasNegativas, []);
+  });
+
+  it('QA Adversarial: deve blindar gerarDataPadraoInicial contra coerção de strings, nulos e extremos', () => {
+    // 1. Strings numéricas ("30", "45") não devem sofrer concatenação espúria de texto (ex: 13 + "30" = "1330")
+    const dataNumero = gerarDataPadraoInicial(30);
+    const dataString = gerarDataPadraoInicial('30');
+    assert.strictEqual(dataString, dataNumero, 'String numérica deve produzir o mesmo resultado que número');
+    assert.match(dataString, /^\d{4}-\d{2}-\d{2}$/);
+
+    // 2. Entradas nulas, NaN, tipos espúrios e strings inválidas devem acionar fallback seguro de 30 dias sem lançar RangeError
+    const casosFallback = [null, NaN, 'invalido', '   ', {}, []];
+    for (const valor of casosFallback) {
+      assert.doesNotThrow(() => {
+        const res = gerarDataPadraoInicial(valor);
+        assert.strictEqual(res, dataNumero, `Valor adversarial ${String(valor)} deve recorrer ao fallback padrão de 30 dias`);
+      });
+    }
+
+    // 3. Offsets negativos e números extremos não quebram ou extrapolam o calendário
+    const resNegativo = gerarDataPadraoInicial(-20);
+    assert.strictEqual(resNegativo, dataNumero, 'Offset negativo deve recorrer ao fallback seguro');
+
+    const resExtremo = gerarDataPadraoInicial(99999999);
+    assert.match(resExtremo, /^\d{4}-\d{2}-\d{2}$/, 'Offset extremo deve ser limitado defensivamente a ISO válida');
   });
 });
 
