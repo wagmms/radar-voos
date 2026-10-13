@@ -7,6 +7,24 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.8.2] - 2026-10-12
+
+### 🎯 Restauração Plena de Macrorregiões Continentais, Resolução Dinâmica de Destinos Reais e Blindagem de Links
+- **Busca Abrangente por Macrorregiões Preservada (`src/domain/rotas.js` e `data/rotas.json`)**:
+  - Restaurados os códigos canônicos KGMID para todas as macrorregiões em `data/rotas.json`: **América do Sul** (`/m/06_1`), **Europa** (`/m/02j9z`), **Ásia** (`/m/02j1x`) e **Estados Unidos** (`/m/09c7w0`). A API SerpAPI/Google Flights varre o continente inteiro de uma só vez sem restrições artificiais.
+  - Função `resolverCodigoParaLink`: converte KGMIDs para seus nomes oficiais em inglês (`South America`, `Europe`, etc.) em URLs textuais do Google Flights, gerando buscas continentais navegáveis (`Flights from ORIG to South America on DATA returning DATA`) que abrem a grade/mapa de destinos da região sem cair na página inicial em branco.
+  - Função `gerarLinkGoogleFlightsCheapest`: quando o destino for uma macrorregião genérica sem aeroporto físico eleito, delega graciosamente para `gerarLinkGoogleFlights`; quando for um aeroporto físico, gera o payload Protobuf `tfs` na aba *"Cheapest"*.
+- **Resolução Concreta de Destino Real em Bug Fares (`src/domain/aeroportos.js`, `src/services/flight_scanner.js`, `src/services/bug_fare_hunter.js`)**:
+  - `resolverDestinoConcreto` e `montarCardBugFare`: priorizam com força máxima `codigoDestinoReal` (ex: `SCL`, `EZE`, `MAD`, `LIS`) e `destinoReal` retornados pelo scanner ou caçador de bug fares.
+  - Alertas estruturados no Telegram e Cockpit PWA mantêm precisão cirúrgica de aeroporto de chegada (IATA e nome), país e datas, adicionando o rótulo da macrorregião para rastreabilidade (ex: `🚨 BUG FARE: São Paulo ➔ Santiago, Chile (SCL) (América do Sul) por R$ 414!`).
+  - Matriz de corredores globais em `src/services/bug_fare_hunter.js` enriquecida com corredores de alta sensibilidade para América do Sul e Ásia.
+- **Cockpit PWA, Meteorologia e Arcos Geodésicos SVG (`src/public/app.js`, `src/public/js/geo_routes.js`, `src/services/weather_service.js`)**:
+  - Cockpit PWA: badges de rota exibem siglas claras (`AMSUL`, `EUROPA`, `ÁSIA`, `EUA`) via `formatarCodigoBadge` em vez de KGMIDs crus.
+  - `sanitizarLinkGoogleFlights`: assegura links diretos para aeroporto físico concreto de chegada.
+  - `geo_routes.js`: IDs de gradiente de arcos ortodrômicos sanitizados (`safeId`) para prevenir quebras no DOM causadas por barras em KGMIDs.
+  - `weather_service.js`: mapeamento de coordenadas meteorológicas para macrorregiões baseado nos principais hubs de referência climática.
+- **Suíte de Testes Expandida**: **123/123 testes aprovados (100% verde)** com novos testes em `tests/aeroportos_bug_fares.test.js`.
+
 ## [2.8.1] - 2026-10-12
 
 ### 🎯 Pipeline de Deploy pelo Telegram com Autocura Autônoma e Zero Downtime
