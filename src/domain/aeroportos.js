@@ -257,21 +257,17 @@ export function resolverDestinoConcreto(opcoes = {}) {
 export function formatarPeriodoViagem(dataIdaStr, dataVoltaStr) {
   if (!dataIdaStr) return 'Data a Definir';
   const idaNorm = formatarDataParaBusca(dataIdaStr);
-  const idaTrim = typeof dataIdaStr === 'string' ? dataIdaStr.trim() : (dataIdaStr ? String(dataIdaStr).trim() : '');
-  if (!idaTrim) return 'Data a Definir';
+  if (!idaNorm) return 'Data a Definir';
 
-  function fmtData(normStr, rawStr) {
+  function fmtData(normStr) {
     if (normStr && /^\d{4}-\d{2}-\d{2}$/.test(normStr)) {
       const [ano, mes, dia] = normStr.split('-');
       return `${dia}/${mes}/${ano}`;
     }
-    const s = typeof rawStr === 'string' ? rawStr.trim() : (rawStr ? String(rawStr).trim() : '');
-    if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '';
-    const [ano, mes, dia] = s.split('-');
-    return `${dia}/${mes}/${ano}`;
+    return '';
   }
 
-  const idaFmt = fmtData(idaNorm, idaTrim);
+  const idaFmt = fmtData(idaNorm);
   const voltaTrim = typeof dataVoltaStr === 'string' ? dataVoltaStr.trim() : (dataVoltaStr !== null && dataVoltaStr !== undefined ? String(dataVoltaStr).trim() : '');
   const soIda = ehSoIda(voltaTrim);
 
@@ -280,26 +276,22 @@ export function formatarPeriodoViagem(dataIdaStr, dataVoltaStr) {
   }
 
   // Resolve volta (pode ser número de dias como "14 dias", ou data YYYY-MM-DD / DD/MM/AAAA)
-  const voltaCalculada = calcularDataVolta(idaNorm || idaTrim, dataVoltaStr);
+  const voltaCalculada = calcularDataVolta(idaNorm, dataVoltaStr);
   const voltaNorm = voltaCalculada || formatarDataParaBusca(dataVoltaStr);
-  const voltaFmt = fmtData(voltaNorm, voltaTrim);
+
+  if (!voltaNorm || voltaNorm < idaNorm) {
+    return `Ida: ${idaFmt} (Só Ida)`;
+  }
+
+  const voltaFmt = fmtData(voltaNorm);
 
   // Calcular duração em dias de forma consistente via UTC
   try {
-    const sIda = idaNorm || idaTrim;
-    const sVolta = voltaNorm || voltaTrim;
-    let diffDias = 0;
-    if (sIda && sVolta && /^\d{4}-\d{2}-\d{2}$/.test(sIda) && /^\d{4}-\d{2}-\d{2}$/.test(sVolta)) {
-      const [ano1, mes1, dia1] = sIda.split('-').map(Number);
-      const [ano2, mes2, dia2] = sVolta.split('-').map(Number);
-      const d1 = new Date(Date.UTC(ano1, mes1 - 1, dia1));
-      const d2 = new Date(Date.UTC(ano2, mes2 - 1, dia2));
-      diffDias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-    } else {
-      const d1 = new Date(sIda);
-      const d2 = new Date(sVolta);
-      diffDias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-    }
+    const [ano1, mes1, dia1] = idaNorm.split('-').map(Number);
+    const [ano2, mes2, dia2] = voltaNorm.split('-').map(Number);
+    const d1 = new Date(Date.UTC(ano1, mes1 - 1, dia1));
+    const d2 = new Date(Date.UTC(ano2, mes2 - 1, dia2));
+    const diffDias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
     const labelDias = diffDias > 0 ? (diffDias === 1 ? ' (1 dia)' : ` (${diffDias} dias)`) : '';
     return `Ida: ${idaFmt} ➔ Volta: ${voltaFmt}${labelDias}`;
   } catch (_) {

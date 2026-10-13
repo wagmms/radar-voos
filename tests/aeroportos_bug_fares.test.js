@@ -121,6 +121,22 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(formatarPeriodoViagem('2026-12-08', '14 dias'), 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
   });
 
+  it('deve lidar defensivamente com casos de borda adversariais em formatarPeriodoViagem (zero, volta espúria, volta no passado e datas inválidas)', () => {
+    // 1. Volta 0, "0", "0 dias" ou valores não interpretáveis como data válida devem degradar para Só Ida
+    assert.strictEqual(formatarPeriodoViagem('2026-12-08', 0), 'Ida: 08/12/2026 (Só Ida)');
+    assert.strictEqual(formatarPeriodoViagem('2026-12-08', '0'), 'Ida: 08/12/2026 (Só Ida)');
+    assert.strictEqual(formatarPeriodoViagem('2026-12-08', '0 dias'), 'Ida: 08/12/2026 (Só Ida)');
+    assert.strictEqual(formatarPeriodoViagem('2026-12-08', 'xyz_invalido'), 'Ida: 08/12/2026 (Só Ida)');
+
+    // 2. Data de volta anterior à data de ida (viagem no passado) deve degradar graciosamente para Só Ida
+    assert.strictEqual(formatarPeriodoViagem('2026-12-08', '2026-12-01'), 'Ida: 08/12/2026 (Só Ida)');
+
+    // 3. Data de ida com data inexistente no calendário ou tipo inválido deve retornar "Data a Definir"
+    assert.strictEqual(formatarPeriodoViagem('2026-02-31', '2026-03-10'), 'Data a Definir');
+    assert.strictEqual(formatarPeriodoViagem('data_corrompida', '2026-12-22'), 'Data a Definir');
+    assert.strictEqual(formatarPeriodoViagem(new Date('invalido'), '2026-12-22'), 'Data a Definir');
+  });
+
   it('deve montar card de Bug Fare com aeroporto de chegada, país, datas e link canônico', () => {
     const card = montarCardBugFare({
       origem: 'São Paulo',

@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.3] - 2026-10-13 — Blindagem Adversarial em formatarPeriodoViagem (Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`formatarPeriodoViagem`):
+  - Corrigido bug onde valores como `0`, `'0'`, `'0 dias'` ou strings inválidas no campo de volta causavam vazamento de dados espúrios na mensagem (ex: `"Ida: 08/12/2026 ➔ Volta: 0"` ou `"➔ Volta: xyz"`), passando a degradar graciosamente para `(Só Ida)`.
+  - Tratamento defensivo contra viagens no passado (data de volta anterior à data de ida), degradando para `(Só Ida)` em vez de permitir períodos temporais inconsistentes.
+  - Blindagem estrita para data de ida inexistente no calendário (ex: `'2026-02-31'`), strings corrompidas ou instâncias de `Date` inválidas, retornando `'Data a Definir'`.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste adversarial com validação de entradas espúrias (`0`, `'0'`, `'0 dias'`, `'xyz_invalido'`), volta no passado e datas inválidas.
+
 ## [v2.18.2] - 2026-10-13 — Blindagem Adversarial em resolverCodigoParaLink (Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
