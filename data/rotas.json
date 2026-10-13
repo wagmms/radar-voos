@@ -50,13 +50,13 @@
     "codigo_origem": "SAO",
     "codigo_destino": "/m/02j9z",
     "data_ida": "2027-02-09",
-    "data_volta": "2027-02-23",
+    "data_volta": null,
     "duracao_max_horas": 20,
     "preco_alvo": 3000,
     "cabine": "economy",
     "flexibilidade_dias": 7,
     "sem_data": 1,
-    "dias_estadia": 14,
+    "dias_estadia": 10,
     "ativa": 1
   },
   {
@@ -72,21 +72,6 @@
     "flexibilidade_dias": 0,
     "sem_data": 0,
     "dias_estadia": 2026,
-    "ativa": 1
-  },
-  {
-    "origem": "São Paulo",
-    "destino": "Buenos Aires",
-    "codigo_origem": "SAO",
-    "codigo_destino": "BUE",
-    "data_ida": "2026-11-10",
-    "data_volta": null,
-    "duracao_max_horas": 999,
-    "preco_alvo": 1800,
-    "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 1,
-    "dias_estadia": 8,
     "ativa": 1
   },
   {
