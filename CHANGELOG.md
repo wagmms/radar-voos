@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.7] - 2026-10-13 — Blindagem Adversarial de converterMoeda (Domínio / Calculadora)
+
+### 🛡️ Correção Defensiva & Robustez (Conversão Monetária e Parsing de Preços)
+- `src/domain/calculadora.js` · `converterMoeda`:
+  - Corrigido bug onde valores monetários em formato string (ex: `'R$ 550,00'` ou com separador de milhar `'1.100'`) falhavam ou eram corrompidos devido ao uso de `parseFloat` cru, retornando `0` ou valores distorcidos em vez de utilizar o parser resiliente `parsePreco`.
+  - Tratamento defensivo para códigos de moeda vazios ou contendo apenas espaços em branco (ex: `'   '`), garantindo fallback consistente para `'BRL'`.
+- `tests/calculadora.test.js`:
+  - Adicionados casos de teste de borda adversariais validando conversão de strings monetárias brasileiras, separadores de milhar e sanitização de whitespace em moedas.
+  - Suíte total: **350/350 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.6] - 2026-10-13 — Blindagem Adversarial de ordenarRotasPorEconomia (Cockpit PWA / Sparklines)
 
 ### 🛡️ Correção Defensiva & Robustez (Cockpit PWA / Ordenação de Rotas)

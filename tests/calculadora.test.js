@@ -266,6 +266,11 @@ describe('Domínio: Calculadora e Inteligência de Preços', () => {
     assert.strictEqual(converterMoeda(null, 'USD', 'BRL'), 0);
     assert.strictEqual(converterMoeda(NaN, 'USD', 'BRL'), 0);
     assert.strictEqual(converterMoeda(100, 'MOEDA_DESCONHECIDA', 'BRL'), 100);
+
+    // 6. QA Adversarial: strings monetárias formatadas, pontos de milhar e moedas com whitespace
+    assert.strictEqual(converterMoeda('R$ 550,00', 'BRL', 'USD'), 100);
+    assert.strictEqual(converterMoeda('1.100', 'BRL', 'USD'), 200);
+    assert.strictEqual(converterMoeda(550, '   ', 'USD'), 100);
   });
 
   it('deve estimar custo diário de destinos internacionais fora do dicionário base via inferência geográfica', () => {

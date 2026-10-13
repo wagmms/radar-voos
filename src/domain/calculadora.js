@@ -109,11 +109,13 @@ export const AJUSTES_PAIS_CUSTO = {
  * Converte valores entre moedas com suporte a cotações personalizadas e fallback defensivo
  */
 export function converterMoeda(valor, moedaOrigem = 'BRL', moedaDestino = 'BRL', cotacoesCustom = {}) {
-  const v = typeof valor === 'number' ? valor : parseFloat(valor);
+  const v = typeof valor === 'number'
+    ? (Number.isFinite(valor) && valor > 0 ? valor : 0)
+    : parsePreco(valor);
   if (!Number.isFinite(v) || v <= 0) return 0;
 
-  const mOrigem = String(moedaOrigem || 'BRL').trim().toUpperCase();
-  const mDestino = String(moedaDestino || 'BRL').trim().toUpperCase();
+  const mOrigem = (moedaOrigem && String(moedaOrigem).trim().toUpperCase()) || 'BRL';
+  const mDestino = (moedaDestino && String(moedaDestino).trim().toUpperCase()) || 'BRL';
 
   if (mOrigem === mDestino) return Number(v.toFixed(2));
 
