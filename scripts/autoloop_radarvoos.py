@@ -618,7 +618,7 @@ def executar_ciclo(num_conta, nome_modelo, id_modelo, objetivo, branch_alvo, mod
 
         if modo_ciclo == "QA_ADVERSARIAL":
             diretriz_modo = f"""
-### 🕵️ MODO ATIVO DESTE TURNO: QA ADVERSARIAL, TESTES DE ESTRESSE & REFINO DE EXPERIÊNCIA
+### 🕵️ MODO ATIVO DESTE TURNO: QA ADVERSARIAL (CAÇADOR DE BUGS & REFINADOR DE EXPERIÊNCIA)
 Você está atuando como Engenheiro Chefe de QA, Fuzzing e Usabilidade do Radar de Voos.
 Sua missão primordial neste ciclo NÃO é criar novas grandes features do backlog, mas sim AUDITAR, TESTAR IMPLACAVELMENTE E POLIR AS FUNÇÕES EXISTENTES:
 1. SELECIONE UMA ÁREA EXISTENTE PARA AUDITAR E CAÇAR ERROS:

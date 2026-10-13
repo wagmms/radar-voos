@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.7.9)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.8.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.9 100% operacional com 114/114 testes passando. Blindados links do Google Flights com resolução canônica de destinos (eliminando links que caem na home), alertas de Bug Fares enriquecidos obrigatoriamente com aeroporto IATA de chegada, país e datas completas da viagem, e cálculo de economia percentual em relação ao teto no Telegram.
+- **Estado Geral**: 🟢 Radar v2.8.0 100% operacional com 114/114 testes JS e 10/10 testes Python aprovados. Implementado autoloop híbrido dual-mode (`--modo {alternado,builder,qa}`) alternando entre desenvolvimento de recursos e QA adversarial/testador de estresse. Alertas no Telegram enriquecidos com botões inline (`[🎯 Alterar Teto]`, `[🔍 Checar Agora]`) e destaque de economia real (R$ e %).
 - **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
-- **Última Tarefa Concluída**: Blindagem de links do Google Flights via Protobuf `tfs` e `returning` canônico; criação do módulo `src/domain/aeroportos.js` com catálogo e `resolverDestinoConcreto()`; migrações SQLite na tabela `bug_fares` para aeroporto de chegada, país e datas; enriquecimento de alertas no Telegram e chips visuais no Cockpit PWA. Suíte automatizada com 114/114 testes aprovados.
+- **Última Tarefa Concluída**: Autoloop Dual-Mode (Builder vs QA Adversarial) com alternância cíclica e flags CLI em `scripts/autoloop_radarvoos.py`; botões inline interativos com atalho de teto e cálculo de economia real em `src/services/notifier_telegram.js`; 114 testes JS e 10 testes Python 100% verdes.
 
 ---
 

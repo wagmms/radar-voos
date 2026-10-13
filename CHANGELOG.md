@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.8.0] - 2026-10-12
+
+### 🎯 Autoloop Dual-Mode (Builder vs QA Adversarial) e Botões Interativos com Economia no Telegram
+- **Autoloop Dual-Mode com Rodízio Alternado (`scripts/autoloop_radarvoos.py` e `tests/test_autoloop_radarvoos_throttling.py`)**:
+  - Implementado sistema de rodízio cíclico de turno entre **Builder** (desenvolvimento focado em recursos atômicos do backlog) e **QA Adversarial** (engenheiro chefe de testes de estresse, fuzzing, auditoria de casos de borda e refinamento de experiência do usuário).
+  - Adicionado suporte a flags CLI `--modo {alternado,builder,qa}` permitindo execução dedicada ou alternada automática (turnos ímpares = Builder, turnos pares = QA Adversarial).
+  - Blindagem de notificações no Telegram com supressão inteligente de ruído: commits que não sejam novas funcionalidades (`feat:`) permanecem silenciosos e há cooldown defensivo de 300s entre alertas.
+  - Sincronização do binário executável canônico em `/home/wagmoraes/.local/bin/autoloop-radarvoos`.
+  - Suíte de testes unitários em Python com 10/10 testes passando cobrindo deduplicação, alternância e injeção de diretrizes.
+- **Botões Inline Interativos e Cálculo de Economia no Telegram (`src/services/notifier_telegram.js`, `src/services/flight_scanner.js`, `tests/telegram_callbacks.test.js`)**:
+  - Notificação de oportunidade enriquecida com cálculo de economia real em reais e percentual em relação ao teto (`🎯 META BATIDA! Economia de R$ X (Y% abaixo do seu teto)`).
+  - Adicionados botões inline interativos: `[🎯 Alterar Teto]` com callback `teto_help:${rotaId}` que devolve mensagem pronta para cópia com `/teto [id] [sugestão]`, e `[🔍 Checar Agora]` com callback `check:${rotaId}`.
+  - Suíte de testes unitários cobrindo o cálculo de meta batida, sanitização e tratamento de callbacks (7/7 testes aprovados).
+- **Validação Global do Repositório**:
+  - Suíte de testes Fastify/Node.js com 114/114 testes passando (100% verde).
+
 ## [2.7.9] - 2026-10-12
 
 ### 🎯 Blindagem de Links do Google Flights, Resolução Concreta de Destinos e Alertas Detalhados de Bug Fares
