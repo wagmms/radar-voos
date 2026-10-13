@@ -246,29 +246,32 @@ export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = 
  * Formata datas do voo de forma clara e amigável (DD/MM/AAAA)
  */
 export function formatarPeriodoViagem(dataIdaStr, dataVoltaStr) {
-  if (!dataIdaStr) return 'Data a Definir';
+  const idaTrim = typeof dataIdaStr === 'string' ? dataIdaStr.trim() : (dataIdaStr ? String(dataIdaStr).trim() : '');
+  if (!idaTrim) return 'Data a Definir';
 
   function fmtData(str) {
-    if (!str || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return str || '';
-    const [ano, mes, dia] = str.split('-');
+    const s = typeof str === 'string' ? str.trim() : (str ? String(str).trim() : '');
+    if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return s || '';
+    const [ano, mes, dia] = s.split('-');
     return `${dia}/${mes}/${ano}`;
   }
 
-  const idaFmt = fmtData(dataIdaStr);
-  const soIda = ehSoIda(dataVoltaStr);
+  const idaFmt = fmtData(idaTrim);
+  const voltaTrim = typeof dataVoltaStr === 'string' ? dataVoltaStr.trim() : (dataVoltaStr ? String(dataVoltaStr).trim() : '');
+  const soIda = ehSoIda(voltaTrim);
 
-  if (soIda || !dataVoltaStr) {
+  if (soIda || !voltaTrim) {
     return `Ida: ${idaFmt} (Só Ida)`;
   }
 
-  const voltaFmt = fmtData(dataVoltaStr);
+  const voltaFmt = fmtData(voltaTrim);
 
   // Calcular duração em dias
   try {
-    const d1 = new Date(dataIdaStr);
-    const d2 = new Date(dataVoltaStr);
+    const d1 = new Date(idaTrim);
+    const d2 = new Date(voltaTrim);
     const diffDias = Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
-    const labelDias = diffDias > 0 ? ` (${diffDias} dias)` : '';
+    const labelDias = diffDias > 0 ? (diffDias === 1 ? ' (1 dia)' : ` (${diffDias} dias)`) : '';
     return `Ida: ${idaFmt} ➔ Volta: ${voltaFmt}${labelDias}`;
   } catch (_) {
     return `Ida: ${idaFmt} ➔ Volta: ${voltaFmt}`;

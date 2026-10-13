@@ -60,6 +60,20 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(periodoSoIda, 'Ida: 08/12/2026 (Só Ida)');
   });
 
+  it('deve tratar entradas de data nulas, vazias ou com espaços defensivamente em formatarPeriodoViagem', () => {
+    assert.strictEqual(formatarPeriodoViagem(null, null), 'Data a Definir');
+    assert.strictEqual(formatarPeriodoViagem('', null), 'Data a Definir');
+    assert.strictEqual(formatarPeriodoViagem('   ', '   '), 'Data a Definir');
+  });
+
+  it('deve formatar viagem de 1 dia no singular (1 dia) e suportar espaços ao redor das datas', () => {
+    const periodo1Dia = formatarPeriodoViagem('2026-12-08', '2026-12-09');
+    assert.strictEqual(periodo1Dia, 'Ida: 08/12/2026 ➔ Volta: 09/12/2026 (1 dia)');
+
+    const periodoComEspacos = formatarPeriodoViagem('  2026-12-08  ', '  2026-12-15  ');
+    assert.strictEqual(periodoComEspacos, 'Ida: 08/12/2026 ➔ Volta: 15/12/2026 (7 dias)');
+  });
+
   it('deve montar card de Bug Fare com aeroporto de chegada, país, datas e link canônico', () => {
     const card = montarCardBugFare({
       origem: 'São Paulo',

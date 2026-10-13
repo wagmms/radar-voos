@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.6] - 2026-10-13 — QA & Blindagem Adversarial em `formatarPeriodoViagem` (aeroportos)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/aeroportos.js` · `formatarPeriodoViagem`:
+  - Corrigido tratamento de strings de datas vazias ou contendo apenas espaços em branco, retornando agora `Data a Definir` com segurança em vez de string malformatada.
+  - Adicionado trim defensivo em strings de data para que datas com espaços (ex: `' 2026-12-08 '`) sejam devidamente reconhecidas e formatadas para `DD/MM/AAAA`.
+  - Corrigida concordância gramatical de duração para viagens de 1 dia, exibindo `(1 dia)` no singular em vez de `(1 dias)`.
+- `tests/aeroportos_bug_fares.test.js`:
+  - Adicionados testes de borda adversariais validando tratamento de entradas vazias com espaços, singular de dias e trim defensivo.
+
+---
+
 ## [v2.10.5] - 2026-10-13 — Suporte a Moedas Dinâmicas e Conversão de Diárias Internacionais (calculadora)
 
 ### 🚀 Funcionalidades & Inteligência de Domínio
