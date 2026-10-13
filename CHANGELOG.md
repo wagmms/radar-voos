@@ -7,6 +7,49 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.7.8] - 2026-10-12
+
+### 🎯 Persistência Defensiva de Voos Flexíveis Só Ida e Two-Way Sync Remoto com GitHub
+- **Discernimento Cirúrgico em `rotaEhSoIda` (`src/domain/rotas.js`)**:
+  - Corrigido o tratamento de rotas flexíveis (`sem_data: 1`): quando `data_volta` é explicitamente `null` ou quando `tipo === 'one_way'` / `tipo_viagem === 'one_way'`, a função retorna categoricamente `true` (Só Ida), eliminando a reversão indevida para Ida e Volta que ocorria ao atualizar a página ou puxar do GitHub.
+  - A rota flexível só é considerada Ida e Volta quando `data_volta` contém dias de viagem (ex: `"10 dias"`) ou data, ou quando `dias_estadia > 0` foi expressamente configurado sem seleção de `one_way`.
+- **Persistência Atômica no SQLite (`src/db.js`)**:
+  - `rotasRepo.atualizar` e `rotasRepo.criar`: quando a rota é Só Ida, `data_volta` e `dias_estadia` são gravados estritamente como `NULL`, prevenindo recálculos espúrios de retorno via `somarDiasData`.
+  - Ao alternar a modalidade entre Ida e Volta e Só Ida (ou vice-versa), `melhor_opcao_flexivel` é limpa automaticamente para não manter na tela o badge com a tarifa da modalidade antiga.
+- **Two-Way Sync com GitHub e Prevenção de Race Conditions (`src/services/rotas_sync.js` e `src/server/routes/rotas_routes.js`)**:
+  - Serialização em `salvarArquivoRotas`: inclui `tipo_viagem: 'one_way' | 'round_trip'` e zera `dias_estadia` para rotas só ida em `data/rotas.json`.
+  - `sincronizarRotasComBanco`: repassa os parâmetros `tipo` e `tipo_viagem` explícitos para o repositório local, evitando que um pull remoto reverta a rota para ida e volta.
+  - Em `POST /api/rotas` e `PUT /api/rotas/:id`: sincronização com o GitHub aguarda com timeout seguro (`Promise.race` de até 3500ms) para que o commit remoto seja concluído antes de responder ao cliente, eliminando race condition de F5 imediato.
+  - O endpoint `POST /api/rotas/sincronizar-github` agora salva atômica e localmente as rotas antes do push e retorna contadores atualizados.
+- **Cockpit PWA (`src/public/app.js`)**:
+  - Função `sincronizarComGitHubRemoto`: prioriza o envio (`POST /api/rotas/sincronizar-github` - Push) das alterações locais para o repositório do GitHub (com fallback gracioso para pull se necessário), garantindo que as alterações feitas no cockpit subam para a nuvem em vez de serem sobrescritas.
+  - Formulário de rota (`criarNovaRota`): envia `tipo`, `tipo_viagem` explícitos e `dias_estadia: null` quando a modalidade é "Apenas Ida".
+  - Funções `renderizarRotas` e `abrirEdicaoRota`: consideram `rota.tipo_viagem === 'one_way'` e ausência de estadia para definir a rota como "Apenas Ida".
+- **Testes de Regressão Automatizados (`tests/rotas_flexibilidade.test.js`)**:
+  - Adicionado teste completo de regressão simulando o ciclo ponta a ponta: criação de rota flexível ida e volta, alteração para só ida, serialização para `rotas.json` e ressincronização bidirecional, com 100% de aprovação (112/112 testes).
+
+## [2.7.7] - 2026-10-12
+
+### 🎯 Resolução Cirúrgica de Só Ida vs Ida e Volta e Novos Comandos Interativos no Telegram
+- **Discernimento Canônico entre Só Ida e Ida e Volta (`src/domain/rotas.js` e `src/db.js`)**:
+  - Implementada a função canônica `rotaEhSoIda`: resolve categoricamente o problema histórico onde rotas flexíveis sem data (`sem_data: 1`) com dias de estadia configurados (`dias_estadia: 10/14`) eram convertidas erroneamente para "Só Ida" por verificação ingênua de `data_volta` nula.
+  - Correção na criação e edição de rotas em `src/db.js` (`rotasRepo.criar` e `rotasRepo.atualizar`): se a rota possui dias de estadia configurados (`dias_estadia > 0`), ela é garantida como Ida e Volta, calculando a data de retorno somando os dias de estadia à data de ida (`somarDiasData`).
+  - Corrigido o piso estrutural em `src/domain/bug_fares.js`: passagens de Só Ida agora utilizam estritamente `pisoBase.soIda` (ex: R$ 1.150 para Europa e R$ 450 para América do Sul), eliminando falsos positivos onde voos normais de uma perna eram alertados como Bug Fare por comparação indevida contra o piso de Ida e Volta.
+  - Corrigido trip type no Protobuf TFS do Google Flights: byte `0x10` codificado dinamicamente como `0x01` para One-Way e `0x02` para Round-Trip.
+- **Novos Comandos e Experiência no Bot do Telegram (`src/services/notifier_telegram.js`)**:
+  - Comando `/teto [id] [valor]`: permite alterar ou definir o teto de preço de qualquer rota diretamente pelo chat do Telegram em tempo real.
+  - Comando `/paridade [milhas] [programa]`: calculadora de milhas que converte pontos de programas de fidelidade (Smiles, Latam Pass, Livelo, Azul, Iberia, TAP) em valor monetário de referência em reais.
+  - Comando `/verificar [id]`: força varredura imediata de uma rota com exibição do preço atual e se está dentro da meta estipulada.
+  - Destaque visual no comando `/rotas` quando uma tarifa atinge a meta estipulada pelo usuário (`🎯 DENTRO DO TETO!`).
+  - Higienização de mensagens de alerta meteorológico e de status, eliminando a exibição de períodos com texto feio como `"até Só Ida"`.
+- **Aprimoramentos no Cockpit PWA (`src/public/app.js`)**:
+  - Ajustadas funções `renderizarRotas` e `abrirEdicaoRota` para que rotas flexíveis com estadia não apareçam ou abram o modal como "Apenas Ida" quando a data de volta ainda não tiver sido preenchida.
+  - Adicionada sincronização bidirecional com fallback para push/pull no botão de sincronização com o GitHub.
+- **Suíte de Testes Expandida (112/112 testes passando - 100%)**:
+  - Adicionado teste canônico `rotaEhSoIda` em `tests/rotas_flexibilidade.test.js` cobrindo 6 cenários de borda.
+  - Adicionados testes para os comandos `/paridade` e `/teto` em `tests/telegram_callbacks.test.js`.
+  - Blindada a suíte `tests/routes.test.js` com limpeza defensiva de arquivos SQLite WAL órfãos (`.sqlite-wal`, `.sqlite-shm`) para evitar erros `disk I/O error`.
+
 ## [2.7.6] - 2026-10-12
 
 ### 🎯 Resolução Canônica de Destinos (Anti-Genérico) e Blindagem de Links do Google Flights

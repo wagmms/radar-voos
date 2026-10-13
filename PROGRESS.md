@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.7.6)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.7.8)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.7.6 operacional com 108/108 testes passando (100%). Destinos genéricos eliminados dos Bug Fares (exibindo obrigatoriamente aeroporto de chegada IATA/nome, país de destino e datas). Links para o Google Flights blindados com sintaxe canônica `returning` e Protobuf `tfs` (aba Cheapest), eliminando redirecionamentos indevidos para a página inicial.
+- **Estado Geral**: 🟢 Radar v2.7.8 100% operacional com 112/112 testes passando. Resolvida a persistência de voos flexíveis ao alternar de Ida e Volta para Só Ida, eliminando a reversão indevida no recarregamento de página. Sincronização Two-Way com GitHub blindada contra race conditions com priorização de Push e paridade de modalidade.
 - **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
-- **Última Tarefa Concluída**: Criado módulo `src/domain/aeroportos.js` com catálogo de aeroportos e resolução de destinos concretos (`resolverDestinoConcreto`, `montarCardBugFare`). Corrigida a geração de links em `src/domain/rotas.js` (eliminando a palavra `through` e KGMIDs soltos). Atualizado o Cockpit PWA (`src/public/app.js` e `src/public/styles.css`) e o bot do Telegram (`src/services/notifier_telegram.js`) com badges de aeroporto, país e datas. Criados 6 testes em `tests/aeroportos_bug_fares.test.js`.
+- **Última Tarefa Concluída**: Refinada a função canônica `rotaEhSoIda` em `src/domain/rotas.js` para tratar `data_volta: null` e tipos explícitos. Atualizados `src/db.js` (`rotasRepo.atualizar` e `criar`) para persistir `data_volta` e `dias_estadia` como `NULL` e resetar `melhor_opcao_flexivel` ao alternar modalidade. Atualizado Two-Way Sync em `src/services/rotas_sync.js`, `src/server/routes/rotas_routes.js` e `src/public/app.js` (botão Sync prioriza Push para a nuvem). Adicionado teste de regressão ponta a ponta em `tests/rotas_flexibilidade.test.js` (112/112 testes passando).
 
 ---
 
@@ -21,8 +21,8 @@
 ## 📋 Backlog Prioritário
 - [ ] `src/services/providers/scrapling_client.js` • `obterTarifasGoogleFlights` • Adaptador de scraping resiliente com cabeçalhos dinâmicos e parsing da aba Cheapest via Protobuf tfs.
 - [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Integrar padrão `proactive-agent` com Working Buffer de 24h, deduplicação de alertas e Z-score estatístico proativo.
-- [ ] `src/services/notifier_telegram.js` • `processarComando` • Adicionar comando interativo `/paridade` para conversão de milhas aéreas (Smiles/Latam Pass/Livelo) com formatação HTML segura (`telegram-compose`).
 - [ ] `src/public/app.js` • `renderizarRotas` • Adicionar ordenação rápida por maior economia em relação ao teto e sparklines em SVG puro ultraleve (`smart-charts`).
+- [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Implementar detecção de deltas com threshold de Z-Score e supressão de ruído para oscilações normais de mercado.
 
 ---
 

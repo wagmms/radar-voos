@@ -78,37 +78,5 @@
     "dias_estadia": 2026,
     "tipo_viagem": "round_trip",
     "ativa": 1
-  },
-  {
-    "origem": "São Paulo",
-    "destino": "Buenos Aires",
-    "codigo_origem": "SAO",
-    "codigo_destino": "BUE",
-    "data_ida": "2026-11-10",
-    "data_volta": "2026-11-18",
-    "duracao_max_horas": 999,
-    "preco_alvo": 1800,
-    "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 1,
-    "dias_estadia": 8,
-    "tipo_viagem": "round_trip",
-    "ativa": 1
-  },
-  {
-    "origem": "Rio de Janeiro",
-    "destino": "Europa",
-    "codigo_origem": "RIO",
-    "codigo_destino": "/m/02j9z",
-    "data_ida": "2026-11-10",
-    "data_volta": "2026-11-25",
-    "duracao_max_horas": 999,
-    "preco_alvo": 3900,
-    "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 1,
-    "dias_estadia": 15,
-    "tipo_viagem": "round_trip",
-    "ativa": 1
   }
 ]
