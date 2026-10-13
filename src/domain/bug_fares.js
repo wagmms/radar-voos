@@ -166,17 +166,24 @@ export function identificarRegiaoDestino(destinoCod) {
 /**
  * Analisa uma tarifa encontrada pelo scanner e determina se é um Bug Fare em tempo real
  */
-export function detectarBugFareEstatistico({
-  origemCod,
-  destinoCod,
-  preco,
-  precoMedioHistorico = null,
-  desvioPadrao = null,
-  cabine = 'economy',
-  dataVolta = null
-}) {
+export function detectarBugFareEstatistico(params = {}) {
+  if (!params || typeof params !== 'object') {
+    return { ehBugFare: false };
+  }
+
+  const {
+    origemCod,
+    destinoCod,
+    preco,
+    precoMedioHistorico = null,
+    desvioPadrao = null,
+    cabine = 'economy',
+    dataVolta = null
+  } = params;
+
+  const precoNum = typeof preco === 'number' ? preco : Number(preco);
   // Filtro de ruído: valores inferiores a R$ 40 geralmente são taxas isoladas ou erros de parsing de centavos
-  if (!preco || preco < 40) return { ehBugFare: false };
+  if (!Number.isFinite(precoNum) || precoNum < 40) return { ehBugFare: false };
 
   const ehIdaEVolta = Boolean(dataVolta) && !ehSoIda(dataVolta);
   const regiao = identificarRegiaoDestino(destinoCod);
@@ -188,25 +195,25 @@ export function detectarBugFareEstatistico({
   // trata-se de ruído/erro de extração de scraping (ex: R$ 362 para Europa quando as taxas já somam > R$ 500)
   const pisoMinimoObj = PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE[regiao] || PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE.OUTRO;
   const valorPisoMinimo = Math.round((ehIdaEVolta ? pisoMinimoObj.idaEVolta : pisoMinimoObj.soIda) * multCabine);
-  if (preco < valorPisoMinimo) {
+  if (precoNum < valorPisoMinimo) {
     return {
       ehBugFare: false,
       descartadoPorInviabilidade: true,
-      motivo: `Tarifa de R$ ${preco} abaixo do piso mínimo plausível de R$ ${valorPisoMinimo} para ${regiao} (dado espúrio/ruído de extração)`
+      motivo: `Tarifa de R$ ${precoNum} abaixo do piso mínimo plausível de R$ ${valorPisoMinimo} para ${regiao} (dado espúrio/ruído de extração)`
     };
   }
 
   // 1. Piso estrutural de preço irreal no GDS ajustado por cabine
   if (pisoBase) {
     const valorPiso = Math.round((ehIdaEVolta ? pisoBase.idaEVolta : pisoBase.soIda) * multCabine);
-    if (preco <= valorPiso) {
+    if (precoNum <= valorPiso) {
       const labelCabine = cabine !== 'economy' ? ` em ${cabine.toUpperCase()}` : '';
-      const descontoEstimado = Math.round(((valorPiso * 1.8 - preco) / (valorPiso * 1.8)) * 100);
+      const descontoEstimado = Math.round(((valorPiso * 1.8 - precoNum) / (valorPiso * 1.8)) * 100);
       return {
         ehBugFare: true,
         severidade: 'CRITICA',
         tipo: '🚨 BUG FARE ESTRUTURAL (TARIFA IRREAL)',
-        motivo: `Preço R$ ${preco.toFixed(0)}${labelCabine} está abaixo do piso estrutural de R$ ${valorPiso} para ${regiao}`,
+        motivo: `Preço R$ ${precoNum.toFixed(0)}${labelCabine} está abaixo do piso estrutural de R$ ${valorPiso} para ${regiao}`,
         regiao,
         pisoReferencia: valorPiso,
         descontoEstimadoPct: Math.max(descontoEstimado, 40)
@@ -214,34 +221,37 @@ export function detectarBugFareEstatistico({
     }
   }
 
+  const numMedio = precoMedioHistorico !== null && precoMedioHistorico !== undefined ? Number(precoMedioHistorico) : null;
+  const numDesvio = desvioPadrao !== null && desvioPadrao !== undefined ? Number(desvioPadrao) : null;
+
   // 2. Anomalia estatística baseada em Z-Score (quando há desvio padrão amostral robusto)
-  if (precoMedioHistorico && desvioPadrao && desvioPadrao >= 50 && precoMedioHistorico > 0) {
-    const zScore = (preco - precoMedioHistorico) / desvioPadrao;
+  if (Number.isFinite(numMedio) && numMedio > 0 && Number.isFinite(numDesvio) && numDesvio >= 50) {
+    const zScore = (precoNum - numMedio) / numDesvio;
     if (zScore <= -2.2) {
-      const quedaPct = Math.round(((precoMedioHistorico - preco) / precoMedioHistorico) * 100);
+      const quedaPct = Math.round(((numMedio - precoNum) / numMedio) * 100);
       return {
         ehBugFare: true,
         severidade: 'ALTA',
         tipo: '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA (Z-SCORE)',
-        motivo: `Tarifa a ${Math.abs(zScore).toFixed(1)} desvios padrão da média (${quedaPct}% abaixo da média de R$ ${precoMedioHistorico.toFixed(0)})`,
+        motivo: `Tarifa a ${Math.abs(zScore).toFixed(1)} desvios padrão da média (${quedaPct}% abaixo da média de R$ ${numMedio.toFixed(0)})`,
         regiao,
-        pisoReferencia: precoMedioHistorico,
+        pisoReferencia: numMedio,
         descontoEstimadoPct: quedaPct
       };
     }
   }
 
   // 3. Queda percentual extrema (anomalia de >= 50% abaixo da média histórica da rota)
-  if (precoMedioHistorico && precoMedioHistorico > 0) {
-    const quedaPct = ((precoMedioHistorico - preco) / precoMedioHistorico) * 100;
+  if (Number.isFinite(numMedio) && numMedio > 0) {
+    const quedaPct = ((numMedio - precoNum) / numMedio) * 100;
     if (quedaPct >= 50) {
       return {
         ehBugFare: true,
         severidade: 'ALTA',
         tipo: '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA',
-        motivo: `Queda anômala de ${quedaPct.toFixed(0)}% em relação à média histórica (R$ ${precoMedioHistorico.toFixed(0)})`,
+        motivo: `Queda anômala de ${quedaPct.toFixed(0)}% em relação à média histórica (R$ ${numMedio.toFixed(0)})`,
         regiao,
-        pisoReferencia: precoMedioHistorico,
+        pisoReferencia: numMedio,
         descontoEstimadoPct: Math.round(quedaPct)
       };
     }

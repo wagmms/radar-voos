@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.10.7] - 2026-10-13 — QA & Blindagem Adversarial em `detectarBugFareEstatistico` (bug_fares)
+
+### 🛡️ Blindagem de QA Adversarial
+- `src/domain/bug_fares.js` · `detectarBugFareEstatistico`:
+  - Corrigido erro de desestruturação quando o método era invocado sem parâmetros, com `null` ou `undefined`, retornando agora `{ ehBugFare: false }` defensivamente.
+  - Adicionada coerção numérica segura (`precoNum`, `numMedio`, `numDesvio`) para suportar strings numéricas (ex: `'1450'`, `'4200'`) e prevenir quebras de `TypeError: .toFixed is not a function`.
+  - Tratamento estrito contra valores não-finitos (`NaN`, `Infinity`, `-Infinity`, preços negativos ou strings não numéricas), prevenindo contaminação estatística.
+- `tests/bug_fares.test.js`:
+  - Adicionado caso de testes adversariais cobrindo entradas nulas/indefinidas, strings numéricas e valores extremos (totalizando 276 testes aprovados).
+
+---
+
 ## [v2.10.6] - 2026-10-13 — QA & Blindagem Adversarial em `formatarPeriodoViagem` (aeroportos)
 
 ### 🛡️ Blindagem de QA Adversarial

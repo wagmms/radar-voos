@@ -101,6 +101,40 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(vooNormal.ehBugFare, false);
   });
 
+  it('deve lidar defensivamente com casos de borda adversariais em detectarBugFareEstatistico', () => {
+    // 1. Entradas nulas, indefinidas ou parâmetros ausentes
+    assert.deepStrictEqual(detectarBugFareEstatistico(null), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico(undefined), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico(), { ehBugFare: false });
+
+    // 2. Preços e médias informados como strings numéricas (não deve quebrar .toFixed e deve detectar)
+    const bugString = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: '1450',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugString.ehBugFare, true);
+    assert.strictEqual(bugString.severidade, 'CRITICA');
+
+    const bugZScoreString = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      preco: '1850',
+      precoMedioHistorico: '4200',
+      desvioPadrao: '800',
+      dataVolta: '2026-11-20'
+    });
+    assert.strictEqual(bugZScoreString.ehBugFare, true);
+    assert.strictEqual(bugZScoreString.severidade, 'ALTA');
+
+    // 3. Entradas adversariais com NaN, Infinity, strings não numéricas ou valores negativos
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: NaN }), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: Infinity }), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: -200 }), { ehBugFare: false });
+    assert.deepStrictEqual(detectarBugFareEstatistico({ preco: 'gratis' }), { ehBugFare: false });
+  });
+
   it('deve extrair itens válidos de XML RSS e Atom no BugFareFeedWatcher', () => {
     const rssMock = `
       <rss version="2.0">
