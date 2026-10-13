@@ -110,7 +110,8 @@ class NotifierTelegram {
     link,
     clima = null,
     semData = false,
-    labelJanela = null
+    labelJanela = null,
+    precoAlvo = null
   }) {
     const ehSoIdaAlerta = ehSoIda(dataVolta);
     const escopoModalidade = ehSoIdaAlerta ? 'Apenas Ida' : 'Ida e Volta';
@@ -140,6 +141,16 @@ class NotifierTelegram {
     }
 
     msg += `💰 <b>Voo (${escopoModalidade}): R$ ${preco.toFixed(2).replace('.', ',')}</b>\n`;
+
+    if (precoAlvo && preco < precoAlvo) {
+      const economiaReais = precoAlvo - preco;
+      const economiaPct = Math.round((economiaReais / precoAlvo) * 100);
+      msg += `🎯 <b>META BATIDA!</b> Economia de <b>R$ ${economiaReais.toFixed(2).replace('.', ',')}</b> (<b>${economiaPct}% abaixo</b> do seu teto de R$ ${precoAlvo.toFixed(2).replace('.', ',')})\n`;
+    }
+
+    if (ehRecorde) {
+      msg += `🏆 <b>RECORDE HISTÓRICO:</b> Menor tarifa já registrada nesta rota!\n`;
+    }
 
     if (variacaoTexto && variacaoTexto !== 'Estável' && variacaoTexto !== 'Primeira Checagem') {
       msg += `📊 ${escapeHtml(variacaoTexto)}\n`;
@@ -171,10 +182,11 @@ class NotifierTelegram {
     if (rotaId) {
       inlineKeyboard.push([
         { text: '🔍 Checar Agora', callback_data: `check:${rotaId}` },
-        { text: '🔕 Silenciar 24h', callback_data: `mute24:${rotaId}` }
+        { text: '🎯 Alterar Teto', callback_data: `teto_help:${rotaId}` }
       ]);
       inlineKeyboard.push([
-        { text: '🌤️ Previsão do Clima', callback_data: `weather:${rotaId}` }
+        { text: '🌤️ Previsão do Clima', callback_data: `weather:${rotaId}` },
+        { text: '🔕 Silenciar 24h', callback_data: `mute24:${rotaId}` }
       ]);
     }
 
@@ -299,6 +311,18 @@ class NotifierTelegram {
         `• Período Viagem: ${periodoTexto}\n\n` +
         `<i>Dados fornecidos por Open-Meteo & wttr.in.</i>`;
       await this.enviarMensagem(textoClima, null, '', false);
+    } else if (acao === 'teto_help') {
+      await this.responderCallbackQuery(cb.id, `Envie /teto ${rotaId} [valor]`);
+      const tetoAtual = rota.preco_alvo ? `R$ ${rota.preco_alvo.toFixed(2).replace('.', ',')}` : 'Não definido';
+      const sugestao = rota.preco_atual ? Math.round(rota.preco_atual * 0.9) : 2500;
+      const texto =
+        `🎯 <b>AJUSTAR TETO DE PREÇO • Rota #${rotaId}</b>\n\n` +
+        `• Rota: <b>${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}</b>\n` +
+        `• Teto Atual: <b>${tetoAtual}</b>\n\n` +
+        `Para alterar o limite desta rota, envie:\n` +
+        `<code>/teto ${rotaId} ${sugestao}</code>\n\n` +
+        `💡 <i>Toque no comando acima para copiar e alterar o valor.</i>`;
+      await this.enviarMensagem(texto, null, '', false);
     }
   }
 

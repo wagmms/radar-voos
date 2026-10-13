@@ -295,7 +295,8 @@ export class FlightScanner {
         link: oferta.link,
         clima: clima.ok ? clima : null,
         semData: rota.sem_data === 1,
-        labelJanela: melhorOpcaoFlexivel?.label
+        labelJanela: melhorOpcaoFlexivel?.label,
+        precoAlvo: rota.preco_alvo
       });
     }
 
