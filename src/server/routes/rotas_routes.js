@@ -1,6 +1,6 @@
 import { rotasRepo } from '../../db.js';
 import { resolverDestino, validarPeriodo, calcularDataVolta, extrairDiasEstadia, ehSoIda, rotaEhSoIda } from '../../domain/rotas.js';
-import { FlightScanner } from '../../services/flight_scanner.js';
+import { FlightScanner, calcularMilhasRota } from '../../services/flight_scanner.js';
 import { weatherService } from '../../services/weather_service.js';
 import { telemetryEvents } from '../../services/telemetry_events.js';
 import { rotasSync } from '../../services/rotas_sync.js';
@@ -14,11 +14,21 @@ export async function rotasRoutes(fastify) {
       } catch (_) {}
     }
     const rotas = rotasRepo.listarTodas(false);
-    const rotasCompletas = rotas.map(r => ({
-      ...r,
-      esta_silenciada: rotasRepo.estaSilenciada(r),
-      historico_recente: rotasRepo.obterHistoricoRecente(r.id, 10)
-    }));
+    const rotasCompletas = rotas.map(r => {
+      const paridadeMilhas = r.paridade_milhas ?? null;
+      const programaMilhas = r.programa_milhas || 'smiles';
+      const milhasEstimadas = r.preco_atual
+        ? calcularMilhasRota(r.preco_atual, paridadeMilhas, programaMilhas)
+        : null;
+      return {
+        ...r,
+        paridade_milhas: paridadeMilhas,
+        programa_milhas: programaMilhas,
+        milhas_estimadas: milhasEstimadas,
+        esta_silenciada: rotasRepo.estaSilenciada(r),
+        historico_recente: rotasRepo.obterHistoricoRecente(r.id, 10)
+      };
+    });
     return { ok: true, total: rotasCompletas.length, rotas: rotasCompletas };
   });
 

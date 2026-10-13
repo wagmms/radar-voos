@@ -143,6 +143,73 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.ok(json.rotas.length >= 1);
   });
 
+  it('GET /api/rotas deve incluir paridade_milhas e programa_milhas em todas as rotas', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/rotas' });
+    assert.strictEqual(res.statusCode, 200);
+    const json = res.json();
+    assert.strictEqual(json.ok, true);
+    assert.ok(json.rotas.length >= 1, 'Deve existir ao menos uma rota');
+
+    for (const rota of json.rotas) {
+      // paridade_milhas deve existir no payload (null quando não configurada)
+      assert.ok(Object.prototype.hasOwnProperty.call(rota, 'paridade_milhas'),
+        `rota ${rota.id} deve ter paridade_milhas`);
+      // programa_milhas deve ser string não vazia com fallback 'smiles'
+      assert.ok(typeof rota.programa_milhas === 'string' && rota.programa_milhas.length > 0,
+        `rota ${rota.id} deve ter programa_milhas como string não vazia`);
+      // milhas_estimadas deve existir no payload (null quando não há preco_atual)
+      assert.ok(Object.prototype.hasOwnProperty.call(rota, 'milhas_estimadas'),
+        `rota ${rota.id} deve ter milhas_estimadas`);
+    }
+  });
+
+  it('GET /api/rotas deve retornar milhas_estimadas calculado quando preco_atual existe', async () => {
+    // Cria rota com paridade_milhas configurada
+    const resCreate = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: {
+        origem: 'São Paulo',
+        destino: 'Nova York',
+        data_ida: '2026-12-10',
+        data_volta: '10',
+        preco_alvo: 5000
+      }
+    });
+    assert.strictEqual(resCreate.statusCode, 201);
+    const novaRota = resCreate.json().rota;
+
+    // Configura paridade_milhas e programa_milhas via PATCH
+    const resPatch = await app.inject({
+      method: 'PATCH',
+      url: `/api/rotas/${novaRota.id}/milhas`,
+      payload: { paridade_milhas: 20.00, programa_milhas: 'latam' }
+    });
+    assert.strictEqual(resPatch.statusCode, 200);
+
+    // Simula checagem: força preco_atual no banco para o teste
+    const { getDb } = await import('../src/db.js');
+    const db = getDb();
+    db.prepare('UPDATE rotas SET preco_atual = 4500 WHERE id = ?').run(novaRota.id);
+
+    // Verifica se GET /api/rotas retorna milhas_estimadas calculadas
+    const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const json = resList.json();
+    const rotaTeste = json.rotas.find(r => r.id === novaRota.id);
+
+    assert.ok(rotaTeste, 'Rota recém-criada deve aparecer no listAll');
+    assert.strictEqual(rotaTeste.programa_milhas, 'latam');
+    assert.strictEqual(rotaTeste.paridade_milhas, 20.00);
+    // milhas_estimadas deve existir e conter { milhas, programa, cotacaoMilheiro }
+    assert.ok(rotaTeste.milhas_estimadas !== null, 'milhas_estimadas não deve ser null quando há preco_atual');
+    assert.ok(typeof rotaTeste.milhas_estimadas.milhas === 'number', 'milhas_estimadas.milhas deve ser número');
+    assert.ok(rotaTeste.milhas_estimadas.milhas > 0, 'milhas_estimadas.milhas deve ser positivo');
+    assert.strictEqual(rotaTeste.milhas_estimadas.programa, 'latam');
+    assert.strictEqual(rotaTeste.milhas_estimadas.cotacaoMilheiro, 20.00);
+    // Verificação de valor: ceil(4500 / 20.00 * 1000) = 225000 milhas
+    assert.strictEqual(rotaTeste.milhas_estimadas.milhas, Math.ceil((4500 / 20.00) * 1000));
+  });
+
   it('PUT /api/rotas/:id deve alterar parâmetros de uma rota existente', async () => {
     const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
     const rotaId = resList.json().rotas[0].id;
