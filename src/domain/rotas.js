@@ -267,7 +267,7 @@ export function resolverCodigoParaLink(cod) {
   const str = String(cod).trim();
   if (!str) return 'SAO';
 
-  const matchIata = str.match(/\(([A-Za-z]{3})\)/i);
+  const matchIata = str.match(/\(\s*([A-Za-z]{3})\s*\)/i);
   if (matchIata) return matchIata[1].toUpperCase();
 
   // Múltiplos aeroportos IATA separados por vírgula (ex: "GRU, GIG" ou "gru , gig")
@@ -284,6 +284,12 @@ export function resolverCodigoParaLink(cod) {
   if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'United States';
   if (limpoLower === 'asia') return 'Asia';
   if (/^\/[mg]\//i.test(str)) return str.replace(/^\/[mg]\//i, '');
+
+  // Código IATA único de 3 letras (ex: "gru", "mia")
+  if (str.length === 3 && /^[A-Za-z]{3}$/.test(str)) {
+    return str.toUpperCase();
+  }
+
   return str;
 }
 

@@ -260,8 +260,15 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
 
     // Código IATA entre parênteses minúsculo ou com espaços deve ser normalizado para maiúsculo
     assert.strictEqual(resolverCodigoParaLink('São Paulo (gru)'), 'GRU');
+    assert.strictEqual(resolverCodigoParaLink('São Paulo ( GRU )'), 'GRU');
+    assert.strictEqual(resolverCodigoParaLink('Miami (  MIA  )'), 'MIA');
     assert.strictEqual(resolverCodigoParaLink('(gig)'), 'GIG');
+    assert.strictEqual(resolverCodigoParaLink('(  gig  )'), 'GIG');
     assert.strictEqual(resolverCodigoParaLink('Buenos Aires (eze)'), 'EZE');
+
+    // Código IATA único minúsculo ou com espaços deve ser normalizado para maiúsculo canônico
+    assert.strictEqual(resolverCodigoParaLink('gru'), 'GRU');
+    assert.strictEqual(resolverCodigoParaLink('  mia  '), 'MIA');
 
     // KGMID e nomes canônicos de regiões
     assert.strictEqual(resolverCodigoParaLink('/m/02j9z'), 'Europe');

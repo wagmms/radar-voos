@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.8] - 2026-10-13 — Blindagem Adversarial em resolverCodigoParaLink (Domínio Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverCodigoParaLink`):
+  - Corrigida a extração de códigos IATA entre parênteses para tolerar espaços internos arbitrários (ex: `"São Paulo ( GRU )"` e `"Miami (  MIA  )"`), alinhando o comportamento ao parser canônico de `resolverDestino`.
+  - Adicionada normalização automática para maiúsculo em códigos IATA individuais de 3 letras informados em minúsculas (ex: `"gru"` → `"GRU"`, `"mia"` → `"MIA"`), prevenindo a geração de URLs e queries de scraping com códigos em caixa baixa.
+  - Preservada a precedência de mapeamento para regiões canônicas (ex: `"eua"` → `"United States"`).
+- **`tests/domain.test.js`**:
+  - Adicionados testes de borda adversariais cobrindo parênteses com espaços internos arbitrários e códigos IATA únicos em minúsculas.
+
 ## [v2.18.7] - 2026-10-13 — Blindagem Adversarial em formatarDataParaBusca (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
