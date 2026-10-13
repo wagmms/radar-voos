@@ -21,21 +21,34 @@ export function normalizarTexto(texto) {
  * Resolve nome de cidade ou região para código Metropolitano, IATA ou KGMID
  */
 export function resolverDestino(texto) {
-  if (!texto) return null;
-  const limpo = normalizarTexto(texto);
+  if (!texto || (typeof texto !== 'string' && typeof texto !== 'number')) return null;
+  const strOriginal = String(texto).trim();
+  if (!strOriginal) return null;
 
+  // 1. Extração prioritária se contiver código IATA entre parênteses (ex: "São Paulo (GRU)", "Miami (MIA)")
+  const matchIata = strOriginal.match(/\(([A-Za-z]{3})\)/i);
+  if (matchIata) {
+    return matchIata[1].toUpperCase();
+  }
+
+  // 2. Resolução por dicionários canônicos (regiões e metrópoles)
+  const limpo = normalizarTexto(strOriginal);
   if (DICIONARIO_REGIOES[limpo]) return DICIONARIO_REGIOES[limpo];
   if (DICIONARIO_CIDADES[limpo]) return DICIONARIO_CIDADES[limpo];
 
-  const trimOriginal = String(texto).trim();
-  if (trimOriginal.length === 3 && /^[A-Za-z]{3}$/.test(trimOriginal)) {
-    return trimOriginal.toUpperCase();
+  // 3. Código IATA único de 3 letras
+  if (strOriginal.length === 3 && /^[A-Za-z]{3}$/.test(strOriginal)) {
+    return strOriginal.toUpperCase();
   }
-  if (/^[A-Za-z]{3}(,[A-Za-z]{3})+$/.test(trimOriginal)) {
-    return trimOriginal.toUpperCase();
+
+  // 4. Múltiplos aeroportos IATA separados por vírgula (com ou sem espaços, ex: "GRU, GIG", "GRU , CGH")
+  if (/^[A-Za-z]{3}(\s*,\s*[A-Za-z]{3})+$/.test(strOriginal)) {
+    return strOriginal.toUpperCase().replace(/\s*,\s*/g, ',');
   }
-  if (trimOriginal.startsWith('/m/') || trimOriginal.startsWith('/g/')) {
-    return trimOriginal;
+
+  // 5. Identificadores KGMID/Freebase (/m/ ou /g/)
+  if (strOriginal.startsWith('/m/') || strOriginal.startsWith('/g/')) {
+    return strOriginal;
   }
 
   return null;

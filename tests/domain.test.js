@@ -43,6 +43,30 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverDestino('Centro Oeste'), null);
   });
 
+  it('deve extrair código IATA embutido entre parênteses e resolver múltiplos aeroportos com espaços', () => {
+    // Caso 1: Código IATA entre parênteses
+    assert.strictEqual(resolverDestino('São Paulo (GRU)'), 'GRU');
+    assert.strictEqual(resolverDestino('Miami (MIA)'), 'MIA');
+    assert.strictEqual(resolverDestino('Aeroporto Internacional (BSB)'), 'BSB');
+
+    // Caso 2: Múltiplos IATAs com espaços arbitrários em volta das vírgulas
+    assert.strictEqual(resolverDestino('GRU, GIG'), 'GRU,GIG');
+    assert.strictEqual(resolverDestino('  GRU , BSB , CNF  '), 'GRU,BSB,CNF');
+    assert.strictEqual(resolverDestino('gig,sdU'), 'GIG,SDU');
+
+    // Caso 3: Casos de borda e entradas adversariais / inválidas
+    assert.strictEqual(resolverDestino(null), null);
+    assert.strictEqual(resolverDestino(undefined), null);
+    assert.strictEqual(resolverDestino(''), null);
+    assert.strictEqual(resolverDestino('   '), null);
+    assert.strictEqual(resolverDestino({}), null);
+    assert.strictEqual(resolverDestino([]), null);
+    assert.strictEqual(resolverDestino(12345), null);
+    assert.strictEqual(resolverDestino('GRU,'), null);
+    assert.strictEqual(resolverDestino(',GRU'), null);
+    assert.strictEqual(resolverDestino('GRU,,GIG'), null);
+  });
+
   it('deve normalizar metrópoles para aeroportos físicos compatíveis com SerpAPI', () => {
     assert.strictEqual(normalizarParaSerpApi('SAO'), 'GRU,CGH');
     assert.strictEqual(normalizarParaSerpApi('RIO'), 'GIG,SDU');

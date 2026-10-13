@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.1] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverDestino`):
+  - Corrigida resolução de destinos onde strings contendo códigos IATA embutidos entre parênteses (ex: `"São Paulo (GRU)"`, `"Miami (MIA)"`) retornavam `null`, passando a extrair o IATA prioritariamente com segurança.
+  - Adicionado suporte defensivo a múltiplos aeroportos IATA separados por vírgula com espaços arbitrários (ex: `"GRU, GIG"`, `"  GRU , BSB , CNF  "`), normalizando a saída para formato canônico sem espaços (`"GRU,GIG"`, `"GRU,BSB,CNF"`).
+  - Blindagem de tipos: rejeição antecipada de entradas nulas, vazias, objetos (`{}`), arrays (`[]`), números soltos e formatos truncados/corrompidos (`"GRU,"`, `",GRU"`, `"GRU,,GIG"`).
+- **`tests/domain.test.js`**:
+  - Adicionados testes de borda e adversariais para `resolverDestino` cobrindo parênteses, espaçamento em listas IATA e entradas inválidas.
+
 ## [v2.18.0] - 2026-10-13 — calcularMilhasRota no Backend + milhas_estimadas em escanearRota
 
 ### ✈️ Novo Recurso: Estimativa de Milhas Calculada no Servidor
