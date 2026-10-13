@@ -278,7 +278,8 @@ export function rotaEhSoIda(rotaOuDados) {
 /**
  * Gera link direto e estruturado para o Google Flights que abre direto no voo / rota
  */
-export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta) {
+export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda = 'BRL') {
+  const moedaCode = (moeda || 'BRL').trim().toUpperCase();
   const origemRes = resolverCodigoParaLink(origemCod);
   const destinoRes = resolverCodigoParaLink(destinoCod);
 
@@ -286,14 +287,14 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
   const destinoParam = encodeURIComponent(destinoRes);
 
   if (!dataIda) {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   }
 
   const soIda = ehSoIda(dataVolta);
   if (!soIda && dataVolta) {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20returning%20${dataVolta}&hl=pt-BR&gl=BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20returning%20${dataVolta}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=BRL`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   }
 }
 
@@ -461,7 +462,8 @@ export function gerarLinkGoogleFlightsCheapest(
   duracaoMaxHoras = null,
   adultos = 1,
   criancas = 0,
-  classeViagem = 'economy'
+  classeViagem = 'economy',
+  moeda = 'BRL'
 ) {
   if (!dataIda) return null;
   const strDest = String(destinoCod || '').trim();
@@ -482,7 +484,7 @@ export function gerarLinkGoogleFlightsCheapest(
     if (hubIata) {
       destinoEfetivo = hubIata;
     } else {
-      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda);
     }
   }
 
@@ -494,7 +496,8 @@ export function gerarLinkGoogleFlightsCheapest(
   const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
   const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
   const tfu = construirTfu(adultos, criancas, 0, classeViagem);
-  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfs}&tfu=${tfu}`;
+  const moedaCode = (moeda || 'BRL').trim().toUpperCase();
+  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaCode}&tfs=${tfs}&tfu=${tfu}`;
 }
 
 /**

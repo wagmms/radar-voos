@@ -38,8 +38,11 @@ class Scheduler {
   /**
    * Executa ciclo de monitoramento
    * @param {boolean} forcarTodas Se true, verifica todas as rotas ativas em fila
+   * @param {Object} [opcoes]
+   * @param {string} [opcoes.moeda] Moeda opcional para cotação
+   * @param {string} [opcoes.curr] Alias para moeda
    */
-  async executarCiclo(forcarTodas = false) {
+  async executarCiclo(forcarTodas = false, { moeda = null, curr = null } = {}) {
     if (this.executando) {
       console.warn('⚠️ Varredura anterior ainda em andamento. Ignorando novo disparo concorrente.');
       return { ok: false, mensagem: 'Execução já em andamento' };
@@ -54,7 +57,8 @@ class Scheduler {
       const resultadoVarredura = await FlightScanner.executarCicloVarredura({
         forcarTodas,
         limite: 1,
-        aplicarJitter: true
+        aplicarJitter: true,
+        moeda: moeda || curr
       });
 
       const processadas = resultadoVarredura.processadas;

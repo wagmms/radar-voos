@@ -4,6 +4,33 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.13.0] - 2026-10-13 — Suporte à Passagem de Moeda Configurada (Multimoeda) no Ciclo de Varredura e Provedores de Busca
+
+### ✨ Novo Recurso & Arquitetura (Motor de Busca Google Flights Multimoeda)
+- `src/services/flight_scanner.js`:
+  - `executarCicloVarredura`: implementado suporte aos parâmetros `moeda` e `curr` (ex: 'BRL', 'USD', 'EUR'). A moeda é normalizada em caixa alta e propagada para cada rota monitorada ou herdada da própria configuração da rota (`rota.moeda`), registrando o campo `moeda` no resultado de cada rota e no retorno consolidado do ciclo.
+  - `escanearRota`: enriquecido para receber `opcoes.moeda` / `opcoes.curr`, determinando `moedaEfetiva` e transmitindo para todas as consultas de provedor (modo sem data, modo data fixa e matriz de flexibilidade adjacente ±7 dias). Transmite a moeda também para `gerarLinkGoogleFlightsCheapest` e `gerarLinkGoogleFlights` e persiste a moeda em `rotasRepo.atualizarResultadoChecagem`.
+  - `buscarOfertas`: assinatura expandida para receber `moeda = 'BRL'` posicional ou via objeto unificado de parâmetros com retrocompatibilidade integral.
+- `src/domain/rotas.js`:
+  - `gerarLinkGoogleFlights` e `gerarLinkGoogleFlightsCheapest`: adicionado parâmetro opcional `moeda = 'BRL'`, injetando dinamicamente `&curr=${moedaCode}` nas URLs de busca canônica e links da aba Cheapest do Google Flights.
+- `src/services/providers/scrapling_client.js`:
+  - `construirUrlCheapest`: suporte ao 6º parâmetro `moeda = 'BRL'`, parametrizando `&curr=${moedaEfetiva}` na URL gerada.
+  - `ScraplingProvider.buscarOfertas`: repassa `moeda` para `construirUrlCheapest` e links canônicos, devolvendo `moeda` estruturada no objeto `oferta`.
+  - `extrairVoosDoHtml`: ampliada regex de detecção para suportar moedas internacionais (`USD`, `EUR`, `US dollars`, `euros`, etc.).
+- `src/services/providers/google_flights_direct_provider.js`:
+  - `GoogleFlightsDirectProvider.buscarOfertas`: suporta `moeda` e `curr`, substituindo ou adicionando dinamicamente `&curr=${moedaCode}` na URL de consulta stealth e incluindo `moeda: moedaCode` na oferta eleita.
+- `src/services/providers/serpapi_provider.js`:
+  - `SerpApiProvider.buscarOfertas`: suporta `moeda` e `curr`, injetando `currency: moedaCode` na query da SerpAPI e na geração do link específico.
+- `src/db.js`:
+  - Adicionada coluna `moeda TEXT DEFAULT 'BRL'` na tabela `rotas` no `initSchema` e via migração defensiva (`ALTER TABLE rotas ADD COLUMN moeda TEXT DEFAULT 'BRL';`).
+  - Atualizados `rotasRepo.criar`, `rotasRepo.atualizar` e `rotasRepo.atualizarResultadoChecagem` para persistir e consultar a moeda da rota.
+- `src/services/scheduler.js`, `src/server/routes/monitor_routes.js` e `src/server/routes/rotas_routes.js`:
+  - Repasse transparente de parâmetros de moeda nos endpoints `/api/varredura`, `/api/rotas` e `/api/rotas/:id/verificar`.
+- `tests/flight_scanner.test.js` & `tests/scrapling_client.test.js`:
+  - 5 novos testes cobrindo propagação de moeda no ciclo de varredura, normalização de alias `curr`, herança de moeda da rota, encapsulamento posicional e por objeto, e URLs com moeda customizada no Scrapling (321/321 testes JS verdes).
+
+---
+
 ## [v2.12.0] - 2026-10-13 — Botão de Cópia Rápida do Link Google Flights com Feedback Toast no Cockpit PWA
 
 ### ✨ Novo Recurso (Cockpit PWA Anti-UI-Slop)

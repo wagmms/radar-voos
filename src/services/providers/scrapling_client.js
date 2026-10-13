@@ -485,7 +485,8 @@ export function extrairPrecoCheapestTab(html, urlResposta = null) {
  * @param {number|null} duracaoMaxHoras - Duração máxima em horas (filtro opcional)
  * @returns {{ url: string, tipoViagem: 'one_way'|'round_trip', tfs: string }}
  */
-export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
+export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null, moeda = 'BRL') {
+  const moedaEfetiva = (moeda || 'BRL').trim().toUpperCase();
   const origResolvido = resolverCodigoParaLink(origemCod);
   const destResolvido = resolverCodigoParaLink(destinoCod);
 
@@ -508,7 +509,7 @@ export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta =
     maxDurationMinutes: maxMin
   });
 
-  const url = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfsPayload}&tfu=EgoIABAAGAAgAigD`;
+  const url = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaEfetiva}&tfs=${tfsPayload}&tfu=EgoIABAAGAAgAigD`;
 
   return { url, tipoViagem, tfs: tfsPayload };
 }
@@ -524,12 +525,12 @@ export function extrairVoosDoHtml(html) {
   const voos = [];
 
   // Camada A: Blocos completos com preço, cia, duração e detalhes
-  const regexAriaBloco = /aria-label=["']((?:[^"']|\\.)*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)(?:[^"']|\\.)*?)["']/gi;
+  const regexAriaBloco = /aria-label=["']((?:[^"']|\\.)*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)(?:[^"']|\\.)*?)["']/gi;
   let m;
 
   while ((m = regexAriaBloco.exec(html)) !== null) {
     const ariaTexto = m[1];
-    const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)/i);
+    const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
     const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
     if (!preco || preco < 80 || preco > 60000) continue;
 
@@ -688,21 +689,25 @@ export class ScraplingProvider extends FlightProviderInterface {
    * @param {number} [params.duracaoMaxHoras]
    * @param {string} [params.cabine]
    * @param {number} [params.adultos]
+   * @param {string} [params.moeda]
+   * @param {string} [params.curr]
    * @returns {Promise<{ok:boolean, encontrouVoos?:boolean, oferta?:object, erro?:boolean, mensagemErro?:string}>}
    */
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
+  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
     // Validação de entrada defensiva
     if (!origemCod || !destinoCod || !dataIda) {
       return { ok: false, erro: true, mensagemErro: 'ScraplingProvider: parâmetros de busca incompletos (origemCod, destinoCod e dataIda são obrigatórios).' };
     }
 
+    const moedaEfetiva = (curr || moeda || 'BRL').trim().toUpperCase();
+
     // Constrói URL Cheapest com distinção One-Way vs Round-Trip
-    const { url: urlCheapest, tipoViagem } = construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras);
+    const { url: urlCheapest, tipoViagem } = construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, moedaEfetiva);
 
     // Link canônico de fallback para exibição (sem tfs)
     const linkCanônico = dataIda
-      ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras) || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta)
-      : gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+      ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaEfetiva) || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva)
+      : gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva);
 
     let ultimoErro = 'Nenhuma tentativa realizada';
 
@@ -816,6 +821,7 @@ export class ScraplingProvider extends FlightProviderInterface {
           encontrouVoos: true,
           oferta: {
             preco: melhorOferta.preco,
+            moeda: moedaEfetiva,
             precoOriginal: melhorOferta.precoOriginal,
             duracaoHoras: melhorOferta.duracaoHoras,
             destinoReal: destinoCod,

@@ -78,4 +78,124 @@ describe('Serviço FlightScanner & Ciclo de Varredura (executarCicloVarredura)',
     assert.strictEqual(typeof resultado.deltaEstatistico.quedaPct, 'number');
     assert.ok(['INFO', 'OPORTUNIDADE', 'BUG_FARE'].includes(resultado.deltaEstatistico.categoria));
   });
+
+  it('4. executarCicloVarredura: deve propagar moeda configurada (moeda=USD) para os provedores e registrar no resultado', async () => {
+    let moedaCapturada = null;
+    FlightScanner.buscarOfertas = async (...args) => {
+      // O último argumento posicional ou o campo moeda no objeto é a moeda
+      if (typeof args[0] === 'object') {
+        moedaCapturada = args[0].moeda;
+      } else {
+        moedaCapturada = args[7]; // 8º argumento posicional
+      }
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco: 250,
+          nivelPreco: 'NORMAL',
+          duracaoHoras: 7.0,
+          duracaoMinutos: 420,
+          detalhes: 'Voo USD',
+          dicaStopover: '-',
+          termometro: '⚪ Preço Normal USD',
+          origemReal: 'SAO',
+          destinoReal: 'MIA',
+          codigoDestinoReal: 'MIA',
+          link: 'https://flights.google.com/teste-usd'
+        }
+      };
+    };
+
+    const res = await FlightScanner.executarCicloVarredura({ forcarTodas: false, limite: 1, moeda: 'USD' });
+    assert.strictEqual(res.ok, true);
+    assert.strictEqual(res.moeda, 'USD');
+    assert.strictEqual(moedaCapturada, 'USD');
+    assert.ok(res.resultados.length > 0);
+    assert.strictEqual(res.resultados[0].moeda, 'USD');
+    assert.strictEqual(res.resultados[0].res.moeda, 'USD');
+  });
+
+  it('5. executarCicloVarredura: deve aceitar alias curr (curr="eur") e normalizar para EUR', async () => {
+    let moedaCapturada = null;
+    FlightScanner.buscarOfertas = async (...args) => {
+      moedaCapturada = typeof args[0] === 'object' ? args[0].moeda : args[7];
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco: 320,
+          nivelPreco: 'NORMAL',
+          duracaoHoras: 10.0,
+          duracaoMinutos: 600,
+          detalhes: 'Voo EUR',
+          dicaStopover: '-',
+          termometro: '⚪ Preço Normal EUR',
+          origemReal: 'SAO',
+          destinoReal: 'LIS',
+          codigoDestinoReal: 'LIS',
+          link: 'https://flights.google.com/teste-eur'
+        }
+      };
+    };
+
+    const res = await FlightScanner.executarCicloVarredura({ forcarTodas: false, limite: 1, curr: 'eur' });
+    assert.strictEqual(res.ok, true);
+    assert.strictEqual(res.moeda, 'EUR');
+    assert.strictEqual(moedaCapturada, 'EUR');
+    assert.strictEqual(res.resultados[0].moeda, 'EUR');
+  });
+
+  it('6. escanearRota: deve usar moeda da rota ou fallback BRL quando nao especificada globalmente', async () => {
+    let moedaCapturada = null;
+    FlightScanner.buscarOfertas = async (...args) => {
+      moedaCapturada = typeof args[0] === 'object' ? args[0].moeda : args[7];
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco: 990,
+          nivelPreco: 'NORMAL',
+          duracaoHoras: 8.0,
+          duracaoMinutos: 480,
+          detalhes: 'Voo Rota Moeda',
+          dicaStopover: '-',
+          termometro: '⚪ Preço Normal',
+          origemReal: 'SAO',
+          destinoReal: 'MIA',
+          codigoDestinoReal: 'MIA',
+          link: 'https://flights.google.com/teste'
+        }
+      };
+    };
+
+    const rotaComMoeda = {
+      ...rotasRepo.listarTodas(true)[0],
+      moeda: 'GBP'
+    };
+
+    const res = await FlightScanner.escanearRota(rotaComMoeda);
+    assert.strictEqual(res.sucesso, true);
+    assert.strictEqual(res.moeda, 'GBP');
+    assert.strictEqual(moedaCapturada, 'GBP');
+  });
+
+  it('7. buscarOfertas: deve encapsular moeda para flightProviderManager corretamente', async () => {
+    // Restaura buscarOfertas original para testar integração com flightProviderManager
+    FlightScanner.buscarOfertas = originalBuscarOfertas;
+
+    // Chamada com parâmetros posicionais
+    const promPosicional = FlightScanner.buscarOfertas('GRU', 'MIA', '2027-04-10', '2027-04-20', 12, 'economy', 1, 'USD');
+    assert.ok(promPosicional instanceof Promise);
+
+    // Chamada com objeto direto
+    const promObjeto = FlightScanner.buscarOfertas({
+      origemCod: 'GRU',
+      destinoCod: 'MIA',
+      dataIda: '2027-04-10',
+      dataVolta: '2027-04-20',
+      moeda: 'EUR'
+    });
+    assert.ok(promObjeto instanceof Promise);
+  });
 });

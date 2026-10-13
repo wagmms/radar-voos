@@ -153,6 +153,7 @@ export async function rotasRoutes(fastify) {
       dias_estadia: soIda ? null : diasEstadiaEfetivo,
       tipo: soIda ? 'one_way' : 'round_trip',
       tipo_viagem: soIda ? 'one_way' : 'round_trip',
+      moeda: body.moeda || body.curr || 'BRL',
       clima_destino_resumo: climaPreliminar?.ok ? climaPreliminar.resumo : null,
       clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
     });
@@ -293,12 +294,13 @@ export async function rotasRoutes(fastify) {
   // Forçar verificação imediata de uma rota específica
   fastify.post('/api/rotas/:id/verificar', async (request, reply) => {
     const { id } = request.params;
+    const { moeda, curr } = { ...(request.query || {}), ...(request.body || {}) };
     const rota = rotasRepo.buscarPorId(id);
     if (!rota) {
       return reply.code(404).send({ ok: false, erro: 'Rota não encontrada' });
     }
 
-    const res = await FlightScanner.escanearRota(rota);
+    const res = await FlightScanner.escanearRota(rota, { moeda: moeda || curr });
     telemetryEvents.emitirAtualizacao('rota_verificada', { rotaId: id, resultado: res });
     return { ok: true, resultado: res };
   });

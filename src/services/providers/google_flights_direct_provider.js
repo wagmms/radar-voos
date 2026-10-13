@@ -209,13 +209,18 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
     return this.ativo;
   }
 
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1 }) {
-    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras) : null;
-    const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
+    const moedaCode = (curr || moeda || 'BRL').trim().toUpperCase();
+    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaCode) : null;
+    const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaCode);
     let linkConsulta = linkBase;
     if (!linkConsulta.includes('&hl=')) linkConsulta += '&hl=pt-BR';
     if (!linkConsulta.includes('&gl=')) linkConsulta += '&gl=BR';
-    if (!linkConsulta.includes('&curr=')) linkConsulta += '&curr=BRL';
+    if (linkConsulta.includes('&curr=')) {
+      linkConsulta = linkConsulta.replace(/&curr=[A-Za-z]{3}/i, `&curr=${moedaCode}`);
+    } else {
+      linkConsulta += `&curr=${moedaCode}`;
+    }
 
     try {
       // 1. Rotação dinâmica de fingerprint para evitar perfil estático de bot
@@ -283,11 +288,11 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       }
 
       // Camada A: Detalhes ricos estruturados nos atributos aria-label e blocos de resultado
-      const regexAriaBloco = /aria-label=["\x27]([^"\x27]*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)[^"\x27]*?)["\x27]/gi;
+      const regexAriaBloco = /aria-label=["\x27]([^"\x27]*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)[^"\x27]*?)["\x27]/gi;
       let matchBloco;
       while ((matchBloco = regexAriaBloco.exec(html)) !== null) {
         const ariaTexto = matchBloco[1];
-        const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)/i);
+        const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
         const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
         if (!preco || preco < 120 || preco > 45000) continue;
 
@@ -476,6 +481,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         encontrouVoos: true,
         oferta: {
           preco: melhorOferta.preco,
+          moeda: moedaCode,
           precoOriginal: melhorOferta.precoOriginal,
           duracaoHoras: melhorOferta.duracaoHoras,
           destinoReal: destinoCod,

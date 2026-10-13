@@ -68,6 +68,7 @@ function initSchema(db) {
       clima_temp_media REAL,
       silenciada_ate TEXT,
       cabine TEXT DEFAULT 'economy',
+      moeda TEXT DEFAULT 'BRL',
       ativa INTEGER DEFAULT 1,
       criada_em TEXT DEFAULT (datetime('now', 'localtime'))
     );
@@ -122,6 +123,7 @@ function initSchema(db) {
   try { db.exec('ALTER TABLE rotas ADD COLUMN sem_data INTEGER DEFAULT 0;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN dias_estadia INTEGER DEFAULT 10;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN destino_real TEXT;'); } catch (_) {}
+  try { db.exec("ALTER TABLE rotas ADD COLUMN moeda TEXT DEFAULT 'BRL';"); } catch (_) {}
 
   // Migrações dinâmicas para tabela bug_fares
   try { db.exec('ALTER TABLE bug_fares ADD COLUMN aeroporto_chegada TEXT;'); } catch (_) {}
@@ -181,14 +183,15 @@ export const rotasRepo = {
     const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
     const flexibilidadeDias = parseInt(dados.flexibilidade_dias, 10) || 0;
+    const moeda = (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
 
     const stmt = db.prepare(`
       INSERT INTO rotas (
         origem, destino, codigo_origem, codigo_destino,
         data_ida, data_volta, duracao_max_horas, preco_alvo,
         link_google_flights, cabine, flexibilidade_dias,
-        sem_data, dias_estadia, ativa
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        sem_data, dias_estadia, moeda, ativa
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
     `);
 
     const res = stmt.run(
@@ -204,7 +207,8 @@ export const rotasRepo = {
       dados.cabine || 'economy',
       flexibilidadeDias,
       semData,
-      soIda ? null : diasEstadia
+      soIda ? null : diasEstadia,
+      moeda
     );
 
     return rotasRepo.buscarPorId(res.lastInsertRowid);
@@ -256,7 +260,8 @@ export const rotasRepo = {
     const cabine = dados.cabine || rota.cabine || 'economy';
     const flexibilidadeDias = dados.flexibilidade_dias !== undefined ? (parseInt(dados.flexibilidade_dias, 10) || 0) : (rota.flexibilidade_dias || 0);
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
-    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
+    const moeda = dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL'));
+    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
 
     // Se a modalidade mudou de Ida e Volta para Só Ida (ou vice-versa), limpa cache de melhor_opcao_flexivel
     const modalidadeMudou = Boolean(rota.data_volta) !== Boolean(dataVolta);
@@ -278,11 +283,12 @@ export const rotasRepo = {
         dias_estadia = ?,
         link_google_flights = ?,
         ativa = ?,
-        melhor_opcao_flexivel = ?
+        melhor_opcao_flexivel = ?,
+        moeda = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -307,6 +313,7 @@ export const rotasRepo = {
     const dataIdaNova = resultado.data_ida || rota.data_ida;
     const dataVoltaNova = resultado.data_volta !== undefined ? resultado.data_volta : rota.data_volta;
     const linkNovo = resultado.link_google_flights || rota.link_google_flights;
+    const moedaNova = resultado.moeda ? String(resultado.moeda).trim().toUpperCase() : null;
 
     const stmt = db.prepare(`
       UPDATE rotas SET
@@ -324,6 +331,7 @@ export const rotasRepo = {
         clima_destino_resumo = COALESCE(?, clima_destino_resumo),
         clima_temp_media = COALESCE(?, clima_temp_media),
         melhor_opcao_flexivel = ?,
+        moeda = COALESCE(?, moeda),
         ultima_checagem = ?
       WHERE id = ?
     `);
@@ -343,6 +351,7 @@ export const rotasRepo = {
       resultado.clima_destino_resumo ?? null,
       resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
       melhorFlexivelStr,
+      moedaNova,
       agora,
       id
     );

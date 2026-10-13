@@ -198,6 +198,14 @@ describe('ScraplingClient: construirUrlCheapest', () => {
     assert.ok(tfs.length > tfsOw.length, 'tfs Round-Trip deve ser maior que One-Way pela leg de volta');
   });
 
+  it('deve construir URL com moeda customizada (USD, EUR)', () => {
+    const { url: urlUsd } = construirUrlCheapest('GRU', 'MIA', '2027-03-15', null, 12, 'USD');
+    assert.match(urlUsd, /curr=USD/);
+
+    const { url: urlEur } = construirUrlCheapest('GRU', 'LIS', '2027-04-10', '2027-04-24', 14, 'EUR');
+    assert.match(urlEur, /curr=EUR/);
+  });
+
   it('deve tratar strings de Só Ida como One-Way corretamente', () => {
     const { tipoViagem: t1 } = construirUrlCheapest('GRU', 'CDG', '2027-01-20', 'Só Ida');
     const { tipoViagem: t2 } = construirUrlCheapest('GRU', 'CDG', '2027-01-20', 'one way');
