@@ -144,6 +144,30 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.match(linkOneWay, /one-way/);
   });
 
+  it('gerarLinkGoogleFlights (adversarial): deve lidar com moeda não-string, datas flexíveis e duração relativa', () => {
+    // Caso 1: Moeda com tipos adversariais (número, objeto, null) não lança TypeError e adota BRL
+    const linkMoedaNum = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', null, 123);
+    assert.match(linkMoedaNum, /curr=BRL/);
+
+    const linkMoedaObj = gerarLinkGoogleFlights('GRU', 'LIS', '2026-11-10', null, {});
+    assert.match(linkMoedaObj, /curr=BRL/);
+
+    // Caso 2: dataIda como objeto Date ou formato brasileiro DD/MM/YYYY é canonicamente convertida
+    const dataIdaDate = new Date(Date.UTC(2026, 10, 15)); // 2026-11-15
+    const linkComDate = gerarLinkGoogleFlights('GRU', 'MIA', dataIdaDate, null);
+    assert.match(linkComDate, /on%202026-11-15%20one-way/);
+
+    const linkDataBr = gerarLinkGoogleFlights('GIG', 'MIA', '20/12/2026', null);
+    assert.match(linkDataBr, /on%202026-12-20%20one-way/);
+
+    // Caso 3: dataVolta expressa em dias ("10 dias" ou 10) é calculada a partir de dataIda
+    const linkDiasTexto = gerarLinkGoogleFlights('SAO', 'LIS', '2026-11-10', '10 dias');
+    assert.match(linkDiasTexto, /returning%202026-11-20/);
+
+    const linkDiasNum = gerarLinkGoogleFlights('SAO', 'LIS', '2026-11-10', 14);
+    assert.match(linkDiasNum, /returning%202026-11-24/);
+  });
+
   it('deve gerar payload Protobuf tfs e link canônico para a aba Cheapest do Google Flights', () => {
     const tfs = gerarTfs({
       origens: ['GIG', 'SDU'],

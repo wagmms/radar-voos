@@ -294,22 +294,33 @@ export function rotaEhSoIda(rotaOuDados) {
  * Gera link direto e estruturado para o Google Flights que abre direto no voo / rota
  */
 export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda = 'BRL') {
-  const moedaCode = (moeda || 'BRL').trim().toUpperCase();
+  const moedaCode = (typeof moeda === 'string' && moeda.trim())
+    ? moeda.trim().toUpperCase()
+    : 'BRL';
   const origemRes = resolverCodigoParaLink(origemCod);
   const destinoRes = resolverCodigoParaLink(destinoCod);
 
   const origemParam = encodeURIComponent(origemRes);
   const destinoParam = encodeURIComponent(destinoRes);
 
-  if (!dataIda) {
+  const dataIdaNorm = formatarDataParaBusca(dataIda) || (typeof dataIda === 'string' ? dataIda.trim() : null);
+
+  if (!dataIdaNorm) {
     return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   }
 
   const soIda = ehSoIda(dataVolta);
-  if (!soIda && dataVolta) {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20returning%20${dataVolta}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
+  let voltaEfetiva = null;
+  if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
+    voltaEfetiva = calcularDataVolta(dataIdaNorm, dataVolta)
+      || formatarDataParaBusca(dataVolta)
+      || (typeof dataVolta === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataVolta.trim()) ? dataVolta.trim() : null);
+  }
+
+  if (voltaEfetiva) {
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20returning%20${voltaEfetiva}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIda}%20one-way&hl=pt-BR&gl=BR&curr=${moedaCode}`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20one-way&hl=pt-BR&gl=BR&curr=${moedaCode}`;
   }
 }
 

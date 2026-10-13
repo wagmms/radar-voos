@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.9] - 2026-10-13 — Blindagem Adversarial de gerarLinkGoogleFlights (Domínio / Rotas)
+
+### 🛡️ Correção Defensiva & Robustez (Geração de Links Estruturados do Google Flights)
+- `src/domain/rotas.js` · `gerarLinkGoogleFlights`:
+  - Corrigido bug de `TypeError: (moeda || 'BRL').trim is not a function` quando o argumento de moeda recebia tipos adversariais não-string (ex: números `123`, booleanos ou objetos), aplicando validação de tipo defensiva com fallback seguro para `'BRL'`.
+  - Normalização defensiva de `dataIda` aceitando instâncias de `Date` e strings em formato brasileiro (`DD/MM/YYYY`) convertidas para o padrão canônico `YYYY-MM-DD`, prevenindo quebras e poluição na query string de busca.
+  - Tratamento resiliente de `dataVolta` quando expressa em dias relativos (ex: `'10 dias'`, `14`), calculando a data de retorno somada à data de ida em vez de injetar texto cru no parâmetro `returning`.
+- `tests/domain.test.js`:
+  - Adicionados testes de borda adversariais validando degradação graciosa para moeda não-string, normalização de objetos `Date`/formato BR e cálculo de data de retorno a partir de duração relativa.
+  - Suíte total: **353/353 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.8] - 2026-10-13 — Blindagem Adversarial de converterDuracaoParaHoras (Provedores / Google Flights Direct)
 
 ### 🛡️ Correção Defensiva & Robustez (Provedor Google Flights Direct)
