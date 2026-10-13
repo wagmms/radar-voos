@@ -601,12 +601,14 @@ function renderizarBugFares() {
 
     const linkSeguro = sanitizarLinkGoogleFlights(bug.link, bug);
 
-    // Título sem termos genéricos
+    // Título sem termos genéricos (apenas aplica fallback em bugs legados sem colunas enriquecidas)
     let tituloExibicao = bug.titulo || 'Bug Fare';
-    if (tituloExibicao.includes('América do Sul')) {
-      tituloExibicao = tituloExibicao.replace('América do Sul', 'Buenos Aires, Argentina (EZE)');
-    } else if (tituloExibicao.includes('Europa (Geral)') || tituloExibicao.includes('➔ Europa')) {
-      tituloExibicao = tituloExibicao.replace('Europa (Geral)', 'Madrid, Espanha (MAD)').replace('➔ Europa', '➔ Madrid, Espanha (MAD)');
+    if (!bug.aeroporto_chegada && !bug.cidade_destino) {
+      if (tituloExibicao.includes('América do Sul')) {
+        tituloExibicao = tituloExibicao.replace('América do Sul', 'Buenos Aires, Argentina (EZE)');
+      } else if (tituloExibicao.includes('Europa (Geral)') || tituloExibicao.includes('➔ Europa')) {
+        tituloExibicao = tituloExibicao.replace('Europa (Geral)', 'Madrid, Espanha (MAD)').replace('➔ Europa', '➔ Madrid, Espanha (MAD)');
+      }
     }
 
     return `
