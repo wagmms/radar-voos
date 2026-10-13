@@ -219,6 +219,7 @@ export class FlightScanner {
         motivo: analiseBug.motivo,
         tipo: analiseBug.tipo,
         destinoReal: oferta.destinoReal || rota.destino_real || null,
+        codigoDestinoReal: oferta.codigoDestinoReal || null,
         linkOriginal: oferta.link
       });
 

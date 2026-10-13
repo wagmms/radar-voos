@@ -44,11 +44,12 @@ export function renderizarArcoVooSvg(codOrigem, codDestino, width = 140, height 
   const endY = height - 12;
   const controlX = width / 2;
   const controlY = 6; // ápice da curva
+  const safeId = `${o}_${d}`.replace(/[^A-Za-z0-9_-]/g, '_');
 
   return `
     <svg class="flight-arc-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
       <defs>
-        <linearGradient id="arcGrad_${o}_${d}" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id="arcGrad_${safeId}" x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stop-color="#06b6d4" />
           <stop offset="100%" stop-color="#10b981" />
         </linearGradient>
@@ -56,7 +57,7 @@ export function renderizarArcoVooSvg(codOrigem, codDestino, width = 140, height 
       <!-- Linha de Base Tracejada -->
       <line x1="${startX}" y1="${startY}" x2="${endX}" y2="${endY}" stroke="rgba(255,255,255,0.1)" stroke-dasharray="2,2" />
       <!-- Arco Ortodrômico da Trajetória -->
-      <path d="M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}" fill="none" stroke="url(#arcGrad_${o}_${d})" stroke-width="2" stroke-linecap="round" />
+      <path d="M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}" fill="none" stroke="url(#arcGrad_${safeId})" stroke-width="2" stroke-linecap="round" />
       <!-- Aeroporto Origem -->
       <circle cx="${startX}" cy="${startY}" r="3.5" fill="#06b6d4" />
       <!-- Avião no Ápice da Curva -->

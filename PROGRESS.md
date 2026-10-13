@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.8.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.8.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.8.0 100% operacional com 114/114 testes JS e 10/10 testes Python aprovados. Implementado autoloop híbrido dual-mode (`--modo {alternado,builder,qa}`) alternando entre desenvolvimento de recursos e QA adversarial/testador de estresse. Alertas no Telegram enriquecidos com botões inline (`[🎯 Alterar Teto]`, `[🔍 Checar Agora]`) e destaque de economia real (R$ e %).
+- **Estado Geral**: 🟢 Radar v2.8.1 100% operacional com 122/122 testes JS e 10/10 testes Python aprovados. Ativado o Pipeline de Deploy com Autocura Autônoma no Telegram: comando `/deploy`, botão inline `[🚀 Fazer Deploy no Render]`, pré-validação estrita, autocura via IA se houver falha e promoção segura para a branch `main` do Render com Zero Downtime.
 - **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
-- **Última Tarefa Concluída**: Autoloop Dual-Mode (Builder vs QA Adversarial) com alternância cíclica e flags CLI em `scripts/autoloop_radarvoos.py`; botões inline interativos com atalho de teto e cálculo de economia real em `src/services/notifier_telegram.js`; 114 testes JS e 10 testes Python 100% verdes.
+- **Última Tarefa Concluída**: `src/services/deploy_pipeline.js` • `executarDeploy` • Pipeline autônomo de deploy com validação prévia, autocura por IA e promoção segura para a branch `main` integrado ao Telegram (`/deploy` e callback `deploy:now`), com 122 testes JS e 10 testes Python 100% verdes.
 
 ---
 

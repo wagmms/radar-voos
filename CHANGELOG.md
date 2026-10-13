@@ -7,6 +7,22 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.8.1] - 2026-10-12
+
+### 🎯 Pipeline de Deploy pelo Telegram com Autocura Autônoma e Zero Downtime
+- **Serviço de Deploy Autônomo com Autocura (`src/services/deploy_pipeline.js` e `tests/deploy_pipeline.test.js`)**:
+  - Implementada a classe `DeployPipeline` que orquestra o ciclo completo de promoção para produção.
+  - Pré-validação com `./validate.sh fast` antes de qualquer alteração na branch de produção.
+  - **Mecanismo de Autocura (Auto-Heal)**: se a pré-validação detectar testes falhando, o pipeline aciona automaticamente o agente autônomo com o log de erro para corrigir o código-fonte, revalida os testes e só prossegue se obtiver 100% de aprovação.
+  - **Zero Downtime & Proteção Estrita**: se a autocura não estabilizar os testes, o deploy é cancelado com segurança sem tocar na branch `main`, mantendo o Render rodando a versão estável anterior.
+  - Promoção atômica: faz commit de salvaguarda, merge de `autoloop/dev` na `main`, `git push origin main` (que aciona o `autoDeploy` do Render) e retorna para `autoloop/dev`.
+  - Suíte de testes unitários com 8/8 testes cobrindo todo o pipeline e mocks de Telegram.
+- **Integração Interativa no Bot do Telegram (`src/services/notifier_telegram.js` e `scripts/autoloop_radarvoos.py`)**:
+  - Adicionado comando `/deploy` (e `/publicar`) para acionamento direto do celular a qualquer momento.
+  - Adicionado callback query `deploy:now` permitindo disparo com 1 toque através do botão inline `[🚀 Fazer Deploy no Render]` nos relatórios do autoloop.
+- **Validação Global**:
+  - Suíte completa de testes Fastify/Node.js expandida para **122/122 testes aprovados (100% verde)** e 10/10 testes Python do autoloop.
+
 ## [2.8.0] - 2026-10-12
 
 ### 🎯 Autoloop Dual-Mode (Builder vs QA Adversarial) e Botões Interativos com Economia no Telegram

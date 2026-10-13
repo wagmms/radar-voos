@@ -111,6 +111,21 @@ export class WeatherService {
       return { codigo: clean, ...COORDENADAS_AEROPORTOS[clean] };
     }
 
+    // Suporte a KGMIDs e macrorregiões (aponta para hub de referência climática)
+    const MACRO_PARA_HUB = {
+      '/M/06_1': 'BUE',
+      'AMERICA DO SUL': 'BUE',
+      '/M/02J9Z': 'MAD',
+      'EUROPA': 'MAD',
+      '/M/09C7W0': 'MIA',
+      'ESTADOS UNIDOS': 'MIA',
+      '/M/02J1X': 'TYO',
+      'ASIA': 'TYO'
+    };
+    if (MACRO_PARA_HUB[clean] && COORDENADAS_AEROPORTOS[MACRO_PARA_HUB[clean]]) {
+      return { codigo: MACRO_PARA_HUB[clean], ...COORDENADAS_AEROPORTOS[MACRO_PARA_HUB[clean]] };
+    }
+
     // Busca por parte da cidade ou nome
     for (const [iata, dados] of Object.entries(COORDENADAS_AEROPORTOS)) {
       if (

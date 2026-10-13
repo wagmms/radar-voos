@@ -32,12 +32,14 @@ export const CORREDORES_GLOBAIS_SWEET_SPOT = [
   { origem: 'BSB', destino: 'CUN', labelDestino: 'Cancún', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
 
   // América do Sul (Piso Econômica R$ 850 ida/volta)
+  { origem: 'SAO', destino: '/m/06_1', labelDestino: 'América do Sul (Geral)', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   { origem: 'SAO', destino: 'BUE', labelDestino: 'Buenos Aires', regiao: 'AMERICA_SUL', diasEstadia: 5 },
   { origem: 'SAO', destino: 'SCL', labelDestino: 'Santiago', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   { origem: 'SAO', destino: 'MVD', labelDestino: 'Montevidéu', regiao: 'AMERICA_SUL', diasEstadia: 4 },
   { origem: 'RIO', destino: 'BUE', labelDestino: 'Buenos Aires', regiao: 'AMERICA_SUL', diasEstadia: 5 },
 
   // Ásia & Oriente Médio (Pisos R$ 2.800 a R$ 3.000)
+  { origem: 'SAO', destino: '/m/02j1x', labelDestino: 'Ásia (Geral)', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
   { origem: 'SAO', destino: 'DXB', labelDestino: 'Dubai', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   { origem: 'SAO', destino: 'DOH', labelDestino: 'Doha', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   { origem: 'SAO', destino: 'TYO', labelDestino: 'Tóquio', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
@@ -137,6 +139,7 @@ export class BugFareHunter {
               motivo: analise.motivo,
               tipo: analise.tipo,
               destinoReal: resultado.oferta.destinoReal || corredor.labelDestino,
+              codigoDestinoReal: resultado.oferta.codigoDestinoReal || null,
               linkOriginal: resultado.oferta.link
             });
 

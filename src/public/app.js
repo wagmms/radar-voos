@@ -406,7 +406,7 @@ function renderizarRotas() {
           <div class="route-airports">
             <span class="airport-badge">${escapeHtml(rota.codigo_origem || 'SAO')}</span>
             <span class="route-arrow">➔</span>
-            <span class="airport-badge">${escapeHtml(rota.codigo_destino || 'DEST')}</span>
+            <span class="airport-badge">${escapeHtml(formatarCodigoBadge(rota.codigo_destino))}</span>
             <div class="city-names">
               ${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}
               ${rota.destino_real && rota.destino_real !== rota.destino && rota.destino_real !== rota.codigo_destino ? `<span style="display:block; font-size:0.75rem; color:#10b981; font-weight:600; margin-top:2px;">📍 ${escapeHtml(rota.destino_real)}</span>` : ''}
@@ -517,6 +517,15 @@ function renderizarRotas() {
   }).join('');
 }
 
+function formatarCodigoBadge(cod) {
+  if (!cod) return 'DEST';
+  if (cod === '/m/06_1') return 'AMSUL';
+  if (cod === '/m/02j9z') return 'EUROPA';
+  if (cod === '/m/02j1x') return 'ÁSIA';
+  if (cod === '/m/09c7w0') return 'EUA';
+  return cod;
+}
+
 function sanitizarLinkGoogleFlights(link, bug = {}) {
   if (!link) return 'https://www.google.com/travel/flights';
   let url = String(link);
@@ -524,24 +533,21 @@ function sanitizarLinkGoogleFlights(link, bug = {}) {
   // 1. Corrige palavra inválida 'through' que faz o Google Flights cair na página inicial
   url = url.replace(/\bthrough\b/gi, 'returning');
 
-  // 2. Corrige continentes ou KGMIDs que quebram o Google Flights
-  if (url.includes('/m/06_1') || url.includes('South%20America') || url.includes('Am%C3%A9rica%20do%20Sul')) {
-    url = url.replace(/\/m\/06_1|South%20America|Am%C3%A9rica%20do%20Sul/g, 'EZE');
-  }
-  if (url.includes('/m/02j9z') || url.includes('Europe') || url.includes('Europa')) {
-    url = url.replace(/\/m\/02j9z|Europe|Europa/g, 'MAD');
-  }
-  if (url.includes('/m/09c7w0') || url.includes('United%20States') || url.includes('Estados%20Unidos')) {
-    url = url.replace(/\/m\/09c7w0|United%20States|Estados%20Unidos/g, 'MIA');
-  }
-
-  // 3. Se o bug possui aeroporto concreto e datas, assegura query canônica direta
+  // 2. Se o bug possui aeroporto concreto e datas, assegura query canônica direta
   if (bug.aeroporto_chegada && bug.data_ida && url.includes('?q=')) {
     const iataChegada = bug.aeroporto_chegada.split('-')[0].trim();
     if (iataChegada && iataChegada.length === 3) {
       const voltaParam = bug.data_volta ? `+returning+${bug.data_volta}` : '+one-way';
-      url = `https://www.google.com/travel/flights?q=Flights+from+SAO+to+${iataChegada}+on+${bug.data_ida}${voltaParam}&hl=pt-BR&gl=BR&curr=BRL`;
+      return `https://www.google.com/travel/flights?q=Flights+from+SAO+to+${iataChegada}+on+${bug.data_ida}${voltaParam}&hl=pt-BR&gl=BR&curr=BRL`;
     }
+  }
+
+  // 3. Corrige KGMIDs brutos dentro de queries textuais (?q=) que quebram o parser do Google Flights
+  if (url.includes('?q=')) {
+    url = url.replace(/\/m\/06_1/g, 'South%20America');
+    url = url.replace(/\/m\/02j9z/g, 'Europe');
+    url = url.replace(/\/m\/02j1x/g, 'Asia');
+    url = url.replace(/\/m\/09c7w0/g, 'United%20States');
   }
 
   return url;
