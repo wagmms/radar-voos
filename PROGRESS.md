@@ -5,9 +5,9 @@
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.20.0 100% operacional com 431/431 testes JS e 10/10 testes Python aprovados. Motor de Scraping agora utiliza Fast-Flights Engine via JSON `script.ds:1` com extração nativa de voos.
+- **Estado Geral**: 🟢 Radar v2.20.0 100% operacional com 436/436 testes JS aprovados. Corrigida a extração de preços (extirpado falso R$ 486 de rodapé) e expandida a busca continental (América do Sul e Europa cobrindo todo o continente).
 - **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
-- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` · `extrairVoosDoPayloadJs` · Implementada Camada 0 de alta precisão (padrão fast-flights) extraindo voos diretamente do payload JSON nativo `script.ds:1` (`AF_initDataCallback`), eliminando dependência de seletores DOM e variações de idioma; integrado em ScraplingProvider e GoogleFlightsDirectProvider; 6 novos testes unitários (431/431 verdes).
+- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` e `src/domain/dicionarios.js` · `extrairVoosDoHtml` / `DESTINOS_CONTINENTES` · Eliminada captura de sugestões de rodapé/FAQ (R$ 486 fantasma) via `PADROES_IGNORAR_RODAPE` e remoção da Camada C cega; implementada expansão continental abrangente para múltiplos aeroportos (América do Sul -> SCL R$ 1.655, Europa -> BCN/MAD R$ 3.624 em BRL); 5 novos testes unitários (436/436 verdes); deploy realizado em `main`.
 
 ---
 
