@@ -306,4 +306,63 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.ok(cardDates.link);
     assert.ok(cardDates.link.includes('tfs='));
   });
+
+  it('deve resolver adversariamente duracao em dias, datas invertidas e espacos em montarCardBugFare', () => {
+    // 1. dataVolta expressa em dias ("10 dias" e número 14) deve ser resolvida para data ISO YYYY-MM-DD
+    const cardDuracaoStr = montarCardBugFare({
+      origem: 'São Paulo',
+      codigoOrigem: 'GRU',
+      destino: 'Buenos Aires',
+      codigoDestino: 'EZE',
+      dataIda: '2026-11-01',
+      dataVolta: '10 dias',
+      preco: 650
+    });
+    assert.strictEqual(cardDuracaoStr.data_ida, '2026-11-01');
+    assert.strictEqual(cardDuracaoStr.data_volta, '2026-11-11');
+    assert.strictEqual(cardDuracaoStr.periodo_texto, 'Ida: 01/11/2026 ➔ Volta: 11/11/2026 (10 dias)');
+    assert.ok(cardDuracaoStr.link && cardDuracaoStr.link.includes('tfs='));
+
+    const cardDuracaoNum = montarCardBugFare({
+      origem: 'São Paulo',
+      codigoOrigem: 'GRU',
+      destino: 'Santiago',
+      codigoDestino: 'SCL',
+      dataIda: '2026-11-01',
+      dataVolta: 14,
+      preco: 720
+    });
+    assert.strictEqual(cardDuracaoNum.data_volta, '2026-11-15');
+    assert.strictEqual(cardDuracaoNum.periodo_texto, 'Ida: 01/11/2026 ➔ Volta: 15/11/2026 (14 dias)');
+
+    // 2. dataVolta anterior à dataIda deve degradar defensivamente para Só Ida (data_volta: null)
+    const cardDataInvertida = montarCardBugFare({
+      origem: 'São Paulo',
+      codigoOrigem: 'GRU',
+      destino: 'Paris',
+      codigoDestino: 'CDG',
+      dataIda: '2026-12-10',
+      dataVolta: '2026-12-01',
+      preco: 1500
+    });
+    assert.strictEqual(cardDataInvertida.data_volta, null);
+    assert.strictEqual(cardDataInvertida.periodo_texto, 'Ida: 10/12/2026 (Só Ida)');
+
+    // 3. Preço negativo e códigos com espaços extras devem ser higienizados defensivamente
+    const cardAdversarial = montarCardBugFare({
+      origem: 'São Paulo',
+      codigoOrigem: '  gru  ',
+      destino: 'Roma',
+      codigoDestino: '  fco  ',
+      dataIda: '2026-11-20',
+      dataVolta: 'one-way',
+      preco: -350
+    });
+    assert.strictEqual(cardAdversarial.preco, 0);
+    assert.strictEqual(cardAdversarial.iata_origem, 'GRU');
+    assert.strictEqual(cardAdversarial.iata_destino, 'FCO');
+    assert.strictEqual(cardAdversarial.data_volta, null);
+    assert.ok(cardAdversarial.titulo.includes('por R$ 0!'));
+  });
 });
+

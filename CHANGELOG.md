@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.30] - 2026-10-13 — Blindagem Adversarial em montarCardBugFare para Duração em Dias, Datas Invertidas e Sanitização Defensiva (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`montarCardBugFare`):
+  - Corrigido cálculo de `voltaEfetiva` quando `dataVolta` é expressa como duração (ex: `"10 dias"` ou número `14`), agora resolvendo a data ISO canônica `YYYY-MM-DD` via `calcularDataVolta` e garantindo coerência total com `periodo_texto` e os links do Google Flights (`tfs`).
+  - Implementada validação defensiva que descarta datas de volta que sejam anteriores à data de ida (`voltaCalculada < dataIdaNorm`), degradando graciosamente para Só Ida (`data_volta = null`) e prevenindo links corrompidos de busca.
+  - Assegurada consistência estrita entre `periodo_texto`, `data_volta` e `link` em todos os fluxos de cards de Bug Fare.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) resolução de duração textual e numérica para data ISO e link `tfs`, (2) degradação automática para Só Ida quando a volta é anterior à ida, e (3) sanitização defensiva de preços negativos e códigos IATA com espaços extras.
+
 ## [v2.18.29] - 2026-10-13 — Blindagem Adversarial em obterInfoAeroporto para Espaços Internos em Parênteses e Separadores Adicionais (Domínio Aeroportos)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

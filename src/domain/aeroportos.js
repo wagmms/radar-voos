@@ -396,7 +396,15 @@ export function montarCardBugFare(params = {}) {
   // Gerar link 100% canônico (Prioriza Protobuf tfs Cheapest, com fallback para query estruturada correta)
   const soIda = ehSoIda(dataVolta);
   const dataIdaNorm = formatarDataParaBusca(dataIda) || (dataIda && typeof dataIda === 'string' ? dataIda.trim() : null);
-  const voltaEfetiva = soIda ? null : (formatarDataParaBusca(dataVolta) || (typeof dataVolta === 'string' ? dataVolta.trim() : null));
+  let voltaEfetiva = null;
+  if (!soIda && dataVolta !== null && dataVolta !== undefined && dataVolta !== '') {
+    const voltaCalculada = (dataIdaNorm ? calcularDataVolta(dataIdaNorm, dataVolta) : null) || formatarDataParaBusca(dataVolta);
+    if (voltaCalculada) {
+      if (!dataIdaNorm || voltaCalculada >= dataIdaNorm) {
+        voltaEfetiva = voltaCalculada;
+      }
+    }
+  }
 
   let linkGoogleFlights = null;
   if (dataIdaNorm) {
