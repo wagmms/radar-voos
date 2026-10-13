@@ -238,6 +238,25 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverCodigoParaLink('eua'), 'United States');
   });
 
+  it('resolverCodigoParaLink: deve tratar entradas adversariais não primitivas, KGMIDs case-insensitive e listas de IATAs', () => {
+    // 1. Tipos não primitivos, booleanos e símbolos devem retornar fallback seguro 'SAO'
+    assert.strictEqual(resolverCodigoParaLink({}), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink([]), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink(true), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink(false), 'SAO');
+    assert.strictEqual(resolverCodigoParaLink(Symbol('iata')), 'SAO');
+
+    // 2. KGMID em maiúsculas ou mistos devem resolver para o nome canônico
+    assert.strictEqual(resolverCodigoParaLink('/M/02J9Z'), 'Europe');
+    assert.strictEqual(resolverCodigoParaLink('/M/06_1'), 'South America');
+    assert.strictEqual(resolverCodigoParaLink('/M/09C7W0'), 'United States');
+    assert.strictEqual(resolverCodigoParaLink('/M/12345'), '12345');
+
+    // 3. Múltiplos aeroportos IATA com espaços e minúsculas devem ser limpos e em maiúsculas
+    assert.strictEqual(resolverCodigoParaLink('  gru , gig  '), 'GRU,GIG');
+    assert.strictEqual(resolverCodigoParaLink('cgh, bsb , cnf'), 'CGH,BSB,CNF');
+  });
+
   it('gerarTfs: deve lidar defensivamente com entradas adversariais, objetos Date, formatos brasileiros e strings unitárias', () => {
     // 1. Deve aceitar instâncias de Date e converter para YYYY-MM-DD sem erro de Buffer
     const dataIdaDate = new Date(Date.UTC(2027, 0, 17));

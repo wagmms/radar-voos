@@ -258,19 +258,27 @@ export const KGMID_PARA_NOME = {
  */
 export function resolverCodigoParaLink(cod) {
   if (cod === null || cod === undefined) return 'SAO';
+  if (typeof cod !== 'string' && typeof cod !== 'number') return 'SAO';
   const str = String(cod).trim();
   if (!str) return 'SAO';
 
   const matchIata = str.match(/\(([A-Za-z]{3})\)/i);
   if (matchIata) return matchIata[1].toUpperCase();
 
-  if (KGMID_PARA_NOME[str]) return KGMID_PARA_NOME[str];
+  // Múltiplos aeroportos IATA separados por vírgula (ex: "GRU, GIG" ou "gru , gig")
+  if (/^[A-Za-z]{3}(\s*,\s*[A-Za-z]{3})+$/.test(str)) {
+    return str.toUpperCase().replace(/\s*,\s*/g, ',');
+  }
+
+  const strLower = str.toLowerCase();
+  if (KGMID_PARA_NOME[strLower]) return KGMID_PARA_NOME[strLower];
+
   const limpoLower = normalizarTexto(str);
   if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'South America';
   if (limpoLower === 'europa' || limpoLower === 'europe') return 'Europe';
   if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'United States';
   if (limpoLower === 'asia') return 'Asia';
-  if (str.startsWith('/m/') || str.startsWith('/g/')) return str.replace(/^\/[mg]\//, '');
+  if (/^\/[mg]\//i.test(str)) return str.replace(/^\/[mg]\//i, '');
   return str;
 }
 

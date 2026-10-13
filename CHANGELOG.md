@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.2] - 2026-10-13 — Blindagem Adversarial em resolverCodigoParaLink (Rotas)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/rotas.js`** (`resolverCodigoParaLink`):
+  - Blindagem estrita de tipos para entradas não primitivas (objetos `{}`, arrays `[]`, booleans e `Symbol`), retornando o fallback seguro `'SAO'` sem quebrar na montagem de URLs do Google Flights nem lançar exceções.
+  - Suporte a KGMIDs em maiúsculas (ex: `"/M/02J9Z"`, `"/M/06_1"`, `"/M/09C7W0"`), normalizando em minúsculo para mapeamento correto com `KGMID_PARA_NOME` e regex case-insensitive para prefixos `/m/` e `/g/`.
+  - Normalização defensiva de múltiplos aeroportos IATA com espaços e minúsculas (ex: `"  gru , gig  "` -> `"GRU,GIG"`), prevenindo URLs mal formadas no Google Flights.
+- **`tests/domain.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando tipos não primitivos, KGMIDs case-insensitive e limpeza de listas com múltiplos IATAs.
+
 ## [v2.18.1] - 2026-10-13 — Blindagem Adversarial em resolverDestino (Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:
