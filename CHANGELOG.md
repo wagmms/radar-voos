@@ -4,6 +4,18 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.20.0] - 2026-10-13 — Motor de Scraping Fast-Flights Engine: Extração Nativa de Dados Estruturados via JSON `script.ds:1` (Scrapling & Direct Providers)
+
+### 🚀 Nova Funcionalidade & Arquitetura de Alta Fidelidade (Padrão fast-flights v3.0):
+- **`src/services/providers/scrapling_client.js`** (`extrairVoosDoPayloadJs`):
+  - Criado e exportado o parser de dados nativos estruturados baseado na arquitetura do `fast-flights` (v3.0): extrai diretamente da chamada `AF_initDataCallback({ key: 'ds:1', ... data: [...] })` contida na tag `<script class="ds:1">`.
+  - Extração de alta precisão de todos os voos dos grupos prioritários e secundários do Google Flights (`payload[2]` e `payload[3]`), capturando: tarifas exatas em centavos/reais (`fare[1]`), companhias aéreas (`flight[1]`), conexões detalhadas e aeroportos de conexão (`flight[2]`), e duração total em minutos (`flight[9]`).
+  - Integrado como **Camada 0 (Prioritária)** em `extrairVoosDoHtml`, com fallback gracioso e retrocompatível para as camadas A/B/C caso a página não traga o payload completo.
+- **`src/services/providers/google_flights_direct_provider.js`**:
+  - Integrada a Camada JS nativa no método `buscarOfertas`, acelerando o tempo de processamento e eliminando falsos positivos causados por variações de idioma, rodapés ou carrosséis no HTML.
+- **`tests/payload_js_parser.test.js`**:
+  - Nova suíte com 6 testes unitários cobrindo: extração com escalas e voos diretos, resiliência a scripts nulos, tratamento defensivo de `errorHasStatus: true` e JSON corrompido, limites tarifários e precedência estrita da Camada 0 sobre regexes de tela (431/431 testes verdes).
+
 ## [v2.19.1] - 2026-10-13 — Correção Canônica do Enum Trip (ROUND_TRIP=1 vs ONE_WAY=2) e Links de Ida e Volta no Google Flights (Domínio Rotas)
 
 ### 🐛 Correção Crítica & Alinhamento com Protocol Buffers Canônico:

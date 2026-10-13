@@ -302,12 +302,14 @@ export class FlightScanner {
     const destinoInfoRota = resolverDestinoConcreto({
       destino: rota.destino,
       codigoDestino: rota.codigo_destino,
-      destinoReal: oferta.destinoReal || rota.destino_real
+      destinoReal: oferta.destinoReal || rota.destino_real,
+      codigoDestinoReal: oferta.codigoDestinoReal || null
     });
 
-    const linkCanonicoRota = (dataIdaEfetiva && destinoInfoRota.iata)
-      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva)
-         || gerarLinkGoogleFlights(rota.codigo_origem, destinoInfoRota.iata, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
+    const destinoParaLink = oferta.codigoDestinoReal || destinoInfoRota.iata;
+    const linkCanonicoRota = (dataIdaEfetiva && destinoParaLink)
+      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva)
+         || gerarLinkGoogleFlights(rota.codigo_origem, rota.codigo_destino || destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
       : oferta.link;
 
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {

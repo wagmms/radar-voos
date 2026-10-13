@@ -14,6 +14,8 @@ import {
   extrairInfoConexoes,
   extrairInfoBagagem
 } from './google_flights_direct_provider.js';
+import { PADROES_IGNORAR_RODAPE } from '../../domain/dicionarios.js';
+
 
 /**
  * ScraplingClient v1.0 — Adaptador de Scraping Resiliente para Google Flights
@@ -437,8 +439,8 @@ export function extrairPrecoCheapestTab(html, urlResposta = null) {
       if (p >= 80 && p <= 60000) return p;
     }
 
-    // Camada 2: Padrão ampliado — captura [[null,NUM],"base64long"] em qualquer contexto de callback
-    const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
+    // Camada 2: Padrão ampliado com validação de token da aba Cheapest (evita callbacks genéricos de rodapé)
+    const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"(?:EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl|[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest))[^"]*"/i;
     const m2 = html.match(r2);
     if (m2) {
       const p = parseInt(m2[1], 10);
@@ -515,13 +517,135 @@ export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta =
 }
 
 /**
+ * Extrai voos diretamente do payload JSON nativo (script.ds:1 / AF_initDataCallback) do Google Flights.
+ * Padrão de alta precisão absorvido do `fast-flights` (v3.0): extrai diretamente do modelo de dados interno
+ * do Google sem dependência de seletores DOM, atributos aria-label ou variações linguísticas de layout.
+ *
+ * @param {string} html
+ * @returns {Array<{preco:number, cia:string, duracaoTexto:string, duracaoHoras:number, escalas:number, detalhesEscalas:string, tempoConexao:string|null, aeroportoConexao:string|null, bagagem:object}>}
+ */
+export function extrairVoosDoPayloadJs(html) {
+  if (!html || typeof html !== 'string') return [];
+
+  try {
+    // 1. Localiza a tag script correspondente ao container ds:1 ou callback AF_initDataCallback
+    const matchScript = html.match(/<script[^>]*class=["'][^"']*ds:1[^"']*["'][^>]*>([\s\S]*?)<\/script>/i) ||
+                        html.match(/AF_initDataCallback\s*\(\s*\{[^}]*?key:\s*['"]ds:1['"][\s\S]*?data:\s*(\[[\s\S]*?\])\s*\}\s*\)\s*;/i);
+    if (!matchScript) return [];
+
+    const scriptContent = matchScript[1] || matchScript[0];
+    const idxData = scriptContent.indexOf('data:');
+    if (idxData === -1) return [];
+
+    const resto = scriptContent.slice(idxData + 5).trim();
+    let dataStr;
+    const idxSc = resto.lastIndexOf(', sideChannel:');
+    const idxSc2 = resto.lastIndexOf(',sideChannel:');
+    const corte = Math.max(idxSc, idxSc2);
+    if (corte !== -1) {
+      dataStr = resto.slice(0, corte).trim();
+    } else {
+      const lastComma = resto.lastIndexOf(',');
+      dataStr = (lastComma !== -1 ? resto.slice(0, lastComma) : resto).trim();
+    }
+
+    if (!dataStr.startsWith('[') || dataStr.includes('errorHasStatus: true')) {
+      return [];
+    }
+
+    const payload = JSON.parse(dataStr);
+    if (!Array.isArray(payload) || payload.length < 4) return [];
+
+    const groups = [];
+    if (Array.isArray(payload[2]) && payload[2][0]) groups.push(payload[2][0]);
+    if (Array.isArray(payload[3]) && payload[3][0]) groups.push(payload[3][0]);
+
+    const voos = [];
+    for (const g of groups) {
+      if (!Array.isArray(g)) continue;
+      for (const k of g) {
+        if (!Array.isArray(k) || k.length < 2) continue;
+        const flight = k[0];
+        if (!Array.isArray(flight) || flight.length < 3) continue;
+
+        // Tarifa / Preço: fare[1]
+        const fare = (Array.isArray(k[1]) && k[1][0]) ? k[1][0] : [];
+        const preco = (Array.isArray(fare) && Number.isFinite(fare[1])) ? Math.round(fare[1]) : null;
+        if (!preco || preco < 80 || preco > 60000) continue;
+
+        // Companhia aérea: flight[1] (array de nomes de cias) ou código do flight[0]
+        const airlines = Array.isArray(flight[1]) ? flight[1] : [];
+        let cia = (airlines[0] && typeof airlines[0] === 'string') ? airlines[0] : (flight[0] || 'Companhia Aérea');
+        cia = limparNomeCompanhia(cia);
+
+        // Fallback por código IATA se necessário
+        if (MAPA_CIAS_IATA[cia.toUpperCase()]) {
+          cia = MAPA_CIAS_IATA[cia.toUpperCase()];
+        }
+
+        // Duração total em minutos: flight[9]
+        const durMin = Number.isFinite(flight[9]) && flight[9] > 0 ? flight[9] : null;
+        const duracaoHoras = durMin ? Math.round((durMin / 60) * 10) / 10 : 12.0;
+        const h = Math.floor(duracaoHoras);
+        const m = durMin ? (durMin % 60) : 0;
+        const duracaoTexto = durMin ? (m > 0 ? `${h} h ${m} min` : `${h} h`) : `${duracaoHoras} h`;
+
+        // Trechos / Escalas: flight[2]
+        const legs = Array.isArray(flight[2]) ? flight[2] : [];
+        const escalas = Math.max(0, legs.length - 1);
+        let detalhesEscalas = 'Direto';
+        let aeroportoConexao = null;
+        let tempoConexao = null;
+
+        if (escalas > 0) {
+          const conexoesIatas = [];
+          for (let i = 0; i < escalas; i++) {
+            const legAnterior = legs[i];
+            const legSeguinte = legs[i + 1];
+            const iataConexao = (Array.isArray(legAnterior) && legAnterior[6]) ||
+                                (Array.isArray(legSeguinte) && legSeguinte[3]);
+            if (iataConexao && typeof iataConexao === 'string') {
+              conexoesIatas.push(iataConexao.toUpperCase());
+            }
+          }
+          aeroportoConexao = conexoesIatas[0] || null;
+          detalhesEscalas = `${escalas} ${escalas === 1 ? 'parada' : 'paradas'}${aeroportoConexao ? ` em ${aeroportoConexao}` : ''}`;
+        }
+
+        voos.push({
+          preco,
+          cia,
+          duracaoTexto,
+          duracaoHoras,
+          escalas,
+          detalhesEscalas,
+          tempoConexao,
+          aeroportoConexao,
+          bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
+        });
+      }
+    }
+
+    return voos;
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Extrai lista de voos detalhados do HTML do Google Flights.
- * Multicamada: aria-label rico → fallback aria-label simples → BRL raw.
+ * Multicamada: Camada 0 (JSON ds:1 nativo / fast-flights) → Camada A (aria-label rico) → fallback simples → BRL raw.
  *
  * @param {string} html
  * @returns {Array<{preco:number, cia:string, duracaoTexto:string, duracaoHoras:number, escalas:number, detalhesEscalas:string, tempoConexao:string|null, aeroportoConexao:string|null, bagagem:object}>}
  */
 export function extrairVoosDoHtml(html) {
+  // Camada 0: Extração direta via payload JSON nativo (script.ds:1 / fast-flights)
+  const voosJs = extrairVoosDoPayloadJs(html);
+  if (voosJs && voosJs.length > 0) {
+    return voosJs;
+  }
+
   const voos = [];
 
   // Camada A: Blocos completos com preço, cia, duração e detalhes
@@ -530,6 +654,7 @@ export function extrairVoosDoHtml(html) {
 
   while ((m = regexAriaBloco.exec(html)) !== null) {
     const ariaTexto = m[1];
+    if (PADROES_IGNORAR_RODAPE.test(ariaTexto)) continue;
     const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
     const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
     if (!preco || preco < 80 || preco > 60000) continue;
@@ -538,6 +663,7 @@ export function extrairVoosDoHtml(html) {
     const posIni = Math.max(0, m.index - 250);
     const posFim = Math.min(html.length, m.index + m[0].length + 900);
     const trecho = html.slice(posIni, posFim);
+    if (PADROES_IGNORAR_RODAPE.test(trecho)) continue;
 
     // Companhia aérea
     let ciaBruta = 'Companhia Aérea';
@@ -603,11 +729,13 @@ export function extrairVoosDoHtml(html) {
     const regexSimples = /aria-label=["'](?:Preço total a partir de|A partir de)?\s*([0-9.,\s]+?)\s*Reais brasileiros["']/gi;
     let ms;
     while ((ms = regexSimples.exec(html)) !== null) {
+      if (PADROES_IGNORAR_RODAPE.test(ms[0])) continue;
       const preco = extrairPrecoNumerico(ms[1]);
       if (preco && preco >= 80 && preco <= 60000) {
         const posIni = Math.max(0, ms.index - 250);
         const posFim = Math.min(html.length, ms.index + ms[0].length + 900);
         const trecho = html.slice(posIni, posFim);
+        if (PADROES_IGNORAR_RODAPE.test(trecho)) continue;
         const cia = extrairCiaIataDoTrecho(trecho, ms[0]) || 'Companhia Aérea';
         voos.push({
           preco,
@@ -629,11 +757,12 @@ export function extrairVoosDoHtml(html) {
     const regexBRL = /(?:R\$|BRL)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
     let mb;
     while ((mb = regexBRL.exec(html)) !== null) {
+      const posIni = Math.max(0, mb.index - 250);
+      const posFim = Math.min(html.length, mb.index + mb[0].length + 900);
+      const trecho = html.slice(posIni, posFim);
+      if (PADROES_IGNORAR_RODAPE.test(trecho)) continue;
       const num = parseFloat(mb[1].replace(/\./g, ''));
       if (num >= 80 && num <= 60000) {
-        const posIni = Math.max(0, mb.index - 250);
-        const posFim = Math.min(html.length, mb.index + mb[0].length + 900);
-        const trecho = html.slice(posIni, posFim);
         const cia = extrairCiaIataDoTrecho(trecho, mb[0]) || 'Companhia Aérea';
         voos.push({
           preco: num,

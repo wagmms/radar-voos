@@ -618,27 +618,16 @@ export function gerarLinkGoogleFlightsCheapest(
   const ehMacrorregiao = strDest.startsWith('/m/') || strDest.startsWith('/g/') ||
     ['america do sul', 'south america', 'europa', 'europe', 'asia', 'estados unidos', 'eua', 'usa'].includes(limpoLower);
 
-  // Se for macrorregião/continente amplo, resolve para o Hub IATA de entrada de referência
-  // garantindo payload Protobuf tfs preciso em vez de página genérica de exploração
-  let destinoEfetivo = destinoCod;
-  if (ehMacrorregiao) {
-    const hubIata = KGMID_PARA_HUB_IATA[strDest] ||
-      (limpoLower === 'europa' || limpoLower === 'europe' ? 'MAD' : null) ||
-      (limpoLower === 'america do sul' || limpoLower === 'south america' ? 'EZE' : null) ||
-      (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa' ? 'MIA' : null) ||
-      (limpoLower === 'asia' ? 'TYO' : null);
-
-    if (hubIata) {
-      destinoEfetivo = hubIata;
-    } else {
-      return gerarLinkGoogleFlights(origemCod, destinoCod, dataIdaNorm, dataVolta, moeda);
-    }
-  }
-
+  // Para macrorregiões/continentes, normalizarParaSerpApi resolve a lista completa de aeroportos
+  // representativos do continente inteiro (ex: EZE,AEP,SCL,MVD,LIM... ou LIS,OPO,MAD,BCN,CDG...)
   const origCod = resolverCodigoParaLink(origemCod);
-  const destCod = resolverCodigoParaLink(destinoEfetivo);
+  const destCod = resolverCodigoParaLink(destinoCod);
   const origens = normalizarParaSerpApi(origCod).split(',').map(s => s.trim()).filter(Boolean);
   const destinos = normalizarParaSerpApi(destCod).split(',').map(s => s.trim()).filter(Boolean);
+
+  if (destinos.length === 0) {
+    return gerarLinkGoogleFlights(origemCod, destinoCod, dataIdaNorm, dataVolta, moeda);
+  }
   const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
 
   const soIda = ehSoIda(dataVolta);

@@ -1,6 +1,9 @@
 import { FlightProviderInterface } from './flight_provider_interface.js';
 import { gerarLinkGoogleFlights, gerarLinkGoogleFlightsCheapest } from '../../domain/rotas.js';
 import { identificarRegiaoDestino } from '../../domain/bug_fares.js';
+import { PADROES_IGNORAR_RODAPE } from '../../domain/dicionarios.js';
+import { extrairVoosDoPayloadJs } from './scrapling_client.js';
+
 
 /**
  * Google Flights Direct Provider (v2.1)
@@ -317,7 +320,18 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       // 4. Parser multicamada de voos
       const voosDetalhados = [];
 
-      // Camada 0: Extração da aba 'Cheapest' (menor tarifa de referência do Google Flights / OTAs)
+      // Camada 0: Extração direta via payload JSON nativo script.ds:1 (padrão fast-flights)
+      const voosJs = extrairVoosDoPayloadJs(html);
+      if (voosJs && voosJs.length > 0) {
+        for (const v of voosJs) {
+          voosDetalhados.push({
+            ...v,
+            tipo: v.detalhesEscalas || 'Voo Regular'
+          });
+        }
+      }
+
+      // Camada 0.5: Extração da aba 'Cheapest' (menor tarifa de referência do Google Flights / OTAs)
       let precoCheapestTab = null;
       const regexCheapestTab = /\[\[null,\s*(\d+)\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
       const matchCheapest = html.match(regexCheapestTab);
@@ -327,69 +341,73 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       }
 
       // Camada A: Detalhes ricos estruturados nos atributos aria-label e blocos de resultado
-      const regexAriaBloco = /aria-label=["\x27]([^"\x27]*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)[^"\x27]*?)["\x27]/gi;
-      let matchBloco;
-      while ((matchBloco = regexAriaBloco.exec(html)) !== null) {
-        const ariaTexto = matchBloco[1];
-        const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
-        const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
-        if (!preco || preco < 120 || preco > 45000) continue;
+      if (voosDetalhados.length === 0) {
+        const regexAriaBloco = /aria-label=["\x27]([^"\x27]*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)[^"\x27]*?)["\x27]/gi;
+        let matchBloco;
+        while ((matchBloco = regexAriaBloco.exec(html)) !== null) {
+          const ariaTexto = matchBloco[1];
+          if (PADROES_IGNORAR_RODAPE.test(ariaTexto)) continue;
+          const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
+          const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
+          if (!preco || preco < 120 || preco > 45000) continue;
 
-        // Contexto HTML adjacente (para inspecionar nós de escala e bagagem se ausentes no ariaTexto)
-        const posIni = Math.max(0, matchBloco.index - 200);
-        const posFim = Math.min(html.length, matchBloco.index + matchBloco[0].length + 800);
-        const trechoHtml = html.slice(posIni, posFim);
+          // Contexto HTML adjacente (para inspecionar nós de escala e bagagem se ausentes no ariaTexto)
+          const posIni = Math.max(0, matchBloco.index - 200);
+          const posFim = Math.min(html.length, matchBloco.index + matchBloco[0].length + 800);
+          const trechoHtml = html.slice(posIni, posFim);
+          if (PADROES_IGNORAR_RODAPE.test(trechoHtml)) continue;
 
-        // Companhia Aérea
-        let ciaBruta = 'Companhia Aérea';
-        const matchCia = ariaTexto.match(/(?:Voo|Flight)\s*(?:[^.]*?)\s*(?:da|with|operado por|operated by)\s*([^.]+?)(?:\.|$)/i) ||
-                         ariaTexto.match(/(?:Voo|Flight)\s+([A-Za-zÀ-ÿ0-9\s]+?)(?:\.|\s+com|\s+direto)/i);
-        if (matchCia) {
-          ciaBruta = matchCia[1].trim();
-        }
-        const cia = limparNomeCompanhia(ciaBruta);
-
-        // Duração
-        let durTexto = '12 h';
-        const matchDur = ariaTexto.match(/(?:Duração total:|Total duration:)\s*([^.]+?)(?:\.|$)/i);
-        if (matchDur) {
-          durTexto = matchDur[1].trim();
-        } else {
-          const matchDurHtml = trechoHtml.match(/(?:Duração total:|Total duration:)\s*([^<.]+?)(?:<|\.|$)/i);
-          if (matchDurHtml) durTexto = matchDurHtml[1].trim();
-        }
-        const duracaoHoras = converterDuracaoParaHoras(durTexto);
-
-        // Conexões e Escalas
-        let conexoesInfo = extrairInfoConexoes(ariaTexto);
-        if (conexoesInfo.escalas === 0 && conexoesInfo.detalhesEscalas === 'Direto' && !/direto|sem\s+escalas|sem\s+paradas|nonstop/i.test(ariaTexto)) {
-          const matchEscalasHtml = trechoHtml.match(/(?:aria-label=["\x27]|>)\s*(\d+\s*(?:parada|escala|stop)s?(?:\s*(?:em|no|na|at|in)\s*[^<"\x27]+?)?)/i);
-          if (matchEscalasHtml) {
-            conexoesInfo = extrairInfoConexoes(matchEscalasHtml[1]);
+          // Companhia Aérea
+          let ciaBruta = 'Companhia Aérea';
+          const matchCia = ariaTexto.match(/(?:Voo|Flight)\s*(?:[^.]*?)\s*(?:da|with|operado por|operated by)\s*([^.]+?)(?:\.|$)/i) ||
+                           ariaTexto.match(/(?:Voo|Flight)\s+([A-Za-zÀ-ÿ0-9\s]+?)(?:\.|\s+com|\s+direto)/i);
+          if (matchCia) {
+            ciaBruta = matchCia[1].trim();
           }
-        }
+          const cia = limparNomeCompanhia(ciaBruta);
 
-        // Bagagem
-        let bagagemInfo = extrairInfoBagagem(ariaTexto);
-        if (!bagagemInfo.texto) {
-          const matchBagHtml = trechoHtml.match(/(?:aria-label=["\x27]|>)\s*([^<"\x27]*?(?:bagagem|mala|carry-on|checked\s+bag|item\s+pessoal)[^<"\x27]*?)(?:["\x27]|<)/i);
-          if (matchBagHtml) {
-            bagagemInfo = extrairInfoBagagem(matchBagHtml[1]);
+          // Duração
+          let durTexto = '12 h';
+          const matchDur = ariaTexto.match(/(?:Duração total:|Total duration:)\s*([^.]+?)(?:\.|$)/i);
+          if (matchDur) {
+            durTexto = matchDur[1].trim();
+          } else {
+            const matchDurHtml = trechoHtml.match(/(?:Duração total:|Total duration:)\s*([^<.]+?)(?:<|\.|$)/i);
+            if (matchDurHtml) durTexto = matchDurHtml[1].trim();
           }
-        }
+          const duracaoHoras = converterDuracaoParaHoras(durTexto);
 
-        voosDetalhados.push({
-          preco,
-          tipo: conexoesInfo.detalhesEscalas,
-          cia,
-          duracaoTexto: durTexto,
-          duracaoHoras,
-          escalas: conexoesInfo.escalas,
-          detalhesEscalas: conexoesInfo.detalhesEscalas,
-          tempoConexao: conexoesInfo.tempoConexao,
-          aeroportoConexao: conexoesInfo.aeroportoConexao,
-          bagagem: bagagemInfo
-        });
+          // Conexões e Escalas
+          let conexoesInfo = extrairInfoConexoes(ariaTexto);
+          if (conexoesInfo.escalas === 0 && conexoesInfo.detalhesEscalas === 'Direto' && !/direto|sem\s+escalas|sem\s+paradas|nonstop/i.test(ariaTexto)) {
+            const matchEscalasHtml = trechoHtml.match(/(?:aria-label=["\x27]|>)\s*(\d+\s*(?:parada|escala|stop)s?(?:\s*(?:em|no|na|at|in)\s*[^<"\x27]+?)?)/i);
+            if (matchEscalasHtml) {
+              conexoesInfo = extrairInfoConexoes(matchEscalasHtml[1]);
+            }
+          }
+
+          // Bagagem
+          let bagagemInfo = extrairInfoBagagem(ariaTexto);
+          if (!bagagemInfo.texto) {
+            const matchBagHtml = trechoHtml.match(/(?:aria-label=["\x27]|>)\s*([^<"\x27]*?(?:bagagem|mala|carry-on|checked\s+bag|item\s+pessoal)[^<"\x27]*?)(?:["\x27]|<)/i);
+            if (matchBagHtml) {
+              bagagemInfo = extrairInfoBagagem(matchBagHtml[1]);
+            }
+          }
+
+          voosDetalhados.push({
+            preco,
+            tipo: conexoesInfo.detalhesEscalas,
+            cia,
+            duracaoTexto: durTexto,
+            duracaoHoras,
+            escalas: conexoesInfo.escalas,
+            detalhesEscalas: conexoesInfo.detalhesEscalas,
+            tempoConexao: conexoesInfo.tempoConexao,
+            aeroportoConexao: conexoesInfo.aeroportoConexao,
+            bagagem: bagagemInfo
+          });
+        }
       }
 
       // Camada A.2: Fallback caso regexAriaBloco não encontre nada (compatibilidade com nós antigos)
@@ -397,6 +415,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         const regexAriaCard = /aria-label=["\x27](?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals)[\s\S]*?(?:Voo|Flight)\s*([^.]*?)\s*(?:da|with)\s*([^.]+)\.[\s\S]*?(?:Duração total:|Total duration:)\s*([^.]+)\./gi;
         let matchCard;
         while ((matchCard = regexAriaCard.exec(html)) !== null) {
+          if (PADROES_IGNORAR_RODAPE.test(matchCard[0])) continue;
           const preco = extrairPrecoNumerico(matchCard[1]);
           if (preco && preco >= 120 && preco <= 45000) {
             const ciaBruta = matchCard[3].trim();
@@ -420,41 +439,25 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
         }
       }
 
-      // Camada B: Fallback de preços gerais em aria-label (quando texto não tiver formato completo de cartão)
+      // Camada B: Fallback de preços gerais em aria-label (exige companhia aérea identificável)
       if (voosDetalhados.length === 0) {
         const regexAriaPreco = /aria-label=["\x27](?:Preço total a partir de|A partir de)?\s*([0-9.,\s]+?)\s*Reais brasileiros["\x27]/gi;
         let matchPreco;
         while ((matchPreco = regexAriaPreco.exec(html)) !== null) {
+          if (PADROES_IGNORAR_RODAPE.test(matchPreco[0])) continue;
           const preco = extrairPrecoNumerico(matchPreco[1]);
           if (preco && preco >= 120 && preco <= 45000) {
+            const posIni = Math.max(0, matchPreco.index - 250);
+            const trecho = html.slice(posIni, matchPreco.index + 500);
+            if (PADROES_IGNORAR_RODAPE.test(trecho)) continue;
+            const ciaMatch = trecho.match(/(?:Voo|Flight)\s*(?:[^.]*?)\s*(?:da|with|operado por|operated by)\s*([^.]+?)(?:\.|$)/i);
+            if (!ciaMatch) continue;
+            const cia = limparNomeCompanhia(ciaMatch[1].trim());
+            if (!cia || cia === 'Companhia Aérea') continue;
             voosDetalhados.push({
               preco,
               tipo: 'Voo Regular',
-              cia: 'Companhia Aérea',
-              duracaoTexto: '12 h',
-              duracaoHoras: 12.0,
-              escalas: 0,
-              detalhesEscalas: 'Direto',
-              tempoConexao: null,
-              aeroportoConexao: null,
-              bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
-            });
-          }
-        }
-      }
-
-      // Camada C: Fallback para padrões textuais de BRL/R$
-      if (voosDetalhados.length === 0) {
-        const regexBRL = /(?:R\$|BRL)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
-        let matchBRL;
-        while ((matchBRL = regexBRL.exec(html)) !== null) {
-          const valLimpo = matchBRL[1].replace(/\./g, '');
-          const num = parseFloat(valLimpo);
-          if (num >= 120 && num <= 45000) {
-            voosDetalhados.push({
-              preco: num,
-              tipo: 'Voo Regular',
-              cia: 'Companhia Aérea',
+              cia,
               duracaoTexto: '12 h',
               duracaoHoras: 12.0,
               escalas: 0,
