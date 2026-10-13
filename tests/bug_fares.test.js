@@ -71,6 +71,13 @@ describe('Domínio: Filtro de Bug Fares e Erros de Tarifa', () => {
     assert.strictEqual(identificarRegiaoDestino(null), 'OUTRO');
     assert.strictEqual(identificarRegiaoDestino(''), 'OUTRO');
     assert.strictEqual(identificarRegiaoDestino(undefined), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino('   '), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino('\t\n  '), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino({}), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino([]), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(true), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(false), 'OUTRO');
+    assert.strictEqual(identificarRegiaoDestino(Object.create(null)), 'OUTRO');
   });
 
   it('deve detectar Bug Fares estruturais e por anomalia estatística (Z-Score)', () => {

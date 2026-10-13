@@ -4,6 +4,15 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.23] - 2026-10-13 — Blindagem Adversarial em identificarRegiaoDestino contra Tipos Não-Primitivos e Strings em Branco (Domínio Bug Fares)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/bug_fares.js`** (`identificarRegiaoDestino`):
+  - Blindada a função contra entradas não-primitivas (`Object.create(null)`, objetos vazios, arrays, booleanos, funções) que podiam causar crash fatal por `TypeError: Cannot convert object to primitive value` ao invocar `String(destinoCod)`.
+  - Tratamento defensivo imediato para strings vazias e com apenas espaços em branco (`'   '`, `'\t\n'`), retornando `'OUTRO'` sem alocações ou execuções desnecessárias de regex.
+- **`tests/bug_fares.test.js`**:
+  - Adicionados casos de teste de borda adversariais verificando `Object.create(null)`, `{}`, `[]`, `true`, `false`, `'   '` e `'\t\n  '`.
+
 ## [v2.18.22] - 2026-10-13 — Blindagem Adversarial em gerarLinkGoogleFlightsCheapest contra Datas Inválidas, Duração em Volta, Retorno Retroativo e Moeda Não-String (Domínio Rotas)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

@@ -95,11 +95,15 @@ export const PISOS_MINIMOS_PLAUSIVEIS_BUG_FARE = {
  * Identifica a macrorregião a partir do código do aeroporto ou nome de destino
  */
 export function identificarRegiaoDestino(destinoCod) {
-  if (!destinoCod) return 'OUTRO';
-  const cod = String(destinoCod).toUpperCase().trim();
-  const nomeLower = String(destinoCod).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (destinoCod === null || destinoCod === undefined) return 'OUTRO';
+  if (typeof destinoCod !== 'string' && typeof destinoCod !== 'number') return 'OUTRO';
+  const str = String(destinoCod).trim();
+  if (!str) return 'OUTRO';
 
-  const destinoResolvido = resolverDestino(destinoCod);
+  const cod = str.toUpperCase();
+  const nomeLower = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  const destinoResolvido = resolverDestino(str);
   const codResolvido = destinoResolvido ? String(destinoResolvido).toUpperCase().trim() : null;
 
   const europa = [
