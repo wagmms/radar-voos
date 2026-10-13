@@ -1,28 +1,28 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.8.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.9.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.8.2 100% operacional com 123/123 testes JS e 10/10 testes Python aprovados. Restaurada com sucesso a busca continental abrangente de macrorregiões com KGMIDs (`/m/06_1`, `/m/02j9z`, `/m/02j1x`, `/m/09c7w0`), garantindo que o Radar busque em todos os países da região e resolva dinamicamente o aeroporto concreto pousado nos alertas e links.
-- **Diretriz Prioritária**: Desenvolver o motor de scraping resiliente (`scrapling`) para captura de tarifas da aba Cheapest e caçador proativo de Bug Fares (`proactive-agent`) com alertas por exceção e Z-Score estatístico.
-- **Última Tarefa Concluída**: Restauração de KGMIDs em `data/rotas.json`, calibração de `resolverCodigoParaLink` e `gerarLinkGoogleFlightsCheapest` em `src/domain/rotas.js`, priorização de `codigoDestinoReal` em `src/domain/aeroportos.js`, enriquecimento de corredores em `bug_fare_hunter.js`, sanitização de gradientes SVG e coordenadas climáticas de macrorregiões (123 testes 100% verdes).
+- **Estado Geral**: 🟢 Radar v2.9.0 100% operacional com 157/157 testes JS e 10/10 testes Python aprovados. Motor de scraping resiliente `ScraplingProvider` implementado e integrado como primeiro provedor da cadeia (`Scrapling → GoogleFlightsDirect → SerpAPI`), com rotação de fingerprints stealth, extração multicamada da aba Cheapest via Protobuf `tfs` e distinção precisa One-Way vs Round-Trip no payload binário.
+- **Diretriz Prioritária**: Implementar caçador proativo de Bug Fares (`proactive-agent`) com Working Buffer de 24h, deduplicação de alertas e Z-Score estatístico, e adicionar sparklines de histórico tarifário no Cockpit PWA.
+- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` — `ScraplingProvider.buscarOfertas` — Adaptador de scraping stealth com 4 perfis Chrome 131 (Win/Mac/Linux/Android), jitter de delay anti-bot (800–2400ms), extração em 3 camadas da aba Cheapest via `tfs`, badge de tipo de viagem e 34 testes novos (157/157 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/services/providers/scrapling_client.js`
-- **Função/Componente/Seletor**: `obterTarifasGoogleFlights`
-- **Comportamento Esperado / Critério de Aceite**: Criar adaptador de scraping resiliente baseado no padrão da skill `scrapling` com evasão de detecção de bots, cabeçalhos HTTP realistas e extração de tarifas da aba "Cheapest" via Protobuf `tfs`, integrando com failover defensivo para os provedores existentes.
+- **Arquivo/Módulo Alvo**: `src/services/bug_fare_hunter.js`
+- **Função/Componente/Seletor**: `escanearCorredoresProativos`
+- **Comportamento Esperado / Critério de Aceite**: Integrar padrão `proactive-agent` com Working Buffer em memória de 24h por rota, deduplicação defensiva de alertas idênticos dentro da janela, cálculo de Z-Score sobre série histórica de tarifas e classificação estrita em `INFO` (sem alerta) → `OPORTUNIDADE` (queda >30%) → `BUG_FARE` (Z-score < -2.5).
 
 ---
 
 ## 📋 Backlog Prioritário
-- [ ] `src/services/providers/scrapling_client.js` • `obterTarifasGoogleFlights` • Adaptador de scraping resiliente com cabeçalhos dinâmicos e parsing da aba Cheapest via Protobuf tfs.
 - [ ] `src/services/bug_fare_hunter.js` • `escanearCorredoresProativos` • Integrar padrão `proactive-agent` com Working Buffer de 24h, deduplicação de alertas e Z-score estatístico proativo.
 - [ ] `src/public/app.js` • `renderizarRotas` • Adicionar ordenação rápida por maior economia em relação ao teto e sparklines em SVG puro ultraleve (`smart-charts`).
 - [ ] `src/services/flight_scanner.js` • `executarCicloVarredura` • Implementar detecção de deltas com threshold de Z-Score e supressão de ruído para oscilações normais de mercado.
+- [ ] `src/services/providers/scrapling_client.js` • `extrairPrecoCheapestTab` • Adicionar 4ª camada de extração via decode base64url do parâmetro `tfu` da URL de resposta para capturar preços em respostas AJAX sem corpo HTML.
 
 ---
 

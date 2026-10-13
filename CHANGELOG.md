@@ -7,7 +7,27 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
-## [2.8.2] - 2026-10-12
+## [2.9.0] - 2026-10-13
+
+### 🦅 ScraplingProvider: Motor de Scraping Resiliente com Aba Cheapest via Protobuf tfs
+
+- **`src/services/providers/scrapling_client.js`** (novo arquivo — 390 linhas):
+  - `ScraplingProvider`: provedor de scraping stealth com rotação de 4 perfis (Win/Mac/Linux/Android Chrome 131), jitter de delay anti-bot (800–2400ms), até 2 tentativas com troca de fingerprint.
+  - `construirUrlCheapest`: constrói URL da aba Cheapest com payload Protobuf `tfs`, com distinção mandatória **One-Way** (`tipoViagem: 'one_way'`) vs **Round-Trip** (`tipoViagem: 'round_trip'`) no byte `0x10` do binário.
+  - `extrairPrecoCheapestTab`: regex multicamada (3 padrões) para capturar o menor preço da aba Cheapest no HTML raw, incluindo variantes minificadas de build de produção do Google Flights.
+  - `extrairVoosDoHtml`: extração em 3 camadas — aria-label rico → aria-label simples → BRL raw fallback — com escalas, aeroporto de conexão, bagagem e duração.
+  - `detectarBloqueioBot`: detecta HTTP 429/503, URLs `sorry/index` e `consent.google.com` para failover imediato.
+  - `montarHeaders`: headers completos de navegador real incluindo `Sec-Ch-Ua-Full-Version-List`, 5 IPs residenciais brasileiros rotativos e cookie de consentimento pré-aceito.
+  - Badge de tipo de viagem nos detalhes (`"Só Ida"` ou `"Ida e Volta"`) e flag `cheapestTabAtivada` na oferta.
+- **`src/services/providers/provider_manager.js`** (atualizado):
+  - `ScraplingProvider` adicionado como **primeiro provedor** na cadeia: `Scrapling → GoogleFlightsDirect → SerpAPI`.
+  - Stats expandidas com `buscasScraplingsSucesso`.
+  - Lógica de failover atualizada: provedores diretos (Scrapling ou GoogleFlightsDirect) com `cheapestTabAtivada` encerram a cadeia imediatamente.
+- **`tests/scrapling_client.test.js`** (novo arquivo — 34 cenários):
+  - Cobertura completa: `detectarBloqueioBot` (6), `extrairPrecoCheapestTab` (5), `construirUrlCheapest` (4), `extrairVoosDoHtml` (6), `ScraplingProvider.buscarOfertas` (10), integração com `FlightProviderManager` (3).
+- **Suíte de Testes**: **157/157 testes aprovados (100% verde)** (+34 testes novos).
+
+
 
 ### 🎯 Restauração Plena de Macrorregiões Continentais, Resolução Dinâmica de Destinos Reais e Blindagem de Links
 - **Busca Abrangente por Macrorregiões Preservada (`src/domain/rotas.js` e `data/rotas.json`)**:

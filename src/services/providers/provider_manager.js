@@ -1,13 +1,16 @@
 import { SerpApiProvider } from './serpapi_provider.js';
 import { GoogleFlightsDirectProvider } from './google_flights_direct_provider.js';
+import { ScraplingProvider } from './scrapling_client.js';
 
 export class FlightProviderManager {
   constructor() {
     this.providers = [
+      new ScraplingProvider(),
       new GoogleFlightsDirectProvider(),
       new SerpApiProvider()
     ];
     this.stats = {
+      buscasScraplingsSucesso: 0,
       buscasDiretasSucesso: 0,
       buscasSerpApiSucesso: 0,
       falhasTotais: 0
@@ -41,7 +44,9 @@ export class FlightProviderManager {
         const resultado = await provider.buscarOfertas(params);
 
         if (resultado.ok && resultado.encontrouVoos && resultado.oferta?.preco) {
-          if (provider instanceof GoogleFlightsDirectProvider) {
+          if (provider instanceof ScraplingProvider) {
+            this.stats.buscasScraplingsSucesso++;
+          } else if (provider instanceof GoogleFlightsDirectProvider) {
             this.stats.buscasDiretasSucesso++;
           } else if (provider instanceof SerpApiProvider) {
             this.stats.buscasSerpApiSucesso++;
@@ -51,13 +56,16 @@ export class FlightProviderManager {
             melhorResultado = resultado;
           }
 
-          // Se o provedor direto já capturou a menor tarifa via aba Cheapest ou se a SerpApi não estiver disponível,
-          // encerra imediatamente. Caso contrário, permite que a SerpApi busque descontos de parceiros e OTAs.
-          const ehDirect = provider instanceof GoogleFlightsDirectProvider;
+          // Provedores diretos (Scrapling ou GoogleFlightsDirect) com tarifa Cheapest capturam
+          // o menor preço disponível — encerra a cadeia sem precisar da SerpAPI.
+          // Caso contrário, deixa a SerpAPI buscar descontos adicionais de parceiros/OTAs.
+          const ehProveedorDireto = provider instanceof ScraplingProvider || provider instanceof GoogleFlightsDirectProvider;
           const temSerpApiDisponivel = this.providers.some(p => p instanceof SerpApiProvider && p.estaDisponivel());
-          const jaTemDescontoOta = resultado.oferta.detalhes?.includes('Aba Cheapest') || Boolean(resultado.oferta.precoOriginal);
+          const jaTemDescontoOta = resultado.oferta.cheapestTabAtivada ||
+            resultado.oferta.detalhes?.includes('Aba Cheapest') ||
+            Boolean(resultado.oferta.precoOriginal);
 
-          if (!ehDirect || !temSerpApiDisponivel || jaTemDescontoOta) {
+          if (!ehProveedorDireto || !temSerpApiDisponivel || jaTemDescontoOta) {
             return melhorResultado;
           }
         } else if (resultado.ok && !melhorResultado) {
