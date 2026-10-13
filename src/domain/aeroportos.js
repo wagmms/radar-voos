@@ -261,22 +261,36 @@ export function resolverDestinoConcreto(opcoes = {}) {
     if (infoReal) return infoReal;
   }
 
-  // 3. Se o codigoDestino for um aeroporto ou metrópole concreta (ex: BUE, SCL, MAD, LIS, BEL)
-  if (codigoDestino && CATALOGO_AEROPORTOS[normalizar(codigoDestino)]) {
-    return { ...CATALOGO_AEROPORTOS[normalizar(codigoDestino)] };
+  // 3. Se codigoDestino for aeroporto mapeado, metrópole, objeto estruturado ou string com separador
+  if (codigoDestino) {
+    const infoCodigoDestino = obterInfoAeroporto(codigoDestino);
+    if (infoCodigoDestino && infoCodigoDestino.regiao !== 'OUTRO') {
+      return infoCodigoDestino;
+    }
   }
 
-  // 4. Se destino for nome de cidade concreta (ex: "Buenos Aires", "Madrid")
+  // 4. Se destino for nome de cidade concreta (ex: "Buenos Aires", "Madrid") ou objeto estruturado
   const infoNome = obterInfoAeroporto(destino);
   if (infoNome) return infoNome;
 
   // 5. Se for continente ou região genérica (ex: "América do Sul", "/m/06_1", "Europa")
-  const infoHub = HUBS_REGIOES_CANONICOS[normalizar(codigoDestino)] || HUBS_REGIOES_CANONICOS[normalizar(destino)];
+  const codRaw = (codigoDestino && typeof codigoDestino === 'object')
+    ? (codigoDestino.iata || codigoDestino.codigo || codigoDestino.code || codigoDestino.airport || '')
+    : codigoDestino;
+  const destRaw = (destino && typeof destino === 'object')
+    ? (destino.cidade || destino.city || destino.nome || destino.name || '')
+    : destino;
+
+  const normCod = normalizar(codRaw);
+  const normDest = normalizar(destRaw);
+  const infoHub = HUBS_REGIOES_CANONICOS[normCod] || HUBS_REGIOES_CANONICOS[normDest];
   if (infoHub) return infoHub;
 
-  // Fallback seguro com sanitização defensiva de strings
-  const codFallback = codigoDestino ? String(codigoDestino).trim().toUpperCase() : '';
-  const nomeFallback = destino ? String(destino).trim() : (codFallback || 'Destino');
+  // Fallback seguro com sanitização defensiva de strings (evita [object Object])
+  const codFallback = (codRaw && typeof codRaw !== 'object') ? String(codRaw).trim().toUpperCase() : '';
+  const nomeFallback = (destRaw && typeof destRaw !== 'object' && String(destRaw).trim())
+    ? String(destRaw).trim()
+    : (codFallback || 'Destino');
 
   return {
     iata: codFallback || 'DEST',

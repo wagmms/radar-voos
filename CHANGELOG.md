@@ -4,6 +4,16 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.18.32] - 2026-10-13 — Blindagem Adversarial em resolverDestinoConcreto contra Vazamento de [object Object] e Suporte a Objetos Estruturados (Domínio Aeroportos)
+
+### 🛡️ Correção Defensiva & QA Adversarial:
+- **`src/domain/aeroportos.js`** (`resolverDestinoConcreto`):
+  - Corrigido vazamento de `[object Object]` nos campos `iata`, `codigoLink`, `nome` e `cidade` quando `codigoDestino` ou `destino` são passados como objetos literais (ex: `{ codigoDestino: { iata: 'MAD' } }` ou `{ codigoDestino: {} }`).
+  - Integrada resolução via `obterInfoAeroporto` para `codigoDestino`, habilitando resolução direta para destinos estruturados ou com separadores (ex: `'LIS - Lisboa'`) e preservando a integridade das regiões catalogadas.
+  - Implementada extração defensiva prévia (`codRaw`, `destRaw`) antes do cálculo de normalização e fallback, assegurando fallbacks seguros e limpos (`'DEST'`, `'Destino'`) sem strings corrompidas.
+- **`tests/aeroportos_bug_fares.test.js`**:
+  - Adicionado caso de teste de borda adversarial validando: (1) resolução de objeto estruturado em `codigoDestino` (`{ iata: 'MAD' }`), (2) resolução de string com separador (`'LIS - Lisboa'`), e (3) rejeição e sanitização estrita de objetos vazios `{}` sem vazamento de `[object Object]`.
+
 ## [v2.18.31] - 2026-10-13 — Blindagem Adversarial em converterDuracaoParaHoras contra Formatos Compactos Zerados e Durações Negativas (Provedor Direto)
 
 ### 🛡️ Correção Defensiva & QA Adversarial:

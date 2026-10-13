@@ -110,6 +110,27 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(fallbackSanitizado.pais, 'Internacional');
   });
 
+  it('deve resolver defensivamente codigoDestino estruturado em resolverDestinoConcreto (objetos, separadores IATA e nunca produzir [object Object])', () => {
+    // 1. Objeto estruturado com iata em codigoDestino deve resolver para a cidade e país corretos
+    const objDestino = resolverDestinoConcreto({ codigoDestino: { iata: 'MAD' } });
+    assert.strictEqual(objDestino.iata, 'MAD');
+    assert.strictEqual(objDestino.cidade, 'Madrid');
+    assert.strictEqual(objDestino.pais, 'Espanha');
+
+    // 2. String formatada com separador em codigoDestino deve extrair IATA e resolver metrópole
+    const strSeparador = resolverDestinoConcreto({ codigoDestino: 'LIS - Lisboa' });
+    assert.strictEqual(strSeparador.iata, 'LIS');
+    assert.strictEqual(strSeparador.cidade, 'Lisboa');
+    assert.strictEqual(strSeparador.pais, 'Portugal');
+
+    // 3. Objetos vazios adversariais não devem vazar [object Object] em iata, codigoLink ou nome
+    const objVazio = resolverDestinoConcreto({ codigoDestino: {}, destino: {} });
+    assert.strictEqual(objVazio.iata, 'DEST');
+    assert.strictEqual(objVazio.cidade, 'Destino');
+    assert.doesNotMatch(objVazio.iata, /object/i);
+    assert.doesNotMatch(objVazio.cidade, /object/i);
+  });
+
   it('deve formatar período da viagem com precisão e clareza', () => {
     const periodoIdaEVolta = formatarPeriodoViagem('2026-12-08', '2026-12-22');
     assert.strictEqual(periodoIdaEVolta, 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');
