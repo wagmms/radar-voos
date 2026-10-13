@@ -4,6 +4,17 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.16.1] - 2026-10-13 — Blindagem Adversarial de parsearTempoMinutos (Cockpit PWA)
+
+### 🛡️ Correção Defensiva & Robustez (Módulo de Badges de Conexão)
+- `src/public/js/conexao_badges.js` · `parsearTempoMinutos`:
+  - Corrigido bug de descarte de minutos no formato compacto sem sufixo "m" (ex: `"2h30"`, `"1h45"`, `"8h15"`), que extraía apenas as horas e perdia os minutos restantes.
+  - Adicionado suporte nativo a formato relógio militar / Google Flights `HH:MM` (ex: `"2:30"`, `"01:15"`).
+  - Blindagem adversarial contra entradas numéricas diretas em minutos (`typeof tempoStr === 'number'`), valores nulos/indefinidos, `NaN`, `Infinity`, números negativos, objetos e arrays.
+- `tests/conexao_badges.test.js`:
+  - 2 novos casos de teste adversariais cobrindo formatos compactos, relógio `HH:MM`, números primitivos e entradas adversariais.
+  - Suite total: **344/344 testes JS e 10/10 Python aprovados** (100% verde).
+
 ## [v2.16.0] - 2026-10-13 — Cache Defensivo de 6h em Memória no WeatherService
 
 ### ✨ Nova Funcionalidade & Otimização (Serviço Meteorológico)

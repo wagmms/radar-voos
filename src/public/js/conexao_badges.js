@@ -25,29 +25,55 @@ function escapeHtml(str) {
  * @returns {number|null} Minutos ou null se não for possível converter
  */
 export function parsearTempoMinutos(tempoStr) {
-  if (!tempoStr || typeof tempoStr !== 'string') return null;
+  if (tempoStr === null || tempoStr === undefined) return null;
+
+  if (typeof tempoStr === 'number') {
+    return (Number.isFinite(tempoStr) && tempoStr >= 0) ? Math.round(tempoStr) : null;
+  }
+
+  if (typeof tempoStr !== 'string') return null;
 
   const limpo = tempoStr.trim().toLowerCase();
-  let totalMinutos = 0;
-  let encontrou = false;
+  if (!limpo) return null;
 
-  // 1. Horas decimais ou inteiras (ex: "9.5h", "9h", "9 h", "9 horas")
-  const matchHoras = limpo.match(/(\d+(?:[.,]\d+)?)\s*(?:h(?:ora(?:s)?)?|hr(?:s)?)/);
-  if (matchHoras) {
-    const horasNum = parseFloat(matchHoras[1].replace(',', '.'));
-    if (!Number.isNaN(horasNum)) {
-      totalMinutos += Math.round(horasNum * 60);
-      encontrou = true;
+  // 1. Formato relógio militar / Google Flights HH:MM (ex: "2:30", "01:45", "10:15")
+  const matchRelogio = limpo.match(/\b(\d{1,2}):(\d{2})\b/);
+  if (matchRelogio) {
+    const h = parseInt(matchRelogio[1], 10);
+    const m = parseInt(matchRelogio[2], 10);
+    if (!Number.isNaN(h) && !Number.isNaN(m) && m < 60) {
+      return h * 60 + m;
     }
   }
 
-  // 2. Minutos adicionais ou avulsos (ex: "30m", "30min", "45 minutos")
-  const matchMinutos = limpo.match(/(\d+)\s*(?:m(?:in(?:uto(?:s)?)?)?)\b/);
-  if (matchMinutos) {
-    const minNum = parseInt(matchMinutos[1], 10);
-    if (!Number.isNaN(minNum)) {
-      totalMinutos += minNum;
+  let totalMinutos = 0;
+  let encontrou = false;
+  let teveHoraDecimal = false;
+
+  // 2. Horas decimais ou inteiras (ex: "9.5h", "9h", "9 h", "9 horas", "2h30")
+  const matchHoras = limpo.match(/(\d+(?:[.,]\d+)?)\s*(?:h(?:ora(?:s)?)?|hr(?:s)?)/);
+  if (matchHoras) {
+    const rawHora = matchHoras[1].replace(',', '.');
+    const horasNum = parseFloat(rawHora);
+    if (!Number.isNaN(horasNum) && Number.isFinite(horasNum) && horasNum >= 0) {
+      totalMinutos += Math.round(horasNum * 60);
       encontrou = true;
+      if (rawHora.includes('.')) {
+        teveHoraDecimal = true;
+      }
+    }
+  }
+
+  // 3. Minutos explícitos com 'm' (ex: "30m", "30min", "45 minutos") OU formato compacto após 'h' (ex: "2h30", "1h 45")
+  if (!teveHoraDecimal) {
+    const matchMinutos = limpo.match(/(?:(?:h(?:ora(?:s)?)?|hr(?:s)?)\s*(\d{1,2})\b|(\d+)\s*(?:m(?:in(?:uto(?:s)?)?)?)\b)/);
+    if (matchMinutos) {
+      const minStr = matchMinutos[1] || matchMinutos[2];
+      const minNum = parseInt(minStr, 10);
+      if (!Number.isNaN(minNum) && minNum >= 0) {
+        totalMinutos += minNum;
+        encontrou = true;
+      }
     }
   }
 

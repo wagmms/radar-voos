@@ -27,10 +27,32 @@ describe('Cockpit PWA: Badges Visuais de Conexões e Stopover (conexao_badges)',
       assert.equal(parsearTempoMinutos('30m'), 30);
     });
 
-    it('deve retornar null para strings vazias, nulas ou sem tempo', () => {
+    it('deve converter formato compacto sem "m" (2h30, 1h45) e formato relógio (2:30, 01:15)', () => {
+      assert.equal(parsearTempoMinutos('2h30'), 150);
+      assert.equal(parsearTempoMinutos('1h45'), 105);
+      assert.equal(parsearTempoMinutos('8h15'), 495);
+      assert.equal(parsearTempoMinutos('2:30'), 150);
+      assert.equal(parsearTempoMinutos('01:15'), 75);
+    });
+
+    it('deve lidar defensivamente com casos de borda e entradas adversariais em parsearTempoMinutos', () => {
+      // 1. Número numérico direto já em minutos
+      assert.equal(parsearTempoMinutos(105), 105);
+      assert.equal(parsearTempoMinutos(0), 0);
+
+      // 2. Valores nulos, indefinidos, vazios ou inválidos
       assert.equal(parsearTempoMinutos(null), null);
+      assert.equal(parsearTempoMinutos(undefined), null);
       assert.equal(parsearTempoMinutos(''), null);
+      assert.equal(parsearTempoMinutos('   '), null);
       assert.equal(parsearTempoMinutos('sem tempo informado'), null);
+
+      // 3. Tipos adversariais (NaN, Infinity, negativos, objetos e arrays)
+      assert.equal(parsearTempoMinutos(NaN), null);
+      assert.equal(parsearTempoMinutos(Infinity), null);
+      assert.equal(parsearTempoMinutos(-60), null);
+      assert.equal(parsearTempoMinutos({}), null);
+      assert.equal(parsearTempoMinutos(['10h']), null);
     });
   });
 
