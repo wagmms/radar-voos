@@ -103,10 +103,18 @@ describe('Pipeline de Deploy com Validação e Autocura (deploy_pipeline)', () =
   it('notifierTelegram deve processar comando /deploy e enviar notificação de sucesso', async () => {
     const msgsEnviadas = [];
     const backupEnviar = notifierTelegram.enviarMensagem;
+    const backupDeploy = deployPipeline.executarDeploy;
     notifierTelegram.enviarMensagem = async (texto) => {
       msgsEnviadas.push(texto);
       return { ok: true };
     };
+    deployPipeline.executarDeploy = async () => ({
+      sucesso: true,
+      hashCommit: 'abc1234',
+      mensagemCommit: 'feat(core): teste commit',
+      totalTestes: 114,
+      autocuraExecutada: false
+    });
 
     try {
       await notifierTelegram.processarComando({
@@ -119,6 +127,7 @@ describe('Pipeline de Deploy com Validação e Autocura (deploy_pipeline)', () =
       assert.ok(msgsEnviadas[1].includes('DEPLOY DISPARADO COM SUCESSO NO RENDER'));
     } finally {
       notifierTelegram.enviarMensagem = backupEnviar;
+      deployPipeline.executarDeploy = backupDeploy;
     }
   });
 
@@ -127,6 +136,7 @@ describe('Pipeline de Deploy com Validação e Autocura (deploy_pipeline)', () =
     let cbRespondido = null;
     const backupEnviar = notifierTelegram.enviarMensagem;
     const backupResponderCb = notifierTelegram.responderCallbackQuery;
+    const backupDeploy = deployPipeline.executarDeploy;
 
     notifierTelegram.enviarMensagem = async (texto) => {
       msgsEnviadas.push(texto);
@@ -136,6 +146,13 @@ describe('Pipeline de Deploy com Validação e Autocura (deploy_pipeline)', () =
       cbRespondido = { id, texto };
       return true;
     };
+    deployPipeline.executarDeploy = async () => ({
+      sucesso: true,
+      hashCommit: 'abc1234',
+      mensagemCommit: 'feat(core): teste commit',
+      totalTestes: 114,
+      autocuraExecutada: false
+    });
 
     try {
       await notifierTelegram.processarCallbackQuery({
@@ -150,6 +167,7 @@ describe('Pipeline de Deploy com Validação e Autocura (deploy_pipeline)', () =
     } finally {
       notifierTelegram.enviarMensagem = backupEnviar;
       notifierTelegram.responderCallbackQuery = backupResponderCb;
+      deployPipeline.executarDeploy = backupDeploy;
     }
   });
 });

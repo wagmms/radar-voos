@@ -46,12 +46,8 @@ export class DeployPipeline {
    * Tenta autoconsertar autonomamente os arquivos do projeto que causaram falha na validação
    */
   tentarAutocura(detalhesErro) {
-    if (process.env.NODE_ENV === 'test') {
-      return { sucesso: true, mensagem: 'Mock de autocura em ambiente de teste' };
-    }
-
     try {
-      const trechoErro = (detalhesErro.stdout + '\n' + detalhesErro.stderr).slice(-1500);
+      const trechoErro = ((detalhesErro.stdout || '') + '\n' + (detalhesErro.stderr || '')).slice(-1500);
       const prompt = `ATENÇÃO DEPLOY RADAR DE VOOS: A validação rápida (./validate.sh fast) falhou com o seguinte erro:
 
 \`\`\`

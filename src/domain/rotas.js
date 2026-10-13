@@ -233,13 +233,13 @@ export function resolverCodigoParaLink(cod) {
   const str = String(cod).trim();
   const matchIata = str.match(/\(([A-Z]{3})\)/);
   if (matchIata) return matchIata[1];
-  if (KGMID_PARA_HUB_IATA[str]) return KGMID_PARA_HUB_IATA[str];
+  if (KGMID_PARA_NOME[str]) return KGMID_PARA_NOME[str];
   const limpoLower = normalizarTexto(str);
-  if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'EZE';
-  if (limpoLower === 'europa' || limpoLower === 'europe') return 'MAD';
-  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'MIA';
-  if (limpoLower === 'asia') return 'TYO';
-  if (str.startsWith('/m/') || str.startsWith('/g/')) return 'EZE';
+  if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'South America';
+  if (limpoLower === 'europa' || limpoLower === 'europe') return 'Europe';
+  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'United States';
+  if (limpoLower === 'asia') return 'Asia';
+  if (str.startsWith('/m/') || str.startsWith('/g/')) return str.replace(/^\/[mg]\//, '');
   return str;
 }
 
@@ -392,6 +392,16 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
  */
 export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
   if (!dataIda) return null;
+  const strDest = String(destinoCod || '').trim();
+  const limpoLower = normalizarTexto(strDest);
+  const ehMacrorregiao = strDest.startsWith('/m/') || strDest.startsWith('/g/') ||
+    ['america do sul', 'south america', 'europa', 'europe', 'asia', 'estados unidos', 'eua', 'usa'].includes(limpoLower);
+
+  // Se for macrorregião/continente amplo sem aeroporto físico eleito, usa o link de exploração da região
+  if (ehMacrorregiao) {
+    return gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta);
+  }
+
   const origCod = resolverCodigoParaLink(origemCod);
   const destCod = resolverCodigoParaLink(destinoCod);
   const origens = normalizarParaSerpApi(origCod).split(',').map(s => s.trim()).filter(Boolean);
