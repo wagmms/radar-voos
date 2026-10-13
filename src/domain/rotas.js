@@ -391,9 +391,78 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
 }
 
 /**
- * Gera link direto e estruturado para o Google Flights que abre FORÇADAMENTE na aba Cheapest (Menor Preço)
+ * Constrói o payload binário tfu (Travel Filter URL) do Google Flights,
+ * que controla número de passageiros e classe de cabine na URL do Cheapest.
+ *
+ * @param {number} adultos - Número total de adultos (>= 1, padrão 1)
+ * @param {number} criancas - Número de crianças (2-11 anos, padrão 0)
+ * @param {number} bebes - Número de bebês no colo (< 2 anos, padrão 0)
+ * @param {string} classeViagem - 'economy' | 'premium_economy' | 'business' | 'first' (padrão 'economy')
+ * @returns {string} Payload base64url compatível com o parâmetro tfu do Google Flights
  */
-export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null) {
+export function construirTfu(adultos = 1, criancas = 0, bebes = 0, classeViagem = 'economy') {
+  // Mapa canônico de cabines para o encoding Protobuf do Google Flights
+  const CABIN_MAP = {
+    economy: 1,
+    premium_economy: 2,
+    business: 3,
+    first: 4
+  };
+
+  // Sanitização defensiva dos parâmetros numéricos
+  const nAdultos = Math.max(1, Math.min(9, Number.isFinite(+adultos) ? Math.floor(+adultos) : 1));
+  const nCriancas = Math.max(0, Math.min(8, Number.isFinite(+criancas) ? Math.floor(+criancas) : 0));
+  const nBebes = Math.max(0, Math.min(nAdultos, Number.isFinite(+bebes) ? Math.floor(+bebes) : 0));
+  const classeStr = typeof classeViagem === 'string' ? classeViagem.toLowerCase().trim() : 'economy';
+  const classeNum = CABIN_MAP[classeStr] || 1;
+
+  // Google Flights codifica adultos adicionais acima do padrão de 1 (adultos - 1 = extras)
+  const adultosExtras = nAdultos - 1;
+
+  // Submensagem interna: passageiros e cabine
+  const innerParts = [
+    Buffer.from([0x08, adultosExtras]), // field 1 varint = adultos extras (0 = 1 adulto padrão)
+    Buffer.from([0x10, nCriancas]),     // field 2 varint = crianças
+    Buffer.from([0x18, nBebes]),        // field 3 varint = bebês no colo
+    Buffer.from([0x20, 0x02]),          // field 4 varint = 2 (max_stops canônico fixo do Google)
+    Buffer.from([0x28, 0x03])           // field 5 varint = 3 (sort_by=melhor preço, padrão do Google)
+  ];
+
+  // Classe de cabine: field 6 varint — omitir quando economy (1) pois é o padrão implícito
+  if (classeNum > 1) {
+    innerParts.push(Buffer.from([0x30, classeNum]));
+  }
+
+  const inner = Buffer.concat(innerParts);
+  // Envelope externo: field 2, length-delimited
+  const outer = Buffer.concat([Buffer.from([0x12, inner.length]), inner]);
+  return outer.toString('base64url');
+}
+
+/**
+ * Gera link direto e estruturado para o Google Flights que abre FORÇADAMENTE na aba Cheapest (Menor Preço).
+ * Suporta múltiplos passageiros (adultos, crianças) e seleção de classe de cabine.
+ *
+ * @param {string} origemCod - Código IATA ou KGMID da origem
+ * @param {string} destinoCod - Código IATA, KGMID ou macrorregião do destino
+ * @param {string} dataIda - Data de ida no formato YYYY-MM-DD
+ * @param {string|null} dataVolta - Data de volta (ou 'Só Ida' / null para one-way)
+ * @param {number|null} duracaoMaxHoras - Duração máxima do voo em horas
+ * @param {number} adultos - Número de adultos (padrão 1)
+ * @param {number} criancas - Número de crianças 2-11 anos (padrão 0)
+ * @param {string} classeViagem - 'economy' | 'premium_economy' | 'business' | 'first' (padrão 'economy')
+ * @returns {string|null} URL canônica do Google Flights aba Cheapest ou null se sem dataIda
+ */
+export function gerarLinkGoogleFlightsCheapest(
+  origemCod,
+  destinoCod,
+  dataIda,
+  dataVolta = null,
+  duracaoMaxHoras = null,
+  adultos = 1,
+  criancas = 0,
+  classeViagem = 'economy'
+) {
   if (!dataIda) return null;
   const strDest = String(destinoCod || '').trim();
   const limpoLower = normalizarTexto(strDest);
@@ -424,7 +493,8 @@ export function gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, d
   const maxMin = duracaoMaxHoras && duracaoMaxHoras > 0 && duracaoMaxHoras < 900 ? Math.round(duracaoMaxHoras * 60) : null;
   const voltaEfetiva = ehSoIda(dataVolta) ? null : dataVolta;
   const tfs = gerarTfs({ origens, destinos, dataIda, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
-  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfs}&tfu=EgoIABAAGAAgAigD`;
+  const tfu = construirTfu(adultos, criancas, 0, classeViagem);
+  return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=BRL&tfs=${tfs}&tfu=${tfu}`;
 }
 
 /**

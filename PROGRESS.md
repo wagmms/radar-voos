@@ -5,16 +5,16 @@
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.10.5 100% operacional com 273/273 testes JS e 10/10 testes Python aprovados. Suporte a moedas dinâmicas e estimativas realistas para destinos internacionais fora do dicionário ativo.
+- **Estado Geral**: 🟢 Radar v2.11.0 100% operacional com 300/300 testes JS e 10/10 testes Python aprovados. Suporte a múltiplos passageiros (adultos, crianças) e classes de cabine (Economy / Premium Economy / Business / First) na construção dinâmica do payload Protobuf `tfu` do Google Flights.
 - **Diretriz Prioritária**: Aumentar a precisão de extração e parametrização de voos do Google Flights e refinamento das badges visuais do Cockpit PWA.
-- **Última Tarefa Concluída**: `src/domain/calculadora.js` · `avaliarCustoDestinoComTotal` · Implementado suporte a moedas dinâmicas (USD, EUR, GBP), cotações customizadas, diárias customizadas e estimativa de diárias para destinos fora do dicionário base via inferência geográfica de aeroportos/regiões e cidades nacionais (`DOMESTICO`), com função `converterMoeda` e blindagem de `ehSoIda` contra underscores (`SO_IDA`). 5 novos testes dedicados (273/273 verdes).
+- **Última Tarefa Concluída**: `src/domain/rotas.js` · `construirTfu` + `gerarLinkGoogleFlightsCheapest` · Implementada função `construirTfu(adultos, criancas, bebes, classeViagem)` que gera payload binário tfu dinâmico (base64url, Protobuf Google Flights) com sanitização defensiva e encoding correto de adultos extras, crianças, bebês e cabine (field 0x30). A assinatura de `gerarLinkGoogleFlightsCheapest` foi ampliada com `adultos`, `criancas` e `classeViagem` mantendo retrocompatibilidade total. 22 novos testes dedicados (300/300 verdes).
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/domain/rotas.js`
-- **Função/Componente/Seletor**: `gerarLinkGoogleFlightsCheapest`
-- **Comportamento Esperado / Critério de Aceite**: Adicionar suporte a múltiplos passageiros (adultos, crianças) e seleção de classe de cabine (Premium Economy / Business / First) na construção do payload Protobuf tfs do Google Flights, garantindo links canônicos navegáveis e coerentes.
+- **Arquivo/Módulo Alvo**: `src/services/notifier_telegram.js`
+- **Função/Componente/Seletor**: `enviarAlertaBugFare`
+- **Comportamento Esperado / Critério de Aceite**: Adicionar botão inline `[🧳 Ver Regras de Bagagem]` com atalho de consulta direta das regras de bagagem da rota (URL parametrizada com IATA origem/destino), vinculado ao card de alerta de Bug Fare no Telegram.
 
 ---
 
