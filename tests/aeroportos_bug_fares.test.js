@@ -52,6 +52,40 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
     assert.strictEqual(concretoScl.iata, 'SCL');
   });
 
+  it('deve lidar defensivamente com resolverDestinoConcreto para entradas nulas, indefinidas ou strings diretas', () => {
+    // Chamada sem parâmetros, null ou undefined não devem lançar TypeError
+    const vazio = resolverDestinoConcreto();
+    assert.strictEqual(vazio.iata, 'DEST');
+    assert.strictEqual(vazio.cidade, 'Destino');
+
+    const nulo = resolverDestinoConcreto(null);
+    assert.strictEqual(nulo.iata, 'DEST');
+
+    const indefinido = resolverDestinoConcreto(undefined);
+    assert.strictEqual(indefinido.iata, 'DEST');
+
+    // Entrada direta como string com código ou nome de aeroporto
+    const diretoIata = resolverDestinoConcreto('MIA');
+    assert.strictEqual(diretoIata.cidade, 'Miami');
+    assert.strictEqual(diretoIata.iata, 'MIA');
+
+    const diretoEspacos = resolverDestinoConcreto('  cdg  ');
+    assert.strictEqual(diretoEspacos.cidade, 'Paris');
+    assert.strictEqual(diretoEspacos.iata, 'CDG');
+  });
+
+  it('deve sanitizar código e nome no fallback de resolverDestinoConcreto para destinos desconhecidos', () => {
+    const fallbackSanitizado = resolverDestinoConcreto({
+      destino: '  Ilha Remota  ',
+      codigoDestino: '  xyz  '
+    });
+
+    assert.strictEqual(fallbackSanitizado.iata, 'XYZ');
+    assert.strictEqual(fallbackSanitizado.codigoLink, 'XYZ');
+    assert.strictEqual(fallbackSanitizado.cidade, 'Ilha Remota');
+    assert.strictEqual(fallbackSanitizado.pais, 'Internacional');
+  });
+
   it('deve formatar período da viagem com precisão e clareza', () => {
     const periodoIdaEVolta = formatarPeriodoViagem('2026-12-08', '2026-12-22');
     assert.strictEqual(periodoIdaEVolta, 'Ida: 08/12/2026 ➔ Volta: 22/12/2026 (14 dias)');

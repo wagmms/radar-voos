@@ -4,6 +4,14 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v2.14.3] - 2026-10-13 — Blindagem Defensiva de resolverDestinoConcreto (QA Adversarial)
+
+### 🛡️ Correção Defensiva & Robustez (Domínio Aeroportos e Resolução de Destinos)
+- `src/domain/aeroportos.js`:
+  - `resolverDestinoConcreto`: corrigido bug em que chamadas sem argumentos (`resolverDestinoConcreto()`), com `null`, `undefined` ou com tipos não-objeto lançavam `TypeError: Cannot destructure property 'destino' of ...`. Implementada desestruturação defensiva com fallback para objeto vazio, suporte transparente a entradas diretas em formato string (ex: `'MIA'`, `'  cdg  '`) e sanitização de maiúsculas/espaços no fallback seguro de aeroportos não cadastrados.
+- `tests/aeroportos_bug_fares.test.js`:
+  - Adicionadas asserções adversariais cobrindo entradas nulas/indefinidas, strings diretas com IATA/cidade e sanitização de maiúsculas e espaços em destinos desconhecidos, totalizando 333 testes com 100% de aprovação.
+
 ## [v2.14.2] - 2026-10-13 — Blindagem Defensiva de calcularDataVolta (QA Adversarial)
 
 ### 🛡️ Correção Defensiva & Robustez (Domínio Rotas e Calendário Aeronáutico)

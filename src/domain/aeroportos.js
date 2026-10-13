@@ -205,7 +205,13 @@ export function obterInfoAeroporto(codigoOuNome) {
  * Resolve com precisão o Destino Concreto do voo (NUNCA genérico)
  * Mescla o destino cadastrado na rota, a oferta e o código IATA real retornado
  */
-export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = null, codigoDestinoReal = null }) {
+export function resolverDestinoConcreto(opcoes = {}) {
+  const opts = (typeof opcoes === 'string')
+    ? { destino: opcoes, codigoDestino: opcoes }
+    : (opcoes && typeof opcoes === 'object' && !Array.isArray(opcoes) ? opcoes : {});
+
+  const { destino, codigoDestino, destinoReal = null, codigoDestinoReal = null } = opts;
+
   // 1. Se veio codigoDestinoReal concreto (ex: retornado pela SerpApi: "SCL", "EZE"), prioridade máxima
   if (codigoDestinoReal) {
     const infoCodigo = obterInfoAeroporto(codigoDestinoReal);
@@ -231,12 +237,15 @@ export function resolverDestinoConcreto({ destino, codigoDestino, destinoReal = 
   const infoHub = HUBS_REGIOES_CANONICOS[normalizar(codigoDestino)] || HUBS_REGIOES_CANONICOS[normalizar(destino)];
   if (infoHub) return infoHub;
 
-  // Fallback seguro
+  // Fallback seguro com sanitização defensiva de strings
+  const codFallback = codigoDestino ? String(codigoDestino).trim().toUpperCase() : '';
+  const nomeFallback = destino ? String(destino).trim() : (codFallback || 'Destino');
+
   return {
-    iata: codigoDestino || 'DEST',
-    codigoLink: codigoDestino || 'DEST',
-    nome: destino || codigoDestino || 'Destino',
-    cidade: destino || codigoDestino || 'Destino',
+    iata: codFallback || 'DEST',
+    codigoLink: codFallback || 'DEST',
+    nome: nomeFallback,
+    cidade: nomeFallback,
     pais: 'Internacional',
     regiao: 'OUTRO'
   };
