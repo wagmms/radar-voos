@@ -7,6 +7,50 @@ e este projeto adere ao [Semantic Versioning](https://semver.org/lang/pt-BR/).
 
 ---
 
+## [2.9.1] - 2026-10-13
+
+### 🛡️ QA Adversarial: 5 Bugs Corrigidos em Provedores de Voo
+
+**Sprint de auditoria adversarial implacável** dos providers `google_flights_direct_provider.js` e `scrapling_client.js`:
+
+#### Bugs Corrigidos
+
+- **`extrairPrecoNumerico("0")` → retornava `0` em vez de `null`** (`src/services/providers/google_flights_direct_provider.js`):
+  - Zero não é preço válido para passagem aérea. Agora garante `n === 0 → null`.
+
+- **`converterDuracaoParaHoras` — imprecisão em filtros de duração máxima** (mesmo arquivo):
+  - Usava `toFixed(1)` causando arredondamento que quebrava filtros: `40 min → 0.8h` em vez de `0.667h`.
+  - Um voo de 40 minutos com `duracaoMaxHoras: 0.75` era erroneamente filtrado (0.8 > 0.75).
+  - Corrigido para `toFixed(3)` (precisão de 3 casas decimais).
+  - Adicionado suporte a formatos compactos: `"2h30m"`, `"2h30min"`.
+
+- **`limparNomeCompanhia` — sufixos corporativos e localização** (mesmo arquivo):
+  - Não removia: `"Linhas Aéreas"` (GOL, Azul), `"Group"` (LATAM Airlines Group → LATAM Airlines), `"Holdings"` (Copa Airlines Holdings → Copa Airlines), `"Airline"` singular (Emirates Airline → Emirates), `"S.A."` (Aerolíneas Argentinas S.A. → Aerolíneas Argentinas).
+  - Não traduzia `"Multiple airlines"` / `"Multiple carriers"` → `"Múltiplas Companhias"`.
+  - Preserva corretamente `"TAP Air Portugal"` e `"LATAM Airlines"`.
+
+- **`extrairPrecoCheapestTab` — Camada 1 não tolerava espaços extras** (`src/services/providers/scrapling_client.js`):
+  - `[[null,  587 ], "EhZ..."]` (com espaços internos extras) não era capturado.
+  - Corrigido regex: `\[\[null,\s*(\d+)\s*\]\s*,\s*` (whitespace tolerante).
+
+- **`extrairPrecoCheapestTab` — Camada 3 não capturava formato minificado sem colchete duplo**:
+  - `[null,1850],"EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl"` não era capturado.
+  - Camada 2 ampliada remove dependência de `AF_initDataCallback` para capturar `[[null,N],"base64"]`.
+  - Camada 3 agora reconhece o token base64 canônico `EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl` além de palavras literais.
+
+#### Testes Adicionados
+
+- **`tests/flight_providers_adversarial.test.js`** (novo arquivo — 34 cenários adversariais):
+  - `extrairPrecoNumerico`: 8 casos (zero, vazio, null, formatos BR com ponto/vírgula/espaço).
+  - `converterDuracaoParaHoras`: 8 casos (precisão 3 casas, formatos compactos, filtro de duração).
+  - `limparNomeCompanhia`: 10 casos (sufixos corporativos, tradução, preservação de nomes compostos).
+  - `extrairPrecoCheapestTab`: 9 casos (espaços extras, formato minificado, limites de intervalo).
+
+- **`tests/flight_providers.test.js`** (atualizado):
+  - Linha 139: assertiva de `duracaoHoras` atualizada de `3.7` (valor do bug) para `≈3.667` com tolerância `±0.001`.
+
+- **Suíte de Testes**: **191/191 testes aprovados (100% verde)** (+34 testes adversariais).
+
 ## [2.9.0] - 2026-10-13
 
 ### 🦅 ScraplingProvider: Motor de Scraping Resiliente com Aba Cheapest via Protobuf tfs

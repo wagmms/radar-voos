@@ -162,24 +162,25 @@ export function detectarBloqueioBot(resp) {
 export function extrairPrecoCheapestTab(html) {
   if (!html) return null;
 
-  // Camada 1: Padrão canônico com comprehensiveness_lure
-  const r1 = /\[\[null,\s*(\d+)\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
+  // Camada 1: Padrão canônico com comprehensiveness_lure — tolerante a espaços extras
+  const r1 = /\[\[null,\s*(\d+)\s*\]\s*,\s*"[^"]*(?:comprehensiveness_lure|EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl)[^"]*"/i;
   const m1 = html.match(r1);
   if (m1) {
     const p = parseInt(m1[1], 10);
     if (p >= 80 && p <= 60000) return p;
   }
 
-  // Camada 2: Padrão alternativo com array de preço mínimo em data callback
-  const r2 = /AF_initDataCallback\([^)]*?\[\[null,\s*(\d{3,6})\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
+  // Camada 2: Padrão ampliado — captura [[null,NUM],"base64long"] em qualquer contexto de callback
+  const r2 = /\[\[null,\s*(\d{3,6})\s*\]\s*,\s*"[A-Za-z0-9+/=_-]{20,}"/;
   const m2 = html.match(r2);
   if (m2) {
     const p = parseInt(m2[1], 10);
     if (p >= 80 && p <= 60000) return p;
   }
 
-  // Camada 3: Padrão compacto minificado (build de produção do Google Flights)
-  const r3 = /\[null,(\d{3,6})\],"[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest)/i;
+  // Camada 3: Padrão compacto minificado — [null,NUM],"EhZ..." ou com palavras literais
+  // EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl = token base64 canônico de comprehensiveness_lure
+  const r3 = /\[null,\s*(\d{3,6})\s*\],\s*"(?:EhZjb21wcmVoZW5zaXZlbmVzc19sdXJl|[A-Za-z0-9+/=_-]{16,}(?:comprehensiveness|lure|cheapest))/i;
   const m3 = html.match(r3);
   if (m3) {
     const p = parseInt(m3[1], 10);

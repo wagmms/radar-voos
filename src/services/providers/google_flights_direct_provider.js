@@ -27,12 +27,23 @@ const USER_AGENTS_STEALTH = [
 
 export function converterDuracaoParaHoras(str) {
   if (!str) return 12.0;
-  const matchH = str.match(/(\d+)\s*h/i);
-  const matchM = str.match(/(\d+)\s*min/i);
+  const s = String(str);
+
+  // Suporte a formatos compactos: "2h30m", "2h30min", "2h 30m"
+  const matchCompacto = s.match(/(\d+)\s*h\s*(\d+)\s*m/i);
+  if (matchCompacto) {
+    const h = parseInt(matchCompacto[1], 10);
+    const m = parseInt(matchCompacto[2], 10);
+    return parseFloat((h + m / 60).toFixed(3));
+  }
+
+  const matchH = s.match(/(\d+)\s*(?:h(?:r|s|ora)?s?)/i);
+  const matchM = s.match(/(\d+)\s*(?:min(?:uto)?s?)/i);
   const h = matchH ? parseInt(matchH[1], 10) : 0;
   const m = matchM ? parseInt(matchM[1], 10) : 0;
   const total = h + (m / 60);
-  return total > 0 ? parseFloat(total.toFixed(1)) : 12.0;
+  // Usa 3 casas decimais para preservar precisão em filtros de duração máxima
+  return total > 0 ? parseFloat(total.toFixed(3)) : 12.0;
 }
 
 export function extrairPrecoNumerico(str) {
@@ -40,18 +51,38 @@ export function extrairPrecoNumerico(str) {
   const limpo = String(str).trim();
   const semCentavos = limpo.replace(/[,.]\d{2}$/, '');
   const numeros = semCentavos.replace(/[^\d]/g, '');
+  if (!numeros) return null;
   const n = parseInt(numeros, 10);
-  return isNaN(n) ? null : n;
+  // Zero não é preço válido para passagem aérea
+  if (isNaN(n) || n === 0) return null;
+  return n;
 }
 
 export function limparNomeCompanhia(ciaBruta) {
   if (!ciaBruta) return 'Companhia Aérea';
-  let limpo = String(ciaBruta)
+  const str = String(ciaBruta).trim();
+
+  // Traduzir termos de múltiplas companhias
+  if (/multiple\s+(?:airlines|carriers|companhias)/i.test(str)) {
+    return 'Múltiplas Companhias';
+  }
+
+  let limpo = str
+    // Remove prefixos de operação
     .replace(/(?:^|\s+)(?:operad[ao]\s+por|operated\s+by)\s+/gi, ' ')
+    // Remove informações de escalas/paradas
     .replace(/\s+(?:com\s+\d+\s+(?:parada|escala|stop)s?|com\s+conexão|com\s+escalas)/gi, '')
     .replace(/\s+(?:com\s+1\s+parada|com\s+2\s+paradas|com\s+3\s+paradas)/gi, '')
     .replace(/\s+(?:direto|sem\s+escalas|sem\s+paradas|nonstop)/gi, '')
+    // Passo 1: remove sufixos legais/corporativos isolados (não descritivos)
+    .replace(/\s+(?:Holdings?|Group|S\.?A\.?|Inc\.?|Ltd\.?|Corp\.)$/gi, '')
+    // Passo 2: remove sufixos descritivos de aviação somente no final
+    .replace(/\s+Linhas?\s+Aéreas?$/gi, '')
+    .replace(/\s+Airways?$/gi, '')
+    // Remove sufixo isolado "Airline" (singular) mas preserva "Airlines" (plural em nome composto)
+    .replace(/\s+Airline$/i, '')
     .trim();
+
   limpo = limpo.replace(/[.,;:]+$/, '').trim();
   return limpo || 'Companhia Aérea';
 }

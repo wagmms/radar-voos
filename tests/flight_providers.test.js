@@ -136,7 +136,8 @@ describe('Provedores de Voos e Failover (FlightProviderManager)', () => {
       assert.ok(res.ok);
       assert.ok(res.encontrouVoos);
       assert.equal(res.oferta.preco, 587);
-      assert.equal(res.oferta.duracaoHoras, 3.7);
+      // 3 h 40 min = 3.667h (precisão de 3 casas decimais, tolerância ±0.001)
+      assert.ok(Math.abs(res.oferta.duracaoHoras - 3.667) < 0.001, `duracaoHoras deve ser ≈3.667, recebeu ${res.oferta.duracaoHoras}`);
       assert.ok(res.oferta.detalhes.includes('Aba Cheapest Google Flights'));
       assert.equal(res.oferta.escalas, 1);
       assert.equal(res.oferta.detalhesEscalas, '1 parada');

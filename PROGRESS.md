@@ -1,13 +1,13 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v2.9.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v2.9.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Radar v2.9.0 100% operacional com 157/157 testes JS e 10/10 testes Python aprovados. Motor de scraping resiliente `ScraplingProvider` implementado e integrado como primeiro provedor da cadeia (`Scrapling → GoogleFlightsDirect → SerpAPI`), com rotação de fingerprints stealth, extração multicamada da aba Cheapest via Protobuf `tfs` e distinção precisa One-Way vs Round-Trip no payload binário.
+- **Estado Geral**: 🟢 Radar v2.9.1 100% operacional com 191/191 testes JS e 10/10 testes Python aprovados. Sprint QA Adversarial concluído: 5 bugs críticos corrigidos nos providers de voo (parsing monetário, precisão de duração, sufixos corporativos e regex da aba Cheapest) com 34 novos testes adversariais adicionados.
 - **Diretriz Prioritária**: Implementar caçador proativo de Bug Fares (`proactive-agent`) com Working Buffer de 24h, deduplicação de alertas e Z-Score estatístico, e adicionar sparklines de histórico tarifário no Cockpit PWA.
-- **Última Tarefa Concluída**: `src/services/providers/scrapling_client.js` — `ScraplingProvider.buscarOfertas` — Adaptador de scraping stealth com 4 perfis Chrome 131 (Win/Mac/Linux/Android), jitter de delay anti-bot (800–2400ms), extração em 3 camadas da aba Cheapest via `tfs`, badge de tipo de viagem e 34 testes novos (157/157 verdes).
+- **Última Tarefa Concluída**: `src/services/providers/google_flights_direct_provider.js` + `scrapling_client.js` — Sprint QA Adversarial — Corrigidos 5 bugs: `extrairPrecoNumerico("0")→null`, `converterDuracaoParaHoras` com precisão `toFixed(3)` + suporte `2h30m`, `limparNomeCompanhia` com sufixos corporativos e `"Múltiplas Companhias"`, `extrairPrecoCheapestTab` tolerante a espaços e formato compacto `[null,N]` (191/191 verdes).
 
 ---
 
