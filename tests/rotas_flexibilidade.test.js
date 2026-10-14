@@ -2,6 +2,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   somarDiasData,
+  gerarLinkGoogleFlights,
+  gerarLinkGoogleFlightsCheapest,
+  gerarJanelaDatasFlexiveis,
   gerarCombinacoesFlexibilidade,
   gerarJanelasExploracaoSemData,
   gerarDataPadraoInicial,
@@ -11,6 +14,24 @@ import {
 import { rotasRepo } from '../src/db.js';
 
 describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
+  it('gera tfs distintos para -1d, Base e +1d em UTC-3 com datas exatas', () => {
+    const combinacoes = gerarJanelaDatasFlexiveis('2027-01-17', null, 1, '2026-10-14');
+    const datas = ['2027-01-16', '2027-01-17', '2027-01-18'];
+    const tfsUnicos = new Set();
+
+    for (let i = 0; i < datas.length; i++) {
+      assert.strictEqual(combinacoes[i].dataIda, datas[i]);
+      const linkScraper = new URL(gerarLinkGoogleFlightsCheapest('RIO', 'BEL', combinacoes[i].dataIda, null));
+      const linkCockpit = new URL(gerarLinkGoogleFlights('RIO', 'BEL', combinacoes[i].dataIda, null));
+      const tfs = linkScraper.searchParams.get('tfs');
+      assert.strictEqual(linkCockpit.searchParams.get('tfs'), tfs);
+      assert.ok(Buffer.from(tfs, 'base64url').includes(Buffer.from(datas[i])));
+      tfsUnicos.add(tfs);
+    }
+
+    assert.strictEqual(tfsUnicos.size, 3);
+  });
+
   it('deve somar ou subtrair dias de uma data ISO com precisão', () => {
     assert.strictEqual(somarDiasData('2026-11-10', 0), '2026-11-10');
     assert.strictEqual(somarDiasData('2026-11-10', 3), '2026-11-13');

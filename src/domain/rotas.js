@@ -493,10 +493,13 @@ export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta
     }
   }
 
+  const buscaCanonica = new URL(gerarLinkGoogleFlightsCheapest(origemRes, destinoRes, dataIdaNorm, voltaEfetiva, null, 1, 0, 'economy', moedaCode));
+  const filtrosCanonicos = `&tfs=${buscaCanonica.searchParams.get('tfs')}&tfu=${buscaCanonica.searchParams.get('tfu')}`;
+
   if (voltaEfetiva) {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20returning%20${voltaEfetiva}&hl=pt-BR&gl=BR&curr=${moedaCode}`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20returning%20${voltaEfetiva}&hl=pt-BR&gl=BR&curr=${moedaCode}${filtrosCanonicos}`;
   } else {
-    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20one-way&hl=pt-BR&gl=BR&curr=${moedaCode}`;
+    return `https://www.google.com/travel/flights?q=Flights%20from%20${origemParam}%20to%20${destinoParam}%20on%20${dataIdaNorm}%20one-way&hl=pt-BR&gl=BR&curr=${moedaCode}${filtrosCanonicos}`;
   }
 }
 

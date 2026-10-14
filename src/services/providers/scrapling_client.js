@@ -248,7 +248,8 @@ export function montarHeaders(perfil) {
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
     'Accept-Language': 'pt-BR,pt;q=0.9',
     'Accept-Encoding': 'gzip, deflate, br, zstd',
-    'Cache-Control': 'max-age=0',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
     'Sec-Ch-Ua': perfil.chUa,
     'Sec-Ch-Ua-Full-Version-List': perfil.chUaFull,
     'Sec-Ch-Ua-Mobile': perfil.mobile,
@@ -709,8 +710,12 @@ export function extrairVoosDoPayloadJs(html) {
     if (!Array.isArray(payload) || payload.length < 3) return [];
 
     const groups = [];
-    if (Array.isArray(payload[2]) && payload[2][0]) groups.push({ list: payload[2][0], isBest: true });
-    if (Array.isArray(payload[3]) && payload[3][0]) groups.push({ list: payload[3][0], isBest: false });
+    for (const index of [2, 3]) {
+      if (!Array.isArray(payload[index])) continue;
+      for (const [bucket, list] of payload[index].entries()) {
+        if (Array.isArray(list)) groups.push({ list, isBest: index === 2 && bucket === 0 });
+      }
+    }
 
     const voos = [];
     for (const group of groups) {
@@ -721,6 +726,9 @@ export function extrairVoosDoPayloadJs(html) {
         if (!Array.isArray(k) || k.length < 2) continue;
         const flight = k[0];
         if (!Array.isArray(flight) || flight.length < 3) continue;
+        const trechos = flight[2];
+        if (typeof flight[0] !== 'string' || !Array.isArray(trechos) || trechos.length === 0 ||
+            !trechos.every(t => Array.isArray(t) && typeof t[3] === 'string' && typeof t[6] === 'string')) continue;
 
         // Tarifa / Preço: fare[1] e Moeda: fare[0]
         const fare = (Array.isArray(k[1]) && k[1][0]) ? k[1][0] : [];

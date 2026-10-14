@@ -79,6 +79,27 @@ const MOCK_HTML_DS1_CORROMPIDO = `
 `;
 
 describe('Fast-Flights Engine: extrairVoosDoPayloadJs (script.ds:1)', () => {
+  it('inclui other_flights válido e ignora preço solto de rodapé', () => {
+    const trecho = (origem, destino, partida, chegada, codigo, numero) => [
+      null, null, null, origem, '', '', destino, null, partida, null, chegada,
+      null, null, null, null, null, null, '', null, null,
+      [2027, 2, 10], [2027, 2, 10], [codigo, numero, null, codigo]
+    ];
+    const direto = [["G3", ["GOL"], [trecho('GRU', 'SSA', [7, 50], [11, 30], 'G3', '2006')], 'GRU', null, null, 'SSA', null, null, 220], [[null, 1002]]];
+    const conexao = [["LA", ["LATAM"], [
+      trecho('GRU', 'BSB', [6, 0], [7, 30], 'LA', '3001'),
+      trecho('BSB', 'SSA', [9, 0], [11, 0], 'LA', '3002')
+    ], 'GRU', null, null, 'SSA', null, null, 300], [[null, 540]]];
+    const data = [null, null, [[direto], [conexao, [[null, 199]]]]];
+    const html = `<script class="ds:1">AF_initDataCallback({key:'ds:1',data:${JSON.stringify(data)},sideChannel:{}});</script>`;
+
+    const voos = extrairVoosDoPayloadJs(html);
+    assert.deepEqual(voos.map(v => v.preco), [1002, 540]);
+    assert.equal(voos[1].escalas, 1);
+    assert.equal(voos[1].isBest, false);
+    assert.equal(voos[1].aeroportoConexao, 'BSB');
+  });
+
   it('deve extrair voos estruturados diretamente do payload JSON nativo ds:1', () => {
     const voos = extrairVoosDoPayloadJs(MOCK_HTML_DS1_VALIDO);
     assert.ok(Array.isArray(voos));

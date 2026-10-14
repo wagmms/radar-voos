@@ -567,6 +567,47 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
     }
   });
 
+  it('escolhe R$ 540 de other_flights e preserva o direto de R$ 1.002', async () => {
+    const trecho = (origem, destino, saida, chegada, codigo, numero) => [
+      null, null, null, origem, '', '', destino, null, saida, null, chegada,
+      null, null, null, null, null, null, '', null, null,
+      [2027, 2, 10], [2027, 2, 10], [codigo, numero, null, codigo]
+    ];
+    const direto = [["G3", ["GOL"], [trecho('GRU', 'SSA', [7, 50], [11, 30], 'G3', '2006')], 'GRU', null, null, 'SSA', null, null, 220], [[null, 1002]]];
+    const conexao = [["LA", ["LATAM"], [
+      trecho('GRU', 'BSB', [6, 0], [7, 30], 'LA', '3001'),
+      trecho('BSB', 'SSA', [9, 0], [11, 0], 'LA', '3002')
+    ], 'GRU', null, null, 'SSA', null, null, 300], [[null, 540]]];
+    const data = [null, null, [[direto], [conexao, [[null, 199]]]]];
+    const html = `<script class="ds:1">AF_initDataCallback({key:'ds:1',data:${JSON.stringify(data)},sideChannel:{}});</script>`;
+    const fetchOriginal = globalThis.fetch;
+    const headersVistos = [];
+    globalThis.fetch = async (_url, options) => {
+      headersVistos.push(options.headers);
+      return { ok: true, status: 200, url: 'https://www.google.com/travel/flights', text: async () => html };
+    };
+
+    try {
+      const params = { origemCod: 'GRU', destinoCod: 'SSA', dataIda: '2027-02-10' };
+      const scrapling = await new ScraplingProvider().buscarOfertas(params);
+      assert.equal(scrapling.oferta.preco, 540);
+      assert.equal(scrapling.oferta.topOfertas[0].preco, 540);
+      assert.equal(scrapling.oferta.melhorOpcaoDiretaOuRapida.preco, 1002);
+      assert.equal(scrapling.oferta.melhorOpcaoDiretaOuRapida.numeroVoo, 'G3 2006');
+
+      const { GoogleFlightsDirectProvider } = await import('../src/services/providers/google_flights_direct_provider.js');
+      const diretoProvider = await new GoogleFlightsDirectProvider().buscarOfertas(params);
+      assert.equal(diretoProvider.oferta.preco, 540);
+      for (const headers of headersVistos) {
+        assert.equal(headers['Cache-Control'], 'no-cache');
+        assert.equal(headers.Pragma, 'no-cache');
+      }
+      assert.equal(headersVistos.length, 2);
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+
   it('deve retornar topOfertas e calcular melhorOpcaoDiretaOuRapida quando a melhor oferta tem conexões', async () => {
     const provider = new ScraplingProvider();
     const fetchOriginal = globalThis.fetch;

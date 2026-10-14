@@ -6,12 +6,30 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import {
   construirTfu,
+  gerarLinkGoogleFlights,
   gerarLinkGoogleFlightsCheapest,
   gerarTfs
 } from '../src/domain/rotas.js';
 
 // Tfu padrão canônico do Google Flights: 1 adulto, economy, sem crianças
 const TFU_PADRAO = 'EgoIABAAGAAgAigD';
+
+describe('Paridade entre link do cockpit e busca Cheapest', () => {
+  it('compartilha tfs, tfu, moeda e abrangência metropolitana RIO → BEL sem restringir conexões', () => {
+    const linkCockpit = new URL(gerarLinkGoogleFlights('RIO', 'BEL', '2027-01-17', null));
+    const linkScraper = new URL(gerarLinkGoogleFlightsCheapest('RIO', 'BEL', '2027-01-17', null));
+    const tfs = Buffer.from(linkScraper.searchParams.get('tfs'), 'base64url');
+
+    assert.strictEqual(linkCockpit.searchParams.get('tfs'), linkScraper.searchParams.get('tfs'));
+    assert.strictEqual(linkCockpit.searchParams.get('tfu'), linkScraper.searchParams.get('tfu'));
+    assert.strictEqual(linkCockpit.searchParams.get('curr'), 'BRL');
+    assert.strictEqual(linkScraper.searchParams.get('curr'), 'BRL');
+    for (const aeroporto of ['GIG', 'SDU', 'BEL']) {
+      assert.ok(tfs.includes(Buffer.from(aeroporto)), `${aeroporto} deve estar no tfs`);
+    }
+    assert.ok(!tfs.includes(Buffer.from([0x28, 0x00])), 'Busca pelo menor preço deve aceitar conexões');
+  });
+});
 
 describe('construirTfu: payload tfu dinâmico de passageiros e cabine', () => {
   it('deve gerar o tfu padrão canônico do Google para 1 adulto economy', () => {
