@@ -1,19 +1,19 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.4.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.4.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Termômetro de Preços nativo (`priceInsights`), Janela de Datas Flexíveis (`dias_flexiveis`), Dica de Data Alternativa (`melhorDataAlternativa`) e Mini-Gráfico SVG acessível (`calendarioPrecos`) implementados no Cockpit PWA e no Telegram com 411/411 testes aprovados (100% de sucesso).
+- **Estado Geral**: 🟢 Blindagem cambial estrita em Reais (`BRL`) implementada em 100% da cadeia de scraping, requisições HTTP/TLS, parsing de `script.ds:1` e detecção de Bug Fares, com 422/422 testes aprovados (100% de sucesso).
 - **Camadas Entregues & Verificadas**:
-  - `src/services/flight_scanner.js`: Propagação integrada de `priceInsights` e `melhorDataAlternativa` ao notificador do Telegram.
-  - `src/services/notifier_telegram.js`: Renderização de badges do termômetro com faixa típica, callout de dia vizinho mais barato com economia em R$, botão inline e sanitização restrita contra injeção de links maliciosos (`ehUrlSegura`).
-  - `src/public/index.html` & `src/public/app.js`: Seletor de flexibilidade de datas (0 a 3 dias) com blindagem de falsy (`dias_flexiveis === 0`) e estilização Aero Dark Mode.
-  - `src/public/js/card_rota.js`: Compatibilidade dual snake_case/camelCase, badges de termômetro e janela flexível, callout de economia e helper puro `renderizarGraficoCalendarioSvg` com imunidade matemática a divisão por zero e datas formatadas sem recuo de fuso horário (`DD/MM`).
-  - **Suíte de Testes**: 411/411 testes aprovados (100% de sucesso no `./validate.sh fast`).
+  - `src/domain/rotas.js`: URLs de busca e aba Cheapest (`gerarLinkGoogleFlights`, `gerarLinkGoogleFlightsCheapest` e `gerarTfs`) forçam `curr=BRL&gl=BR&hl=pt-BR` e sincronizam o teto de preço (`maxPrice`) na moeda BRL.
+  - `src/services/providers/scrapling_client.js`: Headers com `Accept-Language: pt-BR,pt;q=0.9`; conversão de tupla `fare` no `script.ds:1` de `USD` para `BRL` via `USD_BRL_RATE` (padrão `5.80`), convertendo `preco`, `priceInsights`, `decodificarPrecoDoTfu` e alimentando `topOfertas` e `melhorOpcaoDiretaOuRapida` já em Reais; fallback HTML com priorização de `R$` e conversão de `US$` com negative lookbehind `(?<!R)\$`.
+  - `src/services/providers/tls_impersonate_client.js`: Injeção de `Accept-Language: pt-BR,pt;q=0.9` na sessão do cliente TLS primp.
+  - `src/domain/bug_fares.js`: Função exportada `extrairPrecoEmBrl(texto, taxaCambio)` com negative lookbehind `(?<!R)\$` para evitar falsos bug fares gerados por confusão cambial de USD com BRL.
+  - **Suíte de Testes**: 422/422 testes aprovados (100% de sucesso no `./validate.sh fast`).
 - **Diretriz Prioritária**: Implementar telemetria em tempo real com Server-Sent Events (SSE) e sparkline SVG de histórico no Cockpit PWA.
-- **Última Tarefa Concluída**: Turno 4B — Cockpit PWA (seletor flexível, badges, callout e gráfico SVG acessível sem NaN) e Notifier Telegram (termômetro e dia vizinho com blindagem anti-XSS e fuso-imune).
+- **Última Tarefa Concluída**: Blindagem cambial estrita em Reais (`BRL`) em URLs, headers TLS, parser `script.ds:1`, HTML fallback e `BugFareHunter`.
 
 ---
 

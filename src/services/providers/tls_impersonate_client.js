@@ -67,6 +67,7 @@ try:
     client = Client(
         impersonate=impersonate,
         impersonate_os=impersonate_os,
+        headers={"Accept-Language": "pt-BR,pt;q=0.9"},
         referer=True,
         cookie_store=True,
         timeout=timeout

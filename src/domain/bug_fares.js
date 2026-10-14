@@ -227,6 +227,48 @@ export function identificarRegiaoDestino(destinoCod) {
 }
 
 /**
+ * Extrai preço em BRL de strings, títulos de feeds ou textos monetários.
+ * Avalia primeiro se o valor está em Reais (R$, BRL, reais).
+ * Se estiver em moeda estrangeira USD (US$, U$S, USD, ou $ sem R), converte para BRL
+ * multiplicando pela taxa de câmbio (padrão USD_BRL_RATE || 5.80).
+ *
+ * @param {string|number|null} texto - String ou número contendo o preço
+ * @param {number} [taxaCambio] - Taxa de câmbio USD -> BRL (padrão USD_BRL_RATE || 5.80)
+ * @returns {number} Preço inteiro em BRL (ou 0 se inválido)
+ */
+export function extrairPrecoEmBrl(texto, taxaCambio = null) {
+  if (texto === null || texto === undefined) return 0;
+  if (typeof texto === 'number') {
+    return Number.isFinite(texto) && texto > 0 ? Math.round(texto) : 0;
+  }
+
+  const str = String(texto).trim();
+  if (!str) return 0;
+
+  const taxa = (typeof taxaCambio === 'number' && Number.isFinite(taxaCambio) && taxaCambio > 0)
+    ? taxaCambio
+    : (Number(process.env.USD_BRL_RATE) || 5.80);
+
+  // 1. Prevenção de Dupla Conversão: Avalia PRIMEIRO se é R$, BRL ou 'reais'
+  const ehBrl = /R\$|BRL|\breais\b/i.test(str);
+  if (ehBrl) {
+    const valBrl = parsePreco(str);
+    return Math.round(valBrl);
+  }
+
+  // 2. Se detectar dólar pelo símbolo $ (com negative lookbehind (?<!R)\$) ou US$ / U$S / USD / dólares
+  const ehUsd = /(?:US\$|U\$S|\bUSD\b|(?<!R)\$|\bdolares\b|\bdólares\b)/i.test(str);
+  if (ehUsd) {
+    const valUsd = parsePreco(str);
+    return Math.round(valUsd * taxa);
+  }
+
+  // 3. Fallback genérico: utiliza parsePreco padrão
+  const valPadrao = parsePreco(str);
+  return Math.round(valPadrao);
+}
+
+/**
  * Analisa uma tarifa encontrada pelo scanner e determina se é um Bug Fare em tempo real
  */
 export function detectarBugFareEstatistico(params = {}) {
@@ -241,10 +283,21 @@ export function detectarBugFareEstatistico(params = {}) {
     precoMedioHistorico = null,
     desvioPadrao = null,
     cabine = 'economy',
-    dataVolta = null
+    dataVolta = null,
+    moeda = null
   } = params;
 
-  const precoNum = typeof preco === 'number' ? preco : parsePreco(preco);
+  const taxaUsd = Number(process.env.USD_BRL_RATE) || 5.80;
+  let precoNum;
+  if (typeof preco === 'number') {
+    const ehMoedaUsd = moeda && String(moeda).trim().toUpperCase() === 'USD';
+    precoNum = ehMoedaUsd ? Math.round(preco * taxaUsd) : preco;
+  } else if (typeof preco === 'string') {
+    precoNum = extrairPrecoEmBrl(preco, taxaUsd);
+  } else {
+    precoNum = parsePreco(preco);
+  }
+
   // Filtro de ruído: valores inferiores a R$ 40 geralmente são taxas isoladas ou erros de parsing de centavos
   if (!Number.isFinite(precoNum) || precoNum < 40) return { ehBugFare: false };
 

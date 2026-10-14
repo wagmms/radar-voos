@@ -3,6 +3,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
+
+process.env.NODE_ENV = 'test';
+
 import { classificarItemFeed, identificarRegiaoDestino, detectarBugFareEstatistico } from '../src/domain/bug_fares.js';
 import { BugFareFeedWatcher } from '../src/services/bug_fare_feed_watcher.js';
 import { BugFareHunter, CORREDORES_GLOBAIS_SWEET_SPOT, ARQUIVO_WORKING_BUFFER_PADRAO } from '../src/services/bug_fare_hunter.js';
@@ -681,3 +684,36 @@ describe('BugFareHunter: Persistência Atômica do Working Buffer em Disco', () 
     assert.strictEqual(salvarChamado, true);
   });
 });
+
+describe('Blindagem Cambial: extrairPrecoEmBrl e Detecção Anti-USD em Bug Fares', () => {
+  it('extrairPrecoEmBrl: deve manter intactos valores em reais (R$) sem sofrer dupla conversão', async () => {
+    const { extrairPrecoEmBrl } = await import('../src/domain/bug_fares.js');
+    assert.strictEqual(extrairPrecoEmBrl('R$ 1.500'), 1500);
+    assert.strictEqual(extrairPrecoEmBrl('R$ 890,50'), 891);
+    assert.strictEqual(extrairPrecoEmBrl('1.200 reais'), 1200);
+    assert.strictEqual(extrairPrecoEmBrl('BRL 3.400'), 3400);
+  });
+
+  it('extrairPrecoEmBrl: deve converter US$ e $ para BRL pela taxa cambial e nunca ler diretamente em reais', async () => {
+    const { extrairPrecoEmBrl } = await import('../src/domain/bug_fares.js');
+    // 350 * 5.80 = 2030
+    assert.strictEqual(extrairPrecoEmBrl('US$ 350'), 2030);
+    assert.strictEqual(extrairPrecoEmBrl('$350'), 2030);
+    assert.strictEqual(extrairPrecoEmBrl('USD 400'), 2320);
+    assert.strictEqual(extrairPrecoEmBrl('US$ 100'), 580);
+  });
+
+  it('detectarBugFareEstatistico: não deve alertar falso bug fare para tarifa de US$ 350 para Europa', () => {
+    // Tarifa de US$ 350 para Europa = R$ 2030. Piso estrutural da Europa é R$ 1950.
+    // Se fosse lido erroneamente como R$ 350, dispararia falso Bug Fare crítico.
+    const resUsd = detectarBugFareEstatistico({
+      origemCod: 'GRU',
+      destinoCod: 'MAD',
+      preco: 'US$ 350',
+      dataVolta: '2026-11-20'
+    });
+
+    assert.strictEqual(resUsd.ehBugFare, false, 'US$ 350 (R$ 2030) está acima do piso estrutural de R$ 1950 e não deve ser classificado como bug fare');
+  });
+});
+

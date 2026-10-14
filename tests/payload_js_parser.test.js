@@ -269,4 +269,109 @@ describe('Fast-Flights Engine: extrairVoosDoPayloadJs (script.ds:1)', () => {
       assert.strictEqual(extrairPriceInsightsDoPayloadJs(MOCK_HTML_DS1_CORROMPIDO), null);
     });
   });
+
+  describe('Blindagem Cambial: Conversão Defensiva de Moeda (USD -> BRL)', () => {
+    it('deve converter voo com tupla ["USD", 400] para R$ 2320 (taxa 5.80) e registrar moedaOriginal: "USD"', () => {
+      const htmlDs1Usd = `
+        <script class="ds:1">
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [
+              null,
+              null,
+              [
+                [
+                  [
+                    ["AA", ["American Airlines"], [[null, null, null, "GRU", "", "", "MIA"]], "GRU", null, null, "MIA", null, null, 500],
+                    [["USD", 400]]
+                  ]
+                ]
+              ]
+            ],
+            sideChannel: {}
+          });
+        </script>
+      `;
+
+      const voos = extrairVoosDoPayloadJs(htmlDs1Usd);
+      assert.strictEqual(voos.length, 1);
+      const v = voos[0];
+      // 400 USD * 5.80 = 2320 BRL
+      assert.strictEqual(v.preco, 2320, 'Preço deve ser convertido para 2320 BRL e NUNCA retornado como 400');
+      assert.strictEqual(v.precoOriginal, 400);
+      assert.strictEqual(v.moeda, 'BRL');
+      assert.strictEqual(v.moedaOriginal, 'USD');
+    });
+
+    it('deve manter valor exato e moeda BRL para tupla com BRL explícito ou nulo (retrocompatibilidade)', () => {
+      const htmlDs1Brl = `
+        <script class="ds:1">
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [
+              null,
+              null,
+              [
+                [
+                  [
+                    ["G3", ["GOL"], [[null, null, null, "GRU", "", "", "MIA"]], "GRU", null, null, "MIA", null, null, 500],
+                    [["BRL", 2450]]
+                  ],
+                  [
+                    ["LA", ["LATAM"], [[null, null, null, "GRU", "", "", "MIA"]], "GRU", null, null, "MIA", null, null, 500],
+                    [[null, 1890]]
+                  ]
+                ]
+              ]
+            ],
+            sideChannel: {}
+          });
+        </script>
+      `;
+
+      const voos = extrairVoosDoPayloadJs(htmlDs1Brl);
+      assert.strictEqual(voos.length, 2);
+      assert.strictEqual(voos[0].preco, 2450);
+      assert.strictEqual(voos[0].moeda, 'BRL');
+      assert.strictEqual(voos[0].moedaOriginal, 'BRL');
+
+      assert.strictEqual(voos[1].preco, 1890);
+      assert.strictEqual(voos[1].moeda, 'BRL');
+      assert.strictEqual(voos[1].moedaOriginal, 'BRL');
+    });
+
+    it('deve converter faixas de priceInsights para BRL quando a moeda for USD', async () => {
+      const { extrairPriceInsightsDoPayloadJs } = await import('../src/services/providers/scrapling_client.js');
+      const htmlInsightsUsd = `
+        <script class="ds:1">
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [
+              null,
+              null,
+              [],
+              [],
+              null,
+              [
+                [400, 600],
+                "low",
+                "USD"
+              ]
+            ],
+            sideChannel: {}
+          });
+        </script>
+      `;
+
+      const insights = extrairPriceInsightsDoPayloadJs(htmlInsightsUsd);
+      assert.ok(insights);
+      assert.strictEqual(insights.nivel, 'baixo');
+      // 400 * 5.80 = 2320, 600 * 5.80 = 3480
+      assert.strictEqual(insights.faixaMinima, 2320);
+      assert.strictEqual(insights.faixaMaxima, 3480);
+      assert.strictEqual(insights.moeda, 'BRL');
+      assert.strictEqual(insights.moedaOriginal, 'USD');
+    });
+  });
 });
+

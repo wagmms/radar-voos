@@ -4,6 +4,27 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.4.1] - 2026-10-14 — Blindagem Cambial Estrita (100% BRL): URLs, Headers, Parser script.ds:1 e Proteção contra Dupla Conversão
+
+### 🛡️ Correções Cirúrgicas & Blindagem Cambial:
+- **`src/domain/rotas.js` & `src/services/providers/scrapling_client.js`**:
+  - Inclusão mandatória de `hl=pt-BR`, `gl=BR` e `curr=BRL` em todas as URLs geradas pelo Google Flights (`gerarLinkGoogleFlights`, `gerarLinkGoogleFlightsCheapest` e `construirUrlCheapest`).
+  - Atualização dos headers HTTP em `montarHeaders` para `Accept-Language: pt-BR,pt;q=0.9`, eliminando locales `en-US` e requisições em moeda estrangeira.
+- **`src/services/providers/tls_impersonate_client.js`**:
+  - Injeção obrigatória do cabeçalho `Accept-Language: pt-BR,pt;q=0.9` no `Client` do `primp` em sessões TLS impersonadas.
+- **`src/services/providers/scrapling_client.js`** (`extrairVoosDoPayloadJs` & `extrairPriceInsightsDoPayloadJs`):
+  - Detecção da tupla de tarifa `fare` no Google Flights (`script.ds:1`): quando a moeda for `'USD'` (ex: `["USD", 400]`), conversão automática para BRL multiplicando pela taxa configurável `USD_BRL_RATE` (padrão `5.80`), retornando `preco: 2320`, `moeda: 'BRL'` e `moedaOriginal: 'USD'`.
+  - Retrocompatibilidade estrita mantida para mocks legados e tuplas `[null, valor]` ou `["BRL", valor]`, preservando o valor nominal exato.
+  - Conversão de faixas mínima e máxima em `extrairPriceInsightsDoPayloadJs` quando a moeda detectada for `'USD'`.
+  - Conversão em `decodificarPrecoDoTfu` quando o token tfu identificar âncora em `'USD'`.
+  - Garantia de que `topOfertas` e `melhorOpcaoDiretaOuRapida` recebam voos já convertidos em BRL no momento da instanciação.
+- **`src/domain/bug_fares.js` & `src/services/providers/scrapling_client.js`**:
+  - Nova função exportada `extrairPrecoEmBrl(texto, taxaCambio)` com negative lookbehind `(?<!R)\$` para evitar dupla conversão: valores com `R$` ou `BRL` permanecem intactos, enquanto strings com `US$`, `$` ou `USD` são convertidas pela taxa cambial.
+  - Em `detectarBugFareEstatistico`: integração com `extrairPrecoEmBrl` e suporte ao parâmetro `moeda`, evitando que tarifas em dólar (ex: US$ 350) disparem falsos bug fares críticos ao serem confundidas com R$ 350.
+  - Em `extrairVoosDoHtml`: blindagem nas Camadas A, B e C, priorizando tarifas explícitas em `R$` e convertendo dólares para reais somente quando não houver preço em `R$` no HTML fallback.
+- **Suíte de Testes**:
+  - Novos testes dedicados em `tests/payload_js_parser.test.js`, `tests/scrapling_client.test.js` e `tests/bug_fares.test.js` (422/422 testes aprovados, 100% de sucesso no `./validate.sh fast`).
+
 ## [v3.4.0] - 2026-10-14 — Cockpit PWA & Telegram: Termômetro Google, Dica de Data Alternativa e Gráfico SVG da Janela Flexível
 
 ### 🚀 Novas Funcionalidades de Frontend & Notificações:

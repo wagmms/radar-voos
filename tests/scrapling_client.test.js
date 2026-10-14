@@ -950,3 +950,60 @@ describe('ScraplingClient: extrairCiaIataDoTrecho & Fallback por Código IATA (d
   });
 });
 
+describe('Blindagem Cambial: URLs, Headers e Prevenção de Dupla Conversão', () => {
+  it('todas as URLs de busca geradas devem conter curr=BRL, gl=BR e hl=pt-BR', () => {
+    const { url: urlCheapest } = construirUrlCheapest('GRU', 'MIA', '2027-03-15', null, 12, 'BRL');
+    assert.match(urlCheapest, /[?&]curr=BRL/);
+    assert.match(urlCheapest, /[?&]gl=BR/);
+    assert.match(urlCheapest, /[?&]hl=pt-BR/);
+
+    const { url: urlCheapestPadrao } = construirUrlCheapest('GRU', 'MIA', '2027-03-15');
+    assert.match(urlCheapestPadrao, /[?&]curr=BRL/);
+    assert.match(urlCheapestPadrao, /[?&]gl=BR/);
+    assert.match(urlCheapestPadrao, /[?&]hl=pt-BR/);
+  });
+
+  it('extrairVoosDoHtml: aria-label com "US$ 350" ou "$350" deve converter para R$ 2030 (taxa 5.80) e nunca ler como R$ 350', () => {
+    const htmlUsd = `
+      <div aria-label="Preço total a partir de US$ 350. Voo da American Airlines direto. Duração total: 8 h 30 min."></div>
+    `;
+    const voos = extrairVoosDoHtml(htmlUsd);
+    assert.strictEqual(voos.length, 1);
+    // 350 * 5.80 = 2030 BRL
+    assert.strictEqual(voos[0].preco, 2030, 'US$ 350 nunca pode ser lido diretamente como R$ 350');
+  });
+
+  it('extrairVoosDoHtml: aria-label com "R$ 1.500" nunca deve ser confundido com dólar (prevenção de dupla conversão)', () => {
+    const htmlBrl = `
+      <div aria-label="Preço total a partir de R$ 1.500 Reais brasileiros. Voo da GOL direto. Duração total: 3 h."></div>
+    `;
+    const voos = extrairVoosDoHtml(htmlBrl);
+    assert.strictEqual(voos.length, 1);
+    assert.strictEqual(voos[0].preco, 1500, 'R$ 1.500 deve permanecer exatamente 1500 BRL sem ser multiplicado por taxa');
+  });
+
+  it('extrairVoosDoHtml: HTML fallback com US$ 350 deve converter para BRL quando não há R$', () => {
+    const htmlFallbackUsd = `
+      <div>
+        <span>US$ 350</span>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlFallbackUsd);
+    assert.strictEqual(voos.length, 1);
+    assert.strictEqual(voos[0].preco, 2030);
+  });
+
+  it('extrairVoosDoHtml: HTML fallback com R$ e US$ deve priorizar preço em R$', () => {
+    const htmlMisto = `
+      <div>
+        <span>R$ 1.200</span>
+        <span>US$ 300</span>
+      </div>
+    `;
+    const voos = extrairVoosDoHtml(htmlMisto);
+    assert.strictEqual(voos.length, 1);
+    assert.strictEqual(voos[0].preco, 1200, 'Deve priorizar tarifa explícita em R$');
+  });
+});
+
+

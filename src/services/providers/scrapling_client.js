@@ -241,12 +241,12 @@ function selecionarPerfilStealth(ultimoIdx = -1) {
  * @param {object} perfil
  * @returns {Record<string, string>}
  */
-function montarHeaders(perfil) {
+export function montarHeaders(perfil) {
   const ip = IPS_BRASIL[Math.floor(Math.random() * IPS_BRASIL.length)];
   return {
     'User-Agent': perfil.ua,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Language': 'pt-BR,pt;q=0.9',
     'Accept-Encoding': 'gzip, deflate, br, zstd',
     'Cache-Control': 'max-age=0',
     'Sec-Ch-Ua': perfil.chUa,
@@ -335,12 +335,15 @@ export function decodificarPrecoDoTfu(tokenOuUrl) {
               if (j < idxMoeda && buf[j] === 0x10) { // Tag 2 (escala)
                 escala = buf[j + 1];
               }
+              const taxaUsd = Number(process.env.USD_BRL_RATE) || 5.80;
               const precoComEscala = Math.round(val / (10 ** escala));
-              if (precoComEscala >= 80 && precoComEscala <= 60000) {
-                return precoComEscala;
+              const precoEscalaBrl = (moeda === 'USD') ? Math.round(precoComEscala * taxaUsd) : precoComEscala;
+              if (precoEscalaBrl >= 80 && precoEscalaBrl <= 60000) {
+                return precoEscalaBrl;
               }
-              if (val >= 80 && val <= 60000) {
-                return val;
+              const valBrl = (moeda === 'USD') ? Math.round(val * taxaUsd) : val;
+              if (valBrl >= 80 && valBrl <= 60000) {
+                return valBrl;
               }
             }
           }
@@ -719,10 +722,20 @@ export function extrairVoosDoPayloadJs(html) {
         const flight = k[0];
         if (!Array.isArray(flight) || flight.length < 3) continue;
 
-        // Tarifa / Preço: fare[1]
+        // Tarifa / Preço: fare[1] e Moeda: fare[0]
         const fare = (Array.isArray(k[1]) && k[1][0]) ? k[1][0] : [];
-        const preco = (Array.isArray(fare) && Number.isFinite(fare[1])) ? Math.round(fare[1]) : null;
-        if (!preco || preco < 80 || preco > 60000) continue;
+        const precoBruto = (Array.isArray(fare) && Number.isFinite(fare[1])) ? Math.round(fare[1]) : null;
+        if (!precoBruto) continue;
+
+        const taxaUsd = Number(process.env.USD_BRL_RATE) || 5.80;
+        let moedaDetectada = (fare && typeof fare[0] === 'string' && fare[0].trim()) ? fare[0].trim().toUpperCase() : null;
+        if (!moedaDetectada && typeof flight[0] === 'string' && flight[0].toUpperCase() === 'USD') {
+          moedaDetectada = 'USD';
+        }
+
+        const ehUsd = moedaDetectada === 'USD';
+        const preco = ehUsd ? Math.round(precoBruto * taxaUsd) : precoBruto;
+        if (preco < 80 || preco > 60000) continue;
 
         // Companhia aérea: flight[1] (array de nomes de cias) ou código do flight[0]
         const airlines = Array.isArray(flight[1]) ? flight[1] : [];
@@ -778,6 +791,9 @@ export function extrairVoosDoPayloadJs(html) {
 
         voos.push({
           preco,
+          precoOriginal: ehUsd ? precoBruto : preco,
+          moeda: 'BRL',
+          moedaOriginal: moedaDetectada || 'BRL',
           cia,
           numeroVoo,
           horarioPartida,
@@ -906,10 +922,32 @@ export function extrairPriceInsightsDoPayloadJs(payloadOuHtml) {
       }
 
       if (nivelEncontrado !== null || faixaEncontrada !== null) {
+        const taxaUsd = Number(process.env.USD_BRL_RATE) || 5.80;
+        let moedaDetectada = 'BRL';
+        for (const item of bloco) {
+          if (typeof item === 'string' && item.trim().toUpperCase() === 'USD') {
+            moedaDetectada = 'USD';
+            break;
+          }
+        }
+        if (moedaDetectada !== 'USD') {
+          try {
+            const rawStr = JSON.stringify(bloco);
+            if (rawStr.includes('"USD"') || rawStr.includes('USD')) {
+              moedaDetectada = 'USD';
+            }
+          } catch (_) {}
+        }
+        const ehUsd = moedaDetectada === 'USD';
+        const faixaMinima = faixaEncontrada ? (ehUsd ? Math.round(faixaEncontrada.min * taxaUsd) : faixaEncontrada.min) : null;
+        const faixaMaxima = faixaEncontrada ? (ehUsd ? Math.round(faixaEncontrada.max * taxaUsd) : faixaEncontrada.max) : null;
+
         return {
           nivel: nivelEncontrado || 'tipico',
-          faixaMinima: faixaEncontrada ? faixaEncontrada.min : null,
-          faixaMaxima: faixaEncontrada ? faixaEncontrada.max : null
+          faixaMinima,
+          faixaMaxima,
+          moeda: 'BRL',
+          moedaOriginal: moedaDetectada
         };
       }
     }
@@ -935,17 +973,24 @@ export function extrairVoosDoHtml(html) {
   }
 
   const voos = [];
+  const taxaUsd = Number(process.env.USD_BRL_RATE) || 5.80;
 
   // Camada A: Blocos completos com preço, cia, duração e detalhes
-  const regexAriaBloco = /aria-label=["']((?:[^"']|\\.)*?(?:Preço total a partir de|A partir de|Total price from|From)\s*[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)(?:[^"']|\\.)*?)["']/gi;
+  const regexAriaBloco = /aria-label=["']((?:[^"']|\\.)*?(?:Preço total a partir de|A partir de|Total price from|From)\s*(?:(?:R\$|BRL|US\$|U\$S|USD|(?<!R)\$)\s*[0-9.,\s]+|[0-9.,\s]+?\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares))(?:[^"']|\\.)*?)["']/gi;
   let m;
 
   while ((m = regexAriaBloco.exec(html)) !== null) {
     const ariaTexto = m[1];
     if (PADROES_IGNORAR_RODAPE.test(ariaTexto)) continue;
-    const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares)/i);
-    const preco = matchPreco ? extrairPrecoNumerico(matchPreco[1]) : null;
-    if (!preco || preco < 80 || preco > 60000) continue;
+    const matchPreco = ariaTexto.match(/(?:Preço total a partir de|A partir de|Total price from|From)\s*(?:(?:R\$|BRL|US\$|U\$S|USD|(?<!R)\$)\s*([0-9.,\s]+?)(?=\s*[^\d.,]|$)|([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|EUR|US dollars|euros|dólares|dolares))/i);
+    const precoBruto = matchPreco ? extrairPrecoNumerico(matchPreco[1] || matchPreco[2]) : null;
+    if (!precoBruto) continue;
+
+    // Prevenção de Dupla Conversão: avalia primeiro se é BRL
+    const ehBrl = /R\$|BRL|\breais\b|Brazilian reals/i.test(ariaTexto);
+    const ehUsd = !ehBrl && /(?:US\$|U\$S|\bUSD\b|US dollars|\bdolares\b|\bdólares\b|(?<!R)\$)/i.test(ariaTexto);
+    const preco = ehUsd ? Math.round(precoBruto * taxaUsd) : precoBruto;
+    if (preco < 80 || preco > 60000) continue;
 
     // Contexto HTML adjacente para bagagem e escalas
     const posIni = Math.max(0, m.index - 250);
@@ -1019,12 +1064,18 @@ export function extrairVoosDoHtml(html) {
 
   // Camada B: Fallback aria-label simples com preço e currency
   if (voos.length === 0) {
-    const regexSimples = /aria-label=["'](?:Preço total a partir de|A partir de)?\s*([0-9.,\s]+?)\s*Reais brasileiros["']/gi;
+    const regexSimples = /aria-label=["'](?:Preço total a partir de|A partir de)?\s*(?:R\$|BRL|US\$|U\$S|USD|(?<!R)\$)?\s*([0-9.,\s]+?)\s*(?:Reais brasileiros|BRL|reais|Brazilian reals|USD|US dollars|dólares|dolares)?["']/gi;
     let ms;
     while ((ms = regexSimples.exec(html)) !== null) {
       if (PADROES_IGNORAR_RODAPE.test(ms[0])) continue;
-      const preco = extrairPrecoNumerico(ms[1]);
-      if (preco && preco >= 80 && preco <= 60000) {
+      const matchPrecoSimples = ms[0].match(/([0-9.,\s]+)/);
+      const precoBruto = matchPrecoSimples ? extrairPrecoNumerico(matchPrecoSimples[1]) : null;
+      if (!precoBruto) continue;
+
+      const ehBrl = /R\$|BRL|\breais\b|Brazilian reals/i.test(ms[0]);
+      const ehUsd = !ehBrl && /(?:US\$|U\$S|\bUSD\b|US dollars|\bdolares\b|\bdólares\b|(?<!R)\$)/i.test(ms[0]);
+      const preco = ehUsd ? Math.round(precoBruto * taxaUsd) : precoBruto;
+      if (preco >= 80 && preco <= 60000) {
         const posIni = Math.max(0, ms.index - 250);
         const posFim = Math.min(html.length, ms.index + ms[0].length + 900);
         const trecho = html.slice(posIni, posFim);
@@ -1050,7 +1101,7 @@ export function extrairVoosDoHtml(html) {
     }
   }
 
-  // Camada C: Fallback BRL/R$ raw no HTML
+  // Camada C: Fallback BRL/R$ raw no HTML (prioridade mandatória para R$)
   if (voos.length === 0) {
     const regexBRL = /(?:R\$|BRL)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
     let mb;
@@ -1078,6 +1129,42 @@ export function extrairVoosDoHtml(html) {
           isBest: false,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
+      }
+    }
+
+    // Se nenhum preço em R$ for encontrado no HTML, busca US$ / $ e converte para BRL
+    if (voos.length === 0) {
+      const regexUSD = /(?:US\$|U\$S|\bUSD\b|(?<!R)\$)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
+      let mu;
+      while ((mu = regexUSD.exec(html)) !== null) {
+        const posIni = Math.max(0, mu.index - 250);
+        const posFim = Math.min(html.length, mu.index + mu[0].length + 900);
+        const trecho = html.slice(posIni, posFim);
+        if (PADROES_IGNORAR_RODAPE.test(trecho)) continue;
+        const numBruto = parseFloat(mu[1].replace(/\./g, ''));
+        const numConvertido = Math.round(numBruto * taxaUsd);
+        if (numConvertido >= 80 && numConvertido <= 60000) {
+          const cia = extrairCiaIataDoTrecho(trecho, mu[0]) || 'Companhia Aérea';
+          voos.push({
+            preco: numConvertido,
+            precoOriginal: numBruto,
+            moeda: 'BRL',
+            moedaOriginal: 'USD',
+            cia,
+            numeroVoo: null,
+            horarioPartida: null,
+            horarioChegada: null,
+            duracaoTexto: '12 h',
+            duracaoHoras: 12.0,
+            escalas: 0,
+            detalhesEscalas: 'Direto',
+            tempoConexao: null,
+            tempoConexaoMinutos: null,
+            aeroportoConexao: null,
+            isBest: false,
+            bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
+          });
+        }
       }
     }
   }
