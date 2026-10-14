@@ -2,6 +2,116 @@
  * DOMÍNIO: Dicionários e Conhecimento Canônico de Aviação e Viagens
  */
 
+// Catálogo de Regiões e Continentes Multi-Hub Canônicos
+export const REGIOES_HUBS_IATA = Object.freeze({
+  EUR: Object.freeze(['LIS', 'MAD', 'OPO', 'CDG', 'MXP', 'FCO']),
+  SAM: Object.freeze(['SCL', 'EZE', 'AEP', 'LIM', 'MVD', 'BOG']),
+  NEB: Object.freeze(['REC', 'SSA', 'FOR', 'MCZ', 'NAT', 'BPS']),
+  USA: Object.freeze(['MIA', 'MCO', 'FLL', 'JFK']),
+  CAR: Object.freeze(['CUN', 'PUJ', 'CUR', 'SXM']),
+  SAO: Object.freeze(['GRU', 'CGH', 'VCP'])
+});
+
+// Nomes Amigáveis das Cidades dos Hubs
+export const NOMES_CIDADES_IATA = Object.freeze({
+  LIS: 'Lisboa',
+  MAD: 'Madri',
+  OPO: 'Porto',
+  CDG: 'Paris',
+  MXP: 'Milão',
+  FCO: 'Roma',
+  SCL: 'Santiago',
+  EZE: 'Buenos Aires',
+  AEP: 'Buenos Aires (Aeroparque)',
+  LIM: 'Lima',
+  MVD: 'Montevidéu',
+  BOG: 'Bogotá',
+  REC: 'Recife',
+  SSA: 'Salvador',
+  FOR: 'Fortaleza',
+  MCZ: 'Maceió',
+  NAT: 'Natal',
+  BPS: 'Porto Seguro',
+  MIA: 'Miami',
+  MCO: 'Orlando',
+  FLL: 'Fort Lauderdale',
+  JFK: 'Nova York',
+  CUN: 'Cancún',
+  PUJ: 'Punta Cana',
+  CUR: 'Curaçao',
+  SXM: 'St. Maarten',
+  GRU: 'São Paulo (GRU)',
+  CGH: 'São Paulo (CGH)',
+  VCP: 'Campinas (VCP)'
+});
+
+// Termos em linguagem natural para mapeamento de código regional sintético
+export const MAPA_TERMOS_REGIONAIS = Object.freeze({
+  'europa': 'EUR',
+  'europe': 'EUR',
+  'america do sul': 'SAM',
+  'south america': 'SAM',
+  'nordeste': 'NEB',
+  'estados unidos': 'USA',
+  'eua': 'USA',
+  'usa': 'USA',
+  'united states': 'USA',
+  'america do norte': 'USA',
+  'caribe': 'CAR',
+  'caribbean': 'CAR',
+  'sao paulo': 'SAO'
+});
+
+/**
+ * Identifica se um código de 3 letras é um código regional sintético expansível
+ * @param {string} codigo Código a verificar
+ * @returns {boolean}
+ */
+export function ehCodigoRegional(codigo) {
+  if (!codigo || typeof codigo !== 'string') return false;
+  const codUpper = codigo.trim().toUpperCase();
+  return Object.hasOwn(REGIOES_HUBS_IATA, codUpper);
+}
+
+/**
+ * Expande código regional sintético ou termo em linguagem natural para lista de aeroportos IATA reais
+ * @param {string} termoOuCodigo Código sintético (ex: 'EUR') ou nome de região (ex: 'Europa')
+ * @returns {string[]} Lista de códigos IATA dos hubs da região
+ */
+export function expandirDestinoOuOrigemRegional(termoOuCodigo) {
+  if (!termoOuCodigo) return [];
+  const str = String(termoOuCodigo).trim();
+  const codUpper = str.toUpperCase();
+  if (Object.hasOwn(REGIOES_HUBS_IATA, codUpper)) {
+    return [...REGIOES_HUBS_IATA[codUpper]];
+  }
+  const limpo = str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+  const codRegional = MAPA_TERMOS_REGIONAIS[limpo];
+  if (codRegional && Object.hasOwn(REGIOES_HUBS_IATA, codRegional)) {
+    return [...REGIOES_HUBS_IATA[codRegional]];
+  }
+  return [];
+}
+
+const IATAS_BASE = [
+  'EUR', 'SAM', 'NEB', 'USA', 'CAR', 'SAO',
+  'LIS', 'MAD', 'OPO', 'CDG', 'MXP', 'FCO',
+  'SCL', 'EZE', 'AEP', 'LIM', 'MVD', 'BOG',
+  'REC', 'SSA', 'FOR', 'MCZ', 'NAT', 'BPS',
+  'MIA', 'MCO', 'FLL', 'JFK',
+  'CUN', 'PUJ', 'CUR', 'SXM',
+  'GRU', 'CGH', 'VCP',
+  'RIO', 'GIG', 'SDU', 'BSB', 'CNF', 'BHZ', 'FLN', 'POA', 'CWB', 'BEL', 'MAO', 'JPA', 'AJU', 'VIX',
+  'IGU', 'NVT', 'RAO', 'SJP', 'FEN', 'GYN', 'CGB', 'CGR',
+  'BUE', 'MDE', 'CTG', 'ASU', 'UIO', 'GYE', 'MDZ', 'BRC', 'COR', 'ROS',
+  'BCN', 'PAR', 'ORY', 'ROM', 'LIN', 'LON', 'LHR', 'LGW', 'AMS', 'FRA', 'BER', 'MUC', 'ZRH', 'VIE', 'DUB', 'ATH',
+  'NYC', 'EWR', 'LGA', 'LAX', 'SFO', 'ORD', 'CHI', 'WAS', 'IAD', 'DCA', 'BOS', 'ATL', 'DFW', 'LAS', 'YYZ', 'YUL',
+  'SDQ', 'PTY', 'SJO', 'HAV', 'AUA',
+  'TYO', 'NRT', 'HND', 'DXB', 'DOH', 'BKK', 'SIN', 'SYD'
+];
+
+export const CODIGOS_IATA_CONHECIDOS = Object.freeze(new Set(IATAS_BASE));
+
 // Resolução Metropolitana Universal (cobre cidades com múltiplos aeroportos sem falso negativo)
 export const DICIONARIO_CIDADES = {
   "sao paulo": "SAO", "sp": "SAO", "sampa": "SAO", // Cobre GRU, CGH e VCP

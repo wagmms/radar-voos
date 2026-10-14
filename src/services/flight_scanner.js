@@ -19,6 +19,11 @@ import {
 } from '../domain/rotas.js';
 import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
+import {
+  ehCodigoRegional,
+  expandirDestinoOuOrigemRegional,
+  NOMES_CIDADES_IATA
+} from '../domain/dicionarios.js';
 
 /**
  * @deprecated Descontinuado: O Radar de Voos opera exclusivamente com tarifas reais em dinheiro.
@@ -75,6 +80,17 @@ export class FlightScanner {
       // 1. Consulta meteorológica do destino em paralelo
       const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
 
+      const hubsDestino = expandirDestinoOuOrigemRegional(rota.codigo_destino || rota.destino);
+      const ehRegional = hubsDestino.length > 0;
+
+      let origemBusca = rota.codigo_origem;
+      if (ehCodigoRegional(rota.codigo_origem)) {
+        const hubsOrigem = expandirDestinoOuOrigemRegional(rota.codigo_origem);
+        const ehInternacional = ['EUR', 'SAM', 'USA', 'CAR'].includes(String(rota.codigo_destino).toUpperCase()) ||
+          hubsDestino.some(h => ['LIS', 'MAD', 'OPO', 'CDG', 'MXP', 'FCO', 'MIA', 'JFK', 'SCL', 'EZE'].includes(h));
+        origemBusca = (ehInternacional && hubsOrigem.includes('GRU')) ? 'GRU' : (hubsOrigem[0] || rota.codigo_origem);
+      }
+
       let resultadoFinal = null;
       let oferta = null;
       let melhorOpcaoFlexivel = null;
@@ -82,9 +98,74 @@ export class FlightScanner {
       let melhorDataAlternativa = null;
       let dataIdaEfetiva = rota.data_ida;
       let dataVoltaEfetiva = rota.data_volta;
+      let rankingDestinosRegionais = [];
+      let destinoVencedorIata = null;
+      let destinoVencedorNome = null;
 
-      // 2. Modo Voo Flexível Sem Data (movido pelo menor preço nos próximos meses)
-      if (rota.sem_data === 1) {
+      // 2. Modo Exploração Multi-Hub por Região/Continente
+      if (ehRegional) {
+        let menorOfertaRegional = null;
+        for (const hubIata of hubsDestino) {
+          try {
+            const resHub = await FlightScanner.buscarOfertas(
+              origemBusca,
+              hubIata,
+              rota.data_ida,
+              rota.data_volta,
+              rota.duracao_max_horas,
+              rota.cabine || 'economy',
+              1,
+              moedaEfetiva,
+              filtrosAvancados
+            );
+            if (resHub.ok && resHub.encontrouVoos && resHub.oferta && resHub.oferta.preco > 0) {
+              const nomeCidade = NOMES_CIDADES_IATA[hubIata] || resHub.oferta.destinoReal || hubIata;
+              const item = {
+                destinoIata: hubIata,
+                nomeCidade,
+                preco: resHub.oferta.preco,
+                cia: resHub.oferta.cia || null,
+                escalas: resHub.oferta.escalas ?? 0,
+                duracaoTexto: resHub.oferta.detalhes || `${resHub.oferta.duracaoHoras?.toFixed(1)}h`,
+                horarioPartida: resHub.oferta.horarioPartida || null,
+                linkGoogleFlights: resHub.oferta.link
+              };
+              rankingDestinosRegionais.push(item);
+              if (!menorOfertaRegional || resHub.oferta.preco < menorOfertaRegional.oferta.preco) {
+                menorOfertaRegional = {
+                  hubIata,
+                  nomeCidade,
+                  oferta: resHub.oferta
+                };
+              }
+            }
+          } catch (_) {}
+        }
+
+        if (rankingDestinosRegionais.length === 0) {
+          const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
+          rotasRepo.atualizarResultadoChecagem(rota.id, {
+            preco: 0,
+            variacao_texto: '-',
+            termometro: '⚪ Sem voos para os hubs da região',
+            custo_destino_texto: '-',
+            detalhes_voo: '-',
+            dica_stopover: '-',
+            link_google_flights: rota.link_google_flights,
+            clima_destino_resumo: clima.ok ? clima.resumo : null,
+            clima_temp_media: clima.ok ? clima.tempMedia : null,
+            melhor_opcao_flexivel: null
+          });
+          return { sucesso: true, encontrou: false, mensagem: 'Sem voos para os hubs da região' };
+        }
+
+        rankingDestinosRegionais.sort((a, b) => a.preco - b.preco);
+        oferta = menorOfertaRegional.oferta;
+        destinoVencedorIata = menorOfertaRegional.hubIata;
+        destinoVencedorNome = menorOfertaRegional.nomeCidade;
+        oferta.codigoDestinoReal = destinoVencedorIata;
+        oferta.destinoReal = destinoVencedorNome;
+      } else if (rota.sem_data === 1) {
         const soIda = ehSoIda(rota.data_volta);
         const janelas = gerarJanelasExploracaoSemData({
           dataBase: rota.data_ida,
@@ -343,11 +424,13 @@ export class FlightScanner {
       codigoDestinoReal: oferta.codigoDestinoReal || null
     });
 
-    const destinoParaLink = oferta.codigoDestinoReal || destinoInfoRota.iata;
+    const destinoParaLink = destinoVencedorIata || oferta.codigoDestinoReal || destinoInfoRota.iata;
+    const origemParaLink = origemBusca || rota.codigo_origem;
+
     if (melhorDataAlternativa) {
       melhorDataAlternativa.linkGoogleFlights = (melhorDataAlternativa.dataIda && destinoParaLink)
-        ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoParaLink, melhorDataAlternativa.dataIda, melhorDataAlternativa.dataVolta, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
-           || gerarLinkGoogleFlights(rota.codigo_origem, rota.codigo_destino || destinoParaLink, melhorDataAlternativa.dataIda, melhorDataAlternativa.dataVolta, moedaEfetiva))
+        ? (gerarLinkGoogleFlightsCheapest(origemParaLink, destinoParaLink, melhorDataAlternativa.dataIda, melhorDataAlternativa.dataVolta, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
+           || gerarLinkGoogleFlights(origemParaLink, destinoParaLink, melhorDataAlternativa.dataIda, melhorDataAlternativa.dataVolta, moedaEfetiva))
         : null;
       if (melhorOpcaoFlexivel) {
         melhorOpcaoFlexivel.link = melhorDataAlternativa.linkGoogleFlights;
@@ -355,8 +438,8 @@ export class FlightScanner {
     }
 
     const linkCanonicoRota = (dataIdaEfetiva && destinoParaLink)
-      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
-         || gerarLinkGoogleFlights(rota.codigo_origem, rota.codigo_destino || destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
+      ? (gerarLinkGoogleFlightsCheapest(origemParaLink, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
+         || gerarLinkGoogleFlights(origemParaLink, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
       : oferta.link;
 
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
@@ -370,7 +453,9 @@ export class FlightScanner {
       detalhes_voo: `${oferta.duracaoHoras.toFixed(1)}h | ${oferta.detalhes}`,
       dica_stopover: oferta.dicaStopover,
       link_google_flights: linkCanonicoRota || oferta.link,
-      destino_real: `${destinoInfoRota.cidade}, ${destinoInfoRota.pais} (${destinoInfoRota.iata})`,
+      destino_real: destinoVencedorNome
+        ? `${destinoVencedorNome} (${destinoVencedorIata})`
+        : `${destinoInfoRota.cidade}, ${destinoInfoRota.pais} (${destinoInfoRota.iata})`,
       clima_destino_resumo: clima.ok ? clima.resumo : null,
       clima_temp_media: clima.ok ? clima.tempMedia : null,
       melhor_opcao_flexivel: melhorOpcaoFlexivel,
@@ -382,7 +467,8 @@ export class FlightScanner {
       melhor_opcao_direta_rapida: oferta.melhorOpcaoDiretaOuRapida || null,
       calendario_precos: calendarioPrecos.length > 0 ? calendarioPrecos : null,
       melhor_data_alternativa: melhorDataAlternativa,
-      price_insights: oferta.priceInsights || null
+      price_insights: oferta.priceInsights || null,
+      ranking_destinos_regionais: rankingDestinosRegionais.length > 0 ? rankingDestinosRegionais : null
     });
 
     // 4b. Análise de Delta e Z-Score da Rota Monitorada (padrão proactive-agent)
@@ -447,7 +533,10 @@ export class FlightScanner {
         topOfertas: oferta.topOfertas || null,
         melhorOpcaoDiretaOuRapida: oferta.melhorOpcaoDiretaOuRapida || null,
         priceInsights: oferta.priceInsights || null,
-        melhorDataAlternativa: melhorDataAlternativa || null
+        melhorDataAlternativa: melhorDataAlternativa || null,
+        rankingDestinosRegionais: rankingDestinosRegionais.length > 0 ? rankingDestinosRegionais : null,
+        destinoVencedorIata: destinoVencedorIata || null,
+        destinoVencedorNome: destinoVencedorNome || null
       });
     }
 
@@ -461,6 +550,10 @@ export class FlightScanner {
       melhorOpcaoFlexivel,
       calendarioPrecos,
       melhorDataAlternativa,
+      rankingDestinosRegionais: rankingDestinosRegionais.length > 0 ? rankingDestinosRegionais : null,
+      destinoVencedorIata: destinoVencedorIata || null,
+      destinoVencedorNome: destinoVencedorNome || null,
+      linkCanonicoRota,
       priceInsights: oferta.priceInsights || null,
       ehBugFare: analiseBug.ehBugFare,
       deltaEstatistico: analiseDelta,

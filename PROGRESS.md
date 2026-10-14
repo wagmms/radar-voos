@@ -1,23 +1,23 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.4.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.5.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Blindagem cambial estrita em Reais (`BRL`) implementada em 100% da cadeia de scraping, requisições HTTP/TLS, parsing de `script.ds:1` e detecção de Bug Fares, com 422/422 testes aprovados (100% de sucesso).
+- **Estado Geral**: 🟢 Motor de Exploração Multi-Hub por Região/Continente implementado com catálogo canônico (`EUR`, `SAM`, `NEB`, `USA`, `CAR`, `SAO`), varredura automatizada dos hubs, ranking de menores tarifas em R$, fallback seguro no Protobuf `tfs`, exibição no Cockpit PWA e alertas no Telegram, com 429/429 testes aprovados (100% de sucesso).
 - **Camadas Entregues & Verificadas**:
-  - `src/domain/rotas.js`: URLs de busca e aba Cheapest (`gerarLinkGoogleFlights`, `gerarLinkGoogleFlightsCheapest` e `gerarTfs`) forçam `curr=BRL&gl=BR&hl=pt-BR` e sincronizam o teto de preço (`maxPrice`) na moeda BRL.
-  - `src/services/providers/scrapling_client.js`: Headers com `Accept-Language: pt-BR,pt;q=0.9`; conversão de tupla `fare` no `script.ds:1` de `USD` para `BRL` via `USD_BRL_RATE` (padrão `5.80`), convertendo `preco`, `priceInsights`, `decodificarPrecoDoTfu` e alimentando `topOfertas` e `melhorOpcaoDiretaOuRapida` já em Reais; fallback HTML com priorização de `R$` e conversão de `US$` com negative lookbehind `(?<!R)\$`.
-  - `src/services/providers/tls_impersonate_client.js`: Injeção de `Accept-Language: pt-BR,pt;q=0.9` na sessão do cliente TLS primp.
-  - `src/domain/bug_fares.js`: Função exportada `extrairPrecoEmBrl(texto, taxaCambio)` com negative lookbehind `(?<!R)\$` para evitar falsos bug fares gerados por confusão cambial de USD com BRL.
-  - **Suíte de Testes**: 422/422 testes aprovados (100% de sucesso no `./validate.sh fast`).
+  - `src/domain/dicionarios.js` & `src/domain/rotas.js`: Catálogo `REGIOES_HUBS_IATA` com múltiplos hubs por continente/região, helpers `ehCodigoRegional` e `expandirDestinoOuOrigemRegional`, catálogo `CODIGOS_IATA_CONHECIDOS`, mapa de nomes `NOMES_CIDADES_IATA`, resolução canônica em `resolverCodigoIata` e guardrail de fallback para o 1º hub físico no Protobuf `gerarTfs`.
+  - `src/services/flight_scanner.js`: Varredura multi-hub com isolamento `try/catch` por aeroporto, controle de rate-limit (apenas data base `offset === 0` por hub), consolidação do `rankingDestinosRegionais` ordenado por menor preço em R$ e eleição do hub vencedor com voo real no `linkCanonicoRota`.
+  - `src/db.js` & `src/server/routes/rotas_routes.js`: Coluna `ranking_destinos_regionais TEXT` persistida no SQLite via migração idempotente `ALTER TABLE` e desserializada com `safeJsonParse` nas rotas Fastify.
+  - `src/public/js/card_rota.js` & `src/services/notifier_telegram.js`: Renderização de destaque do vencedor e mini-ranking (top 3 a 5) com links seguros (`ehUrlSegura`) e blindagem XSS estrita no Cockpit PWA e no Telegram.
+  - **Suíte de Testes**: 429/429 testes aprovados (100% de sucesso no `./validate.sh fast`).
 - **Diretriz Prioritária**: Implementar telemetria em tempo real com Server-Sent Events (SSE) e sparkline SVG de histórico no Cockpit PWA.
-- **Última Tarefa Concluída**: Blindagem cambial estrita em Reais (`BRL`) em URLs, headers TLS, parser `script.ds:1`, HTML fallback e `BugFareHunter`.
+- **Última Tarefa Concluída**: Motor de Exploração Multi-Hub por Região/Continente (Multi-Airport Routing) com ranking de tarifas e guardrail Protobuf.
 
 ---
 
-## 🎯 Próxima Tarefa em Andamento (Turno 4C)
+## 🎯 Próxima Tarefa em Andamento
 - **Arquivo/Módulo Alvo**: `src/public/js/card_rota.js` & `src/server/routes/monitor_routes.js`
 - **Função/Componente/Seletor**: `renderizarSparklineSvg` e rota `/api/stream/telemetria`
 - **Comportamento Esperado / Critério de Aceite**: Desenhar sparkline em SVG puro para o histórico de preços dos últimos 10 checks na rota e transmitir eventos SSE para atualização em tempo real sem reload manual.

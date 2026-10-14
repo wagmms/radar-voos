@@ -130,7 +130,10 @@ class NotifierTelegram {
     melhorOpcaoDiretaOuRapida = null,
     topOfertas = null,
     priceInsights = null,
-    melhorDataAlternativa = null
+    melhorDataAlternativa = null,
+    rankingDestinosRegionais = null,
+    destinoVencedorIata = null,
+    destinoVencedorNome = null
   }) {
     const ehSoIdaAlerta = ehSoIda(dataVolta);
     const escopoModalidade = ehSoIdaAlerta ? 'Apenas Ida' : 'Ida e Volta';
@@ -258,6 +261,24 @@ class NotifierTelegram {
 
         msg += `\n📅 <b>Dia Vizinho Mais Barato (${sinalOffset}d):</b> ${dataIdaAlt}${voltaAltTexto} por <b>R$ ${precoAltStr}</b> (Economia de R$ ${econAltStr} / -${econPct}%)${linkAltHtml}\n`;
       }
+    }
+
+    if (Array.isArray(rankingDestinosRegionais) && rankingDestinosRegionais.length > 0) {
+      const vencedor = rankingDestinosRegionais[0];
+      const nomeVencedor = escapeHtml(vencedor.nomeCidade || vencedor.destinoIata);
+      const iataVencedor = escapeHtml(vencedor.destinoIata);
+      const precoVencedor = typeof vencedor.preco === 'number'
+        ? vencedor.preco.toFixed(2).replace('.', ',')
+        : escapeHtml(vencedor.preco);
+
+      msg += `\n🌍 <b>Melhor destino na região:</b> ${nomeVencedor} (${iataVencedor}) por <b>R$ ${precoVencedor}</b>\n`;
+
+      const topDestinos = rankingDestinosRegionais.slice(0, 5);
+      const linhasRanking = topDestinos.map((d, idx) => {
+        const precoFmt = typeof d.preco === 'number' ? d.preco.toFixed(0) : escapeHtml(d.preco);
+        return `${idx + 1}º ${escapeHtml(d.nomeCidade || d.destinoIata)} (${escapeHtml(d.destinoIata)}): R$ ${precoFmt}`;
+      });
+      msg += `🏆 <b>Ranking Regional:</b>\n  • ${linhasRanking.join('\n  • ')}\n`;
     }
 
     if (dicaStopover && dicaStopover !== '-') {

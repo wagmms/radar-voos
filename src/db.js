@@ -83,6 +83,7 @@ function initSchema(db) {
       calendario_precos TEXT,
       melhor_data_alternativa TEXT,
       price_insights TEXT,
+      ranking_destinos_regionais TEXT,
       ativa INTEGER DEFAULT 1,
       criada_em TEXT DEFAULT (datetime('now', 'localtime'))
     );
@@ -153,6 +154,7 @@ function initSchema(db) {
   try { db.exec('ALTER TABLE rotas ADD COLUMN calendario_precos TEXT;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN melhor_data_alternativa TEXT;'); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN price_insights TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN ranking_destinos_regionais TEXT;'); } catch (_) {}
 
   // Migrações dinâmicas para tabela bug_fares
   try { db.exec('ALTER TABLE bug_fares ADD COLUMN aeroporto_chegada TEXT;'); } catch (_) {}
@@ -405,6 +407,7 @@ export const rotasRepo = {
     const calendarioPrecosStr = serializarJsonSeguro(resultado.calendario_precos ?? resultado.calendarioPrecos, rota.calendario_precos);
     const melhorDataAlternativaStr = serializarJsonSeguro(resultado.melhor_data_alternativa ?? resultado.melhorDataAlternativa, rota.melhor_data_alternativa);
     const priceInsightsStr = serializarJsonSeguro(resultado.price_insights ?? resultado.priceInsights, rota.price_insights);
+    const rankingRegionaisStr = serializarJsonSeguro(resultado.ranking_destinos_regionais ?? resultado.rankingDestinosRegionais, rota.ranking_destinos_regionais);
 
     const stmt = db.prepare(`
       UPDATE rotas SET
@@ -432,6 +435,7 @@ export const rotasRepo = {
         calendario_precos = ?,
         melhor_data_alternativa = ?,
         price_insights = ?,
+        ranking_destinos_regionais = ?,
         ultima_checagem = ?
       WHERE id = ?
     `);
@@ -461,6 +465,7 @@ export const rotasRepo = {
       calendarioPrecosStr ?? null,
       melhorDataAlternativaStr ?? null,
       priceInsightsStr ?? null,
+      rankingRegionaisStr ?? null,
       agora,
       id
     );

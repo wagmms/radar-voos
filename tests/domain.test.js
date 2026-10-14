@@ -13,8 +13,16 @@ import {
   gerarLinkGoogleFlightsCheapest,
   resolverCodigoParaLink,
   encodeVarint,
-  encodeLengthDelimited
+  encodeLengthDelimited,
+  resolverCodigoIata
 } from '../src/domain/rotas.js';
+import {
+  REGIOES_HUBS_IATA,
+  NOMES_CIDADES_IATA,
+  ehCodigoRegional,
+  expandirDestinoOuOrigemRegional,
+  CODIGOS_IATA_CONHECIDOS
+} from '../src/domain/dicionarios.js';
 
 describe('Domínio: Rotas e Resolução Aeronáutica', () => {
   it('deve resolver metrópoles brasileiras e internacionais corretamente', () => {
@@ -27,22 +35,72 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.strictEqual(resolverDestino('Paris'), 'PAR');
   });
 
-  it('deve resolver códigos de regiões e países do Google Flights (KGMID)', () => {
-    assert.strictEqual(resolverDestino('Europa'), '/m/02j9z');
-    assert.strictEqual(resolverDestino('Estados Unidos'), '/m/09c7w0');
-    assert.strictEqual(resolverDestino('Portugal'), '/m/05r4w');
-    assert.strictEqual(resolverDestino('América do Sul'), '/m/06_1');
-    assert.strictEqual(resolverDestino('america do sul'), '/m/06_1');
-    assert.strictEqual(resolverDestino('Ásia'), '/m/02j1x');
-    assert.strictEqual(resolverDestino('asia'), '/m/02j1x');
+  it('deve resolver regiões e continentes para códigos sintéticos multi-hub canônicos', () => {
+    assert.strictEqual(resolverCodigoIata('Europa'), 'EUR');
+    assert.strictEqual(resolverDestino('Europa'), 'EUR');
+    assert.strictEqual(resolverCodigoIata('Estados Unidos'), 'USA');
+    assert.strictEqual(resolverCodigoIata('EUA'), 'USA');
+    assert.strictEqual(resolverCodigoIata('América do Sul'), 'SAM');
+    assert.strictEqual(resolverCodigoIata('america do sul'), 'SAM');
+    assert.strictEqual(resolverCodigoIata('Nordeste'), 'NEB');
+    assert.strictEqual(resolverCodigoIata('Caribe'), 'CAR');
+
+    // Preservação estrita de cidades específicas
+    assert.strictEqual(resolverCodigoIata('Madri'), 'MAD');
+    assert.strictEqual(resolverCodigoIata('Madrid'), 'MAD');
+    assert.strictEqual(resolverCodigoIata('Buenos Aires'), 'BUE');
+    assert.strictEqual(resolverCodigoIata('Recife'), 'REC');
+    assert.strictEqual(resolverCodigoIata('Miami'), 'MIA');
+    assert.strictEqual(resolverCodigoIata('Cancun'), 'CUN');
   });
 
-  it('não deve mais resolver regiões brasileiras agrupadas', () => {
-    assert.strictEqual(resolverDestino('Nordeste'), null);
-    assert.notStrictEqual(resolverDestino('Sul'), 'CWB,POA,FLN');
-    assert.strictEqual(resolverDestino('Sudeste'), null);
-    assert.strictEqual(resolverDestino('Norte'), null);
-    assert.strictEqual(resolverDestino('Centro Oeste'), null);
+  it('deve catalogar e expandir destinos regionais multi-hub corretamente', () => {
+    assert.strictEqual(ehCodigoRegional('EUR'), true);
+    assert.strictEqual(ehCodigoRegional('SAM'), true);
+    assert.strictEqual(ehCodigoRegional('NEB'), true);
+    assert.strictEqual(ehCodigoRegional('USA'), true);
+    assert.strictEqual(ehCodigoRegional('CAR'), true);
+    assert.strictEqual(ehCodigoRegional('SAO'), true);
+    assert.strictEqual(ehCodigoRegional('GRU'), false);
+    assert.strictEqual(ehCodigoRegional('LIS'), false);
+
+    // Expansão de Europa para múltiplos hubs (e não apenas MAD)
+    const hubsEur = expandirDestinoOuOrigemRegional('EUR');
+    assert.deepStrictEqual(hubsEur, ['LIS', 'MAD', 'OPO', 'CDG', 'MXP', 'FCO']);
+
+    // Expansão de América do Sul para múltiplos hubs (e não apenas EZE)
+    const hubsSam = expandirDestinoOuOrigemRegional('SAM');
+    assert.deepStrictEqual(hubsSam, ['SCL', 'EZE', 'AEP', 'LIM', 'MVD', 'BOG']);
+
+    // Expansão a partir do termo em linguagem natural
+    assert.deepStrictEqual(expandirDestinoOuOrigemRegional('Europa'), ['LIS', 'MAD', 'OPO', 'CDG', 'MXP', 'FCO']);
+    assert.deepStrictEqual(expandirDestinoOuOrigemRegional('Nordeste'), ['REC', 'SSA', 'FOR', 'MCZ', 'NAT', 'BPS']);
+    assert.deepStrictEqual(expandirDestinoOuOrigemRegional('Caribe'), ['CUN', 'PUJ', 'CUR', 'SXM']);
+
+    // Códigos IATA conhecidos devem conter códigos sintéticos
+    assert.ok(CODIGOS_IATA_CONHECIDOS.has('EUR') || CODIGOS_IATA_CONHECIDOS.includes('EUR'));
+    assert.ok(CODIGOS_IATA_CONHECIDOS.has('SAM') || CODIGOS_IATA_CONHECIDOS.includes('SAM'));
+    assert.ok(CODIGOS_IATA_CONHECIDOS.has('NEB') || CODIGOS_IATA_CONHECIDOS.includes('NEB'));
+    assert.ok(CODIGOS_IATA_CONHECIDOS.has('USA') || CODIGOS_IATA_CONHECIDOS.includes('USA'));
+    assert.ok(CODIGOS_IATA_CONHECIDOS.has('CAR') || CODIGOS_IATA_CONHECIDOS.includes('CAR'));
+
+    // Nomes amigáveis
+    assert.strictEqual(NOMES_CIDADES_IATA.LIS, 'Lisboa');
+    assert.strictEqual(NOMES_CIDADES_IATA.SCL, 'Santiago');
+    assert.strictEqual(NOMES_CIDADES_IATA.REC, 'Recife');
+  });
+
+  it('gerarTfs: deve fazer fallback defensivo para o 1º hub se receber código regional sintético', () => {
+    // Nunca deve enviar EUR ou SAM direto para o protobuf
+    const tfsEur = gerarTfs({
+      origens: ['GRU'],
+      destinos: ['EUR'],
+      dataIda: '2027-04-10'
+    });
+    assert.ok(typeof tfsEur === 'string' && tfsEur.length > 0);
+    const decoded = Buffer.from(tfsEur, 'base64').toString('utf8');
+    assert.ok(!decoded.includes('EUR'), 'Não pode conter código sintético EUR no protobuf');
+    assert.ok(decoded.includes('LIS'), 'Deve conter LIS (1º hub de EUR) como fallback seguro');
   });
 
   it('deve extrair código IATA embutido entre parênteses e resolver múltiplos aeroportos com espaços', () => {

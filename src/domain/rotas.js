@@ -1,7 +1,10 @@
 import {
   DICIONARIO_CIDADES,
   DICIONARIO_REGIOES,
-  MAPA_AEROPORTOS_SERPAPI
+  MAPA_AEROPORTOS_SERPAPI,
+  MAPA_TERMOS_REGIONAIS,
+  ehCodigoRegional,
+  expandirDestinoOuOrigemRegional
 } from './dicionarios.js';
 
 /**
@@ -18,9 +21,9 @@ export function normalizarTexto(texto) {
 }
 
 /**
- * Resolve nome de cidade ou região para código Metropolitano, IATA ou KGMID
+ * Resolve nome de cidade, país ou região para código IATA ou código regional sintético (EUR, SAM, etc.)
  */
-export function resolverDestino(texto) {
+export function resolverCodigoIata(texto) {
   if (!texto || (typeof texto !== 'string' && typeof texto !== 'number')) return null;
   const strOriginal = String(texto).trim();
   if (!strOriginal) return null;
@@ -31,27 +34,41 @@ export function resolverDestino(texto) {
     return matchIata[1].toUpperCase();
   }
 
-  // 2. Resolução por dicionários canônicos (regiões e metrópoles)
   const limpo = normalizarTexto(strOriginal);
-  if (Object.hasOwn(DICIONARIO_REGIOES, limpo) && typeof DICIONARIO_REGIOES[limpo] === 'string') return DICIONARIO_REGIOES[limpo];
-  if (Object.hasOwn(DICIONARIO_CIDADES, limpo) && typeof DICIONARIO_CIDADES[limpo] === 'string') return DICIONARIO_CIDADES[limpo];
 
-  // 3. Código IATA único de 3 letras
-  if (strOriginal.length === 3 && /^[A-Za-z]{3}$/.test(strOriginal)) {
-    return strOriginal.toUpperCase();
+  // 2. Mapeamento de Regiões Multi-Hub Canônicas (Europa -> EUR, América do Sul -> SAM, etc.)
+  if (Object.hasOwn(MAPA_TERMOS_REGIONAIS, limpo) && typeof MAPA_TERMOS_REGIONAIS[limpo] === 'string') {
+    return MAPA_TERMOS_REGIONAIS[limpo];
   }
 
-  // 4. Múltiplos aeroportos IATA separados por vírgula (com ou sem espaços, ex: "GRU, GIG", "GRU , CGH")
-  if (/^[A-Za-z]{3}(\s*,\s*[A-Za-z]{3})+$/.test(strOriginal)) {
-    return strOriginal.toUpperCase().replace(/\s*,\s*/g, ',');
+  // 3. Resolução por cidades (ex: Madri -> MAD, Buenos Aires -> BUE)
+  if (Object.hasOwn(DICIONARIO_CIDADES, limpo) && typeof DICIONARIO_CIDADES[limpo] === 'string') {
+    return DICIONARIO_CIDADES[limpo];
   }
 
-  // 5. Identificadores KGMID/Freebase (/m/ ou /g/)
+  // 4. Identificadores KGMID/Freebase (/m/ ou /g/)
   if (/^\/[mg]\//i.test(strOriginal)) {
     return strOriginal.toLowerCase();
   }
 
+  // 5. Código IATA único de 3 letras (físico ou regional sintético)
+  if (strOriginal.length === 3 && /^[A-Za-z]{3}$/.test(strOriginal)) {
+    return strOriginal.toUpperCase();
+  }
+
+  // 6. Múltiplos aeroportos IATA separados por vírgula (com ou sem espaços, ex: "GRU, GIG")
+  if (/^[A-Za-z]{3}(\s*,\s*[A-Za-z]{3})+$/.test(strOriginal)) {
+    return strOriginal.toUpperCase().replace(/\s*,\s*/g, ',');
+  }
+
   return null;
+}
+
+/**
+ * Resolve nome de cidade ou região para código Metropolitano, IATA ou KGMID
+ */
+export function resolverDestino(texto) {
+  return resolverCodigoIata(texto);
 }
 
 /**
@@ -325,9 +342,11 @@ export function resolverCodigoParaLink(cod) {
   if (KGMID_PARA_NOME[strLower]) return KGMID_PARA_NOME[strLower];
 
   const limpoLower = normalizarTexto(str);
-  if (limpoLower === 'america do sul' || limpoLower === 'south america') return 'South America';
-  if (limpoLower === 'europa' || limpoLower === 'europe') return 'Europe';
-  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa') return 'United States';
+  if (limpoLower === 'america do sul' || limpoLower === 'south america' || limpoLower === 'sam') return 'South America';
+  if (limpoLower === 'europa' || limpoLower === 'europe' || limpoLower === 'eur') return 'Europe';
+  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa' || limpoLower === 'america do norte') return 'United States';
+  if (limpoLower === 'caribe' || limpoLower === 'car') return 'Caribbean';
+  if (limpoLower === 'nordeste' || limpoLower === 'neb') return 'REC';
   if (limpoLower === 'asia') return 'Asia';
   if (/^\/[mg]\//i.test(str)) return str.replace(/^\/[mg]\//i, '');
 
@@ -507,14 +526,24 @@ export function gerarTfs({
   hideSeparateAndSelfTransfer = null,
   excludeBasicEconomy = null
 } = {}) {
+  const resolverHubFisico = (cod) => {
+    if (!cod) return '';
+    const codTrim = String(cod).trim().toUpperCase();
+    if (ehCodigoRegional(codTrim)) {
+      const hubs = expandirDestinoOuOrigemRegional(codTrim);
+      return hubs.length > 0 ? hubs[0] : codTrim;
+    }
+    return codTrim;
+  };
+
   // Normalização defensiva de origens e destinos (suporta arrays, strings únicas e filtra entradas inválidas)
   const listaOrigens = (Array.isArray(origens) ? origens : (origens ? [origens] : ['SAO']))
-    .map(o => (o !== null && o !== undefined) ? String(o).trim() : '')
+    .map(o => (o !== null && o !== undefined) ? resolverHubFisico(o) : '')
     .filter(Boolean);
   const origensEfetivas = listaOrigens.length > 0 ? listaOrigens : ['SAO'];
 
   const listaDestinos = (Array.isArray(destinos) ? destinos : (destinos ? [destinos] : []))
-    .map(d => (d !== null && d !== undefined) ? String(d).trim() : '')
+    .map(d => (d !== null && d !== undefined) ? resolverHubFisico(d) : '')
     .filter(Boolean);
   const destinosEfetivos = listaDestinos.length > 0 ? listaDestinos : ['SAO'];
 

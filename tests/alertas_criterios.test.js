@@ -412,4 +412,44 @@ describe('Inteligência de Alertas e Critérios Estritos (alertasRepo.deveDispar
       notifierTelegram.enviarMensagem = backupEnviar;
     }
   });
+
+  it('14. enviarAlertaOportunidade: DEVE formatar ranking regional com destaque do vencedor e top destinos', async () => {
+    const { notifierTelegram } = await import('../src/services/notifier_telegram.js');
+    let msgCapturada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (msg) => {
+      msgCapturada = msg;
+      return true;
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 10,
+        origem: 'São Paulo',
+        destinoReal: 'Lisboa (LIS)',
+        dataIda: '2027-05-15',
+        dataVolta: '2027-05-25',
+        preco: 3120,
+        duracaoHoras: 10.0,
+        detalhes: 'Voo direto',
+        link: 'https://flights.google.com/lis',
+        rankingDestinosRegionais: [
+          { destinoIata: 'LIS', nomeCidade: 'Lisboa', preco: 3120 },
+          { destinoIata: 'MAD', nomeCidade: 'Madri', preco: 3390 },
+          { destinoIata: 'MXP', nomeCidade: 'Milão', preco: 3510 }
+        ]
+      });
+
+      assert.ok(msgCapturada.includes('Melhor destino na região:'), 'Deve incluir linha de melhor destino na região');
+      assert.ok(msgCapturada.includes('Lisboa (LIS)'), 'Deve citar o vencedor');
+      assert.ok(msgCapturada.includes('3120,00'), 'Deve exibir preço do vencedor');
+      assert.ok(msgCapturada.includes('Ranking Regional:'), 'Deve incluir título do ranking');
+      assert.ok(msgCapturada.includes('1º Lisboa (LIS): R$ 3120'), 'Deve listar 1º colocado');
+      assert.ok(msgCapturada.includes('2º Madri (MAD): R$ 3390'), 'Deve listar 2º colocado');
+      assert.ok(msgCapturada.includes('3º Milão (MXP): R$ 3510'), 'Deve listar 3º colocado');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
 });
+

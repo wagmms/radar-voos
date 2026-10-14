@@ -312,6 +312,56 @@ export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = nul
 }
 
 /**
+ * Renderiza ranking de destinos investigados quando a rota é regional / continente multi-hub
+ * @param {Array<{ destinoIata: string, nomeCidade: string, preco: number, cia?: string, linkGoogleFlights?: string }>} rankingDestinosRegionais
+ * @returns {string} Fragmento HTML seguro
+ */
+export function renderizarRankingDestinosRegionais(rankingDestinosRegionais) {
+  if (!Array.isArray(rankingDestinosRegionais) || rankingDestinosRegionais.length === 0) {
+    return '';
+  }
+
+  const vencedor = rankingDestinosRegionais[0];
+  const nomeVencedor = escapeHtml(vencedor.nomeCidade || vencedor.destinoIata || 'Destino');
+  const iataVencedor = escapeHtml(vencedor.destinoIata || '');
+  const precoVencedor = formatarPreco(vencedor.preco);
+
+  const topDestinos = rankingDestinosRegionais.slice(0, 5);
+  const itensHtml = topDestinos.map((item, index) => {
+    const posicao = index + 1;
+    const nome = escapeHtml(item.nomeCidade || item.destinoIata || '');
+    const iata = escapeHtml(item.destinoIata || '');
+    const preco = formatarPreco(item.preco);
+    const ehVencedor = index === 0;
+    const temLink = ehUrlSegura(item.linkGoogleFlights);
+    const linkHtml = temLink
+      ? `<a href="${escapeHtml(item.linkGoogleFlights)}" target="_blank" rel="noopener noreferrer" class="link-ranking-item">Ver ➔</a>`
+      : '';
+
+    return `
+      <li class="ranking-regional-item ${ehVencedor ? 'ranking-vencedor' : ''}">
+        <span class="ranking-pos">${posicao}º</span>
+        <span class="ranking-nome">${nome} (${iata})</span>
+        <span class="ranking-preco">R$ ${preco}</span>
+        ${linkHtml}
+      </li>
+    `.trim();
+  }).join('');
+
+  return `
+    <div class="card-ranking-regional" data-testid="ranking-destinos-regionais">
+      <div class="ranking-regional-destaque">
+        <span class="ranking-icone">🌍</span>
+        <span class="ranking-texto"><strong>Melhor destino na região:</strong> ${nomeVencedor} (${iataVencedor}) por <strong>R$ ${precoVencedor}</strong></span>
+      </div>
+      <ul class="ranking-regional-lista">
+        ${itensHtml}
+      </ul>
+    </div>
+  `.trim();
+}
+
+/**
  * Renderiza o card completo da rota
  */
 export function renderizarCardRota(rota) {
@@ -330,6 +380,7 @@ export function renderizarCardRota(rota) {
   const melhorDataAlt = rota.melhor_data_alternativa || rota.melhorDataAlternativa;
   const calendario = rota.calendario_precos || rota.calendarioPrecos;
   const diasFlex = rota.dias_flexiveis ?? rota.diasFlexiveis ?? 0;
+  const rankingRegionais = rota.ranking_destinos_regionais || rota.rankingDestinosRegionais;
 
   const badgeMeta = renderizarBadgeMeta(rota);
   const badgeTermometro = renderizarBadgeTermometro(priceInsights);
@@ -338,6 +389,7 @@ export function renderizarCardRota(rota) {
   const linhaHorarios = renderizarLinhaHorarios(rota);
   const blocoTradeOff = renderizarTradeOff(rota);
   const calloutDataAlt = renderizarCalloutDataAlternativa(melhorDataAlt);
+  const blocoRankingRegional = renderizarRankingDestinosRegionais(rankingRegionais);
   const graficoCalendario = renderizarGraficoCalendarioSvg(calendario, precoAtual);
 
   const periodoTexto = rota.sem_data
@@ -374,6 +426,7 @@ export function renderizarCardRota(rota) {
       ${linhaHorarios}
       ${blocoTradeOff}
       ${calloutDataAlt}
+      ${blocoRankingRegional}
       ${graficoCalendario}
 
       ${rota.custo_destino_texto && rota.custo_destino_texto !== '-' ? `

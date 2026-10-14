@@ -4,6 +4,34 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.5.0] - 2026-10-14 — Motor de Exploração Multi-Hub por Região/Continente (Multi-Airport Routing)
+
+### 🌍 Novas Funcionalidades de Exploração & Domínio Multi-Hub:
+- **`src/domain/dicionarios.js` & `src/domain/rotas.js`**:
+  - Eliminação do mapeamento estático que reduzia regiões a um único destino (`europa` ➔ `MAD`, `america do sul` ➔ `EZE`).
+  - Criação do catálogo canônico `REGIOES_HUBS_IATA` com códigos sintéticos expansíveis:
+    - `EUR`: `['LIS', 'MAD', 'OPO', 'CDG', 'MXP', 'FCO']`
+    - `SAM`: `['SCL', 'EZE', 'AEP', 'LIM', 'MVD', 'BOG']`
+    - `NEB`: `['REC', 'SSA', 'FOR', 'MCZ', 'NAT', 'BPS']`
+    - `USA`: `['MIA', 'MCO', 'FLL', 'JFK']`
+    - `CAR`: `['CUN', 'PUJ', 'CUR', 'SXM']`
+    - `SAO`: `['GRU', 'CGH', 'VCP']`
+  - Helpers exportados `ehCodigoRegional(codigo)` e `expandirDestinoOuOrigemRegional(termoOuCodigo)`.
+  - Catálogo `CODIGOS_IATA_CONHECIDOS` contendo códigos físicos e sintéticos para validações defensivas.
+  - Mapeamento de nomes canônicos `NOMES_CIDADES_IATA` garantindo rótulos amigáveis para todos os hubs.
+  - Funções `resolverCodigoIata` e `resolverDestino`: resolvem termos regionais (`"Europa"`, `"América do Sul"`, etc.) para códigos sintéticos (`EUR`, `SAM`, etc.) preservando nomes de cidades específicas (`"Madri"` ➔ `MAD`, `"Buenos Aires"` ➔ `BUE`).
+  - **Guardrail Protobuf `tfs` (`gerarTfs`)**: Fallback automático e seguro para o 1º hub da região caso receba um código regional direto, impedindo que o Google Flights receba códigos sintéticos inválidos.
+- **`src/services/flight_scanner.js` & `src/db.js`**:
+  - Varredura multi-hub em `FlightScanner.escanearRota` quando a rota for regional, com isolamento `try/catch` individual por hub e controle de rate-limit (apenas data base `offset === 0` para cada hub).
+  - Suporte simétrico para origens regionais (`SAO` fixa `GRU` para rotas internacionais).
+  - Consolidação do `rankingDestinosRegionais` ordenado pelo menor preço em R$, elegendo o hub vencedor como oferta principal da rota com `destinoVencedorIata`, `destinoVencedorNome` e `linkCanonicoRota` apontando para o voo vencedor real.
+  - Persistência no SQLite da coluna `ranking_destinos_regionais TEXT` via migração idempotente `ALTER TABLE` e `safeJsonParse` nas rotas da API Fastify (`GET /api/rotas` e `GET /api/rotas/:id`).
+- **Cockpit PWA & Notificações Telegram**:
+  - `src/public/js/card_rota.js`: Nova função `renderizarRankingDestinosRegionais` exibindo destaque do destino vencedor e mini-ranking (top 3 a 5 destinos com preço em R$ e links seguros `ehUrlSegura`), com blindagem XSS estrita.
+  - `src/services/notifier_telegram.js`: Formatação no alerta de oportunidade destacando a cidade vencedora da região e o mini-ranking.
+- **Suíte de Testes Automatizados**:
+  - 429/429 testes aprovados (100% de sucesso no `./validate.sh fast`).
+
 ## [v3.4.1] - 2026-10-14 — Blindagem Cambial Estrita (100% BRL): URLs, Headers, Parser script.ds:1 e Proteção contra Dupla Conversão
 
 ### 🛡️ Correções Cirúrgicas & Blindagem Cambial:

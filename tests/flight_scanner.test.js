@@ -430,5 +430,94 @@ describe('FlightScanner — Janela de Datas Flexíveis & Termômetro priceInsigh
     // Limpeza
     rotasRepo.excluir(rotaCriada.id);
   });
+
+  it('11. escanearRota: deve realizar varredura multi-hub para rota regional (GRU ➔ EUR), consolidar ranking e eleger o destino mais barato em R$', async () => {
+    const precosHubs = {
+      LIS: 3120,
+      MAD: 3390,
+      OPO: 3650,
+      CDG: 3800,
+      MXP: 3510,
+      FCO: 3900
+    };
+
+    const hubsConsultados = [];
+
+    FlightScanner.buscarOfertas = async (...args) => {
+      const dest = typeof args[0] === 'object' ? args[0].destinoCod : args[1];
+      hubsConsultados.push(dest);
+      const preco = precosHubs[dest] || 4500;
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco,
+          nivelPreco: 'NORMAL',
+          duracaoHoras: 10.5,
+          duracaoMinutos: 630,
+          detalhes: `Voo para ${dest}`,
+          cia: dest === 'LIS' ? 'TAP Air Portugal' : 'Iberia',
+          dicaStopover: '-',
+          termometro: '🟢 Preço Bom',
+          origemReal: 'GRU',
+          destinoReal: dest,
+          codigoDestinoReal: dest,
+          link: `https://www.google.com/travel/flights?q=Flights%20to%20${dest}`
+        }
+      };
+    };
+
+    const rotaRegional = rotasRepo.criar({
+      origem: 'São Paulo',
+      codigo_origem: 'GRU',
+      destino: 'Europa',
+      codigo_destino: 'EUR',
+      data_ida: '2027-05-15',
+      data_volta: '2027-05-25',
+      sem_data: 0
+    });
+
+    const res = await FlightScanner.escanearRota(rotaRegional);
+
+    assert.strictEqual(res.sucesso, true);
+    assert.ok(Array.isArray(res.rankingDestinosRegionais), 'Deve retornar rankingDestinosRegionais');
+    assert.strictEqual(res.rankingDestinosRegionais.length, 6, 'Deve varrer os 6 hubs da Europa');
+
+    // 1º colocado: Lisboa (LIS) por R$ 3120
+    assert.strictEqual(res.rankingDestinosRegionais[0].destinoIata, 'LIS');
+    assert.strictEqual(res.rankingDestinosRegionais[0].preco, 3120);
+    assert.strictEqual(res.rankingDestinosRegionais[0].nomeCidade, 'Lisboa');
+
+    // 2º colocado: Madri (MAD) por R$ 3390
+    assert.strictEqual(res.rankingDestinosRegionais[1].destinoIata, 'MAD');
+    assert.strictEqual(res.rankingDestinosRegionais[1].preco, 3390);
+
+    // Oferta principal eleita deve ser a de menor preço (LIS)
+    assert.strictEqual(res.oferta.preco, 3120);
+    assert.strictEqual(res.destinoVencedorIata, 'LIS');
+    assert.strictEqual(res.destinoVencedorNome, 'Lisboa');
+    assert.ok(!res.linkCanonicoRota.includes('EUR'), 'Link canônico não deve conter EUR sintético');
+    assert.ok(res.linkCanonicoRota.startsWith('https://www.google.com/travel/flights'));
+
+    const tfsParam = new URL(res.linkCanonicoRota).searchParams.get('tfs');
+    if (tfsParam) {
+      const decodedTfs = Buffer.from(tfsParam, 'base64').toString('utf8');
+      assert.ok(decodedTfs.includes('LIS'), 'Payload tfs deve apontar para o aeroporto vencedor LIS');
+      assert.ok(!decodedTfs.includes('EUR'), 'Payload tfs não deve conter código sintético EUR');
+    } else {
+      assert.ok(res.linkCanonicoRota.includes('LIS'), 'Link deve apontar para LIS');
+    }
+
+    // Persistência no SQLite
+    const rotaSalva = rotasRepo.buscarPorId(rotaRegional.id);
+    assert.ok(rotaSalva.ranking_destinos_regionais, 'ranking_destinos_regionais deve ser persistido no SQLite');
+    const rankingSalvo = JSON.parse(rotaSalva.ranking_destinos_regionais);
+    assert.strictEqual(rankingSalvo[0].destinoIata, 'LIS');
+    assert.strictEqual(rankingSalvo[0].preco, 3120);
+
+    // Limpeza
+    rotasRepo.excluir(rotaRegional.id);
+  });
 });
+
 

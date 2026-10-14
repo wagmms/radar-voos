@@ -38,6 +38,7 @@ export async function rotasRoutes(fastify) {
         calendario_precos: safeJsonParse(r.calendario_precos, null),
         melhor_data_alternativa: safeJsonParse(r.melhor_data_alternativa, null),
         price_insights: safeJsonParse(r.price_insights, null),
+        ranking_destinos_regionais: safeJsonParse(r.ranking_destinos_regionais, null),
         paridade_milhas: paridadeMilhas,
         programa_milhas: programaMilhas,
         milhas_estimadas: null,
@@ -70,6 +71,7 @@ export async function rotasRoutes(fastify) {
         calendario_precos: safeJsonParse(rota.calendario_precos, null),
         melhor_data_alternativa: safeJsonParse(rota.melhor_data_alternativa, null),
         price_insights: safeJsonParse(rota.price_insights, null),
+        ranking_destinos_regionais: safeJsonParse(rota.ranking_destinos_regionais, null),
         esta_silenciada: rotasRepo.estaSilenciada(rota)
       },
       historico

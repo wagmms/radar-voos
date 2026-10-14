@@ -13,6 +13,7 @@ import {
   renderizarTradeOff,
   renderizarCalloutDataAlternativa,
   renderizarGraficoCalendarioSvg,
+  renderizarRankingDestinosRegionais,
   renderizarCardRota
 } from '../src/public/js/card_rota.js';
 
@@ -420,4 +421,92 @@ describe('Cockpit PWA: Módulo Card de Rota (card_rota.js)', () => {
       ]), '');
     });
   });
+
+  describe('Ranking de Destinos Regionais Multi-Hub (renderizarRankingDestinosRegionais)', () => {
+    it('deve renderizar destaque do vencedor e mini-ranking ordenado com links seguros', () => {
+      const ranking = [
+        {
+          destinoIata: 'LIS',
+          nomeCidade: 'Lisboa',
+          preco: 3120,
+          cia: 'TAP Air Portugal',
+          escalas: 0,
+          duracaoTexto: '10.0h',
+          linkGoogleFlights: 'https://flights.google.com/lis'
+        },
+        {
+          destinoIata: 'MAD',
+          nomeCidade: 'Madri',
+          preco: 3390,
+          cia: 'Iberia',
+          escalas: 0,
+          duracaoTexto: '11.0h',
+          linkGoogleFlights: 'https://flights.google.com/mad'
+        },
+        {
+          destinoIata: 'MXP',
+          nomeCidade: 'Milão',
+          preco: 3510,
+          cia: 'LATAM',
+          escalas: 1,
+          duracaoTexto: '13.5h',
+          linkGoogleFlights: 'https://flights.google.com/mxp'
+        }
+      ];
+
+      const html = renderizarRankingDestinosRegionais(ranking);
+      assert.ok(html.includes('data-testid="ranking-destinos-regionais"'), 'Deve conter o container de ranking');
+      assert.ok(html.includes('Melhor destino na região:'), 'Deve destacar texto de melhor destino');
+      assert.ok(html.includes('Lisboa (LIS)'), 'Deve conter nome e IATA do vencedor');
+      assert.ok(html.includes('R$ 3.120'), 'Deve exibir preço do vencedor formatado em R$');
+      assert.ok(html.includes('Madri (MAD)'), 'Deve listar 2º colocado');
+      assert.ok(html.includes('R$ 3.390'), 'Deve exibir preço do 2º colocado');
+      assert.ok(html.includes('href="https://flights.google.com/lis"'), 'Deve incluir link seguro do Google Flights');
+      assert.ok(html.includes('href="https://flights.google.com/mad"'), 'Deve incluir link seguro do 2º colocado');
+    });
+
+    it('blindagem XSS: deve escapar caracteres perigosos no nome da cidade e IATA', () => {
+      const rankingXss = [
+        {
+          destinoIata: '<script>',
+          nomeCidade: '<b>Hacked</b>',
+          preco: 2500,
+          linkGoogleFlights: 'javascript:alert(1)'
+        }
+      ];
+
+      const html = renderizarRankingDestinosRegionais(rankingXss);
+      assert.ok(!html.includes('<script>'), 'Não deve conter tags script');
+      assert.ok(html.includes('&lt;b&gt;Hacked&lt;/b&gt;'), 'Deve escapar tags HTML do nome da cidade');
+      assert.ok(html.includes('&lt;script&gt;'), 'Deve escapar tags do IATA');
+      assert.ok(!html.includes('href="javascript:'), 'Não deve permitir protocolo javascript:');
+    });
+
+    it('deve retornar string vazia para entradas nulas, indefinidas ou arrays vazios', () => {
+      assert.strictEqual(renderizarRankingDestinosRegionais(null), '');
+      assert.strictEqual(renderizarRankingDestinosRegionais(undefined), '');
+      assert.strictEqual(renderizarRankingDestinosRegionais([]), '');
+      assert.strictEqual(renderizarRankingDestinosRegionais('invalido'), '');
+    });
+
+    it('renderizarCardRota: deve incluir a seção de ranking regional quando a rota contiver ranking_destinos_regionais', () => {
+      const rotaComRanking = {
+        id: 42,
+        origem: 'São Paulo',
+        destino: 'Europa',
+        codigo_origem: 'GRU',
+        codigo_destino: 'EUR',
+        preco_atual: 3120,
+        ranking_destinos_regionais: [
+          { destinoIata: 'LIS', nomeCidade: 'Lisboa', preco: 3120, linkGoogleFlights: 'https://flights.google.com/lis' },
+          { destinoIata: 'MAD', nomeCidade: 'Madri', preco: 3390, linkGoogleFlights: 'https://flights.google.com/mad' }
+        ]
+      };
+
+      const cardHtml = renderizarCardRota(rotaComRanking);
+      assert.ok(cardHtml.includes('data-testid="ranking-destinos-regionais"'), 'Card deve renderizar ranking de destinos');
+      assert.ok(cardHtml.includes('Lisboa (LIS)'));
+    });
+  });
 });
+
