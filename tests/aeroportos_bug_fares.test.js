@@ -229,6 +229,9 @@ describe('Domínio: Resolução de Aeroportos, Cidades e Links Canônicos de Bug
       motivo: 'Abaixo do piso estrutural'
     });
 
+    const db = getDb();
+    db.prepare('DELETE FROM bug_fares WHERE link = ?').run(card.link);
+
     const res = bugFaresRepo.inserir(card);
     assert.ok(res);
 

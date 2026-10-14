@@ -10,7 +10,8 @@ import {
   gerarDataPadraoInicial,
   extrairDiasEstadia,
   ehSoIda,
-  rotaEhSoIda
+  rotaEhSoIda,
+  obterDatasEfetivasRota
 } from './domain/rotas.js';
 
 let dbInstance = null;
@@ -34,6 +35,7 @@ export function getDb(customPath = null) {
 
   initSchema(dbInstance);
   popularDadosIniciaisSeVazio(dbInstance);
+  rotasRepo.sanitizarRotasIdaEVolta(dbInstance);
   return dbInstance;
 }
 
@@ -195,27 +197,17 @@ export const rotasRepo = {
       throw new Error(`Destino não reconhecido: '${dados.destino}'. Informe a cidade, região ou código IATA.`);
     }
 
-    const semData = dados.sem_data ? 1 : 0;
-    const diasEstadia = extrairDiasEstadia(dados.dias_estadia || dados.data_volta, 10);
-    const soIda = rotaEhSoIda({
-      ...dados,
-      sem_data: semData,
-      dias_estadia: diasEstadia
-    });
-    let dataIda = dados.data_ida;
-    if (semData && !dataIda) {
-      dataIda = gerarDataPadraoInicial(25);
+    const { dataIda, dataVolta, soIda, diasEstadia, semData } = obterDatasEfetivasRota(dados);
+    const moeda = (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
+
+    // Se a rota for Ida e Volta e o link contiver one-way (ou for nulo), regera link round-trip
+    let link = dados.link_google_flights;
+    if (!link || (!soIda && link.includes('one-way'))) {
+      link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
     }
-
-    const dataVolta = semData
-      ? (soIda ? null : somarDiasData(dataIda, diasEstadia))
-      : (soIda ? null : calcularDataVolta(dataIda, dados.data_volta));
-
-    const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
     const flexibilidadeDias = parseInt(dados.flexibilidade_dias, 10) || 0;
     const diasFlexiveis = Math.min(3, Math.max(0, parseInt(dados.dias_flexiveis !== undefined ? dados.dias_flexiveis : flexibilidadeDias, 10) || 0));
-    const moeda = (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
 
     const parseNumOpt = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null);
     const maxStops = parseNumOpt(dados.max_stops !== undefined ? dados.max_stops : dados.maxStops);
@@ -245,7 +237,7 @@ export const rotasRepo = {
       dados.cabine || 'economy',
       flexibilidadeDias,
       diasFlexiveis,
-      semData,
+      semData ? 1 : 0,
       soIda ? null : diasEstadia,
       moeda,
       maxStops,
@@ -265,37 +257,17 @@ export const rotasRepo = {
     const destino = dados.destino || rota.destino;
     const codigoOrigem = resolverDestino(origem) || rota.codigo_origem;
     const codigoDestino = resolverDestino(destino) || rota.codigo_destino;
-    const semData = dados.sem_data !== undefined ? (dados.sem_data ? 1 : 0) : (rota.sem_data || 0);
-    const diasEstadia = dados.dias_estadia !== undefined
-      ? extrairDiasEstadia(dados.dias_estadia, rota.dias_estadia || 10)
-      : (dados.data_volta !== undefined && semData ? extrairDiasEstadia(dados.data_volta, rota.dias_estadia || 10) : (rota.dias_estadia || 10));
-    const dataIda = dados.data_ida || rota.data_ida;
 
-    let dataVolta;
-    let diasEstadiaFinal = diasEstadia;
-    if (dados.data_volta !== undefined) {
-      const soIda = rotaEhSoIda({
-        ...rota,
-        ...dados,
-        sem_data: semData,
-        dias_estadia: dados.dias_estadia !== undefined ? dados.dias_estadia : (dados.tipo === 'one_way' || ehSoIda(dados.data_volta) ? null : diasEstadia)
-      });
-      if (semData) {
-        dataVolta = soIda ? null : somarDiasData(dataIda, diasEstadia);
-        if (soIda) diasEstadiaFinal = null;
-      } else {
-        dataVolta = soIda ? null : calcularDataVolta(dataIda, dados.data_volta);
-        if (soIda) diasEstadiaFinal = null;
-      }
-    } else if (dados.tipo === 'one_way' || dados.tipo_viagem === 'one_way') {
-      dataVolta = null;
-      diasEstadiaFinal = null;
-    } else if (dados.dias_estadia !== undefined && semData && rota.data_volta) {
-      dataVolta = somarDiasData(dataIda, diasEstadia);
-    } else {
-      dataVolta = rota.data_volta;
-      if (rotaEhSoIda(rota)) diasEstadiaFinal = null;
+    const dadosMesclados = {
+      ...rota,
+      ...dados
+    };
+    if (dados.tipo === 'one_way' || dados.tipo_viagem === 'one_way') {
+      dadosMesclados.tipo_viagem = 'one_way';
+      dadosMesclados.data_volta = null;
     }
+
+    const { dataIda, dataVolta, soIda, diasEstadia, semData } = obterDatasEfetivasRota(dadosMesclados);
 
     const precoAlvo = dados.preco_alvo !== undefined ? (parseFloat(dados.preco_alvo) || null) : rota.preco_alvo;
     const duracaoMaxHoras = dados.duracao_max_horas !== undefined ? (parseFloat(dados.duracao_max_horas) || 999) : rota.duracao_max_horas;
@@ -308,7 +280,11 @@ export const rotasRepo = {
           : (rota.dias_flexiveis !== undefined && rota.dias_flexiveis !== null ? rota.dias_flexiveis : Math.min(3, Math.max(0, flexibilidadeDias))));
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
     const moeda = dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL'));
-    const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
+    
+    let link = dados.link_google_flights;
+    if (!link || (!soIda && link.includes('one-way'))) {
+      link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
+    }
 
     // Paridade de milhas: valor numérico positivo ou null; programa: string normalizada ou fallback
     const paridadeMilhas = dados.paridade_milhas !== undefined
@@ -359,7 +335,7 @@ export const rotasRepo = {
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, diasFlexiveis, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, maxStops, carryOnBags, checkedBags, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, diasFlexiveis, semData ? 1 : 0, soIda ? null : diasEstadia, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, maxStops, carryOnBags, checkedBags, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -584,6 +560,67 @@ export const rotasRepo = {
     }
 
     return { total, media, desvioPadrao, menor, maior };
+  },
+
+  sanitizarRotasIdaEVolta: (dbParam = null) => {
+    const db = dbParam || getDb();
+    const rotas = db.prepare('SELECT * FROM rotas').all();
+    let totalSanitizadas = 0;
+
+    for (const r of rotas) {
+      const soIda = rotaEhSoIda(r);
+      if (soIda) continue;
+
+      let precisaAtualizar = false;
+      let novaDataVolta = r.data_volta;
+      let novoPrecoAtual = r.preco_atual;
+      let novoMenorHistorico = r.menor_preco_historico;
+      let novoLink = r.link_google_flights;
+      let novoTermometro = r.termometro;
+
+      // 1. Se rota de Ida e Volta não tem data_volta válida ISO (YYYY-MM-DD)
+      if (!novaDataVolta || !/^\d{4}-\d{2}-\d{2}$/.test(String(novaDataVolta).trim())) {
+        const dias = extrairDiasEstadia(r.dias_estadia, 10);
+        novaDataVolta = somarDiasData(r.data_ida || gerarDataPadraoInicial(25), dias);
+        precisaAtualizar = true;
+      }
+
+      // 2. Se o link do Google Flights contiver 'one-way' ou não tiver retorno
+      const linkEhOneWay = novoLink && novoLink.includes('one-way');
+      if (!novoLink || linkEhOneWay || (!novoLink.includes('returning') && !novoLink.includes('tfs='))) {
+        const codOrigem = r.codigo_origem || resolverDestino(r.origem);
+        const codDestino = r.codigo_destino || resolverDestino(r.destino);
+        if (codOrigem && codDestino) {
+          novoLink = gerarLinkGoogleFlights(codOrigem, codDestino, r.data_ida, novaDataVolta, r.moeda || 'BRL');
+          precisaAtualizar = true;
+        }
+      }
+
+      // 3. Se a rota estava cravada em cotação espúria (link era one-way, ou preco_atual === preco_alvo no teto)
+      const eraNoTetoEspurio = r.preco_alvo && r.preco_atual === r.preco_alvo &&
+        (String(r.termometro || '').includes('No teto') || String(r.termometro || '').includes('Meta Batida'));
+      if (linkEhOneWay || eraNoTetoEspurio) {
+        novoPrecoAtual = null;
+        novoMenorHistorico = null;
+        novoTermometro = '⚪ Aguardando checagem (Ida e Volta)';
+        precisaAtualizar = true;
+      }
+
+      if (precisaAtualizar) {
+        db.prepare(`
+          UPDATE rotas SET
+            data_volta = ?,
+            preco_atual = ?,
+            menor_preco_historico = ?,
+            link_google_flights = ?,
+            termometro = ?
+          WHERE id = ?
+        `).run(novaDataVolta, novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, r.id);
+        totalSanitizadas++;
+      }
+    }
+
+    return totalSanitizadas;
   }
 };
 

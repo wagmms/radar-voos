@@ -4,6 +4,25 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.5.1] - 2026-10-14 — Bugfix & Auditoria de Resiliência: Round-Trip Obrigatório, Eliminação de Cotações Espúrias no Teto e Correção de Subtítulos no Cockpit PWA
+
+### 🐛 Correções Críticas dos 4 Bugs de Produção:
+- **Bug 1 — Garantia de Ida e Volta Real no Scanner e nos Links do Google Flights**:
+  - `src/domain/rotas.js` (`rotaEhSoIda` e `obterDatasEfetivasRota`): rotas de aviação comercial sem marcação explícita de só-ida (`one_way` ou `'Só Ida'`) agora calculam obrigatoriamente a `data_volta` com base nos `dias_estadia` (padrão 10 a 14 dias), impedindo que rotas flexíveis (`sem_data: 1`) ou sem volta cadastrada sejam rebaixadas para Só Ida.
+  - `src/services/flight_scanner.js`: varreduras em janelas flexíveis e varreduras multi-hub regionais (`GRU ➔ EUR`, etc.) agora transmitem as pernas de volta reais para o provedor, gerando links `linkHub` e `linkCanonicoRota` com trecho de retorno (`round-trip`) no Google Flights.
+  - `src/db.js` (`rotasRepo.criar` e `rotasRepo.atualizar`): salva sempre `data_volta` calculada para rotas de Ida e Volta e regenera URLs do Google Flights com trecho de volta.
+- **Bug 2 — Eliminação de Falsos Alarmes e Cotações Espúrias no Teto da Meta (`R$ 2.000` / `R$ 1.000`)**:
+  - `src/services/flight_scanner.js`: remoção da injeção de `maxPrice: rota.preco_alvo` no filtro Protobuf `tfs` do Google Flights. O scanner agora pesquisa as tarifas reais de mercado sem ocultar os voos e sem forçar o seletor a ler nós do slider de preço.
+  - `src/domain/dicionarios.js`: inclusão de filtros de preço e rótulos de sliders em `PADROES_IGNORAR_RODAPE`.
+  - `src/db.js` (`rotasRepo.sanitizarRotasIdaEVolta`): rotina de inicialização automática que detecta e expurga cotações antigas de Ida e Volta salvas com link one-way ou cravadas no teto (`preco_atual === preco_alvo`), resetando `preco_atual = null`, `menor_preco_historico = null` e `termometro = '⚪ Aguardando checagem (Ida e Volta)'`.
+- **Bug 3 — Eliminação de `🔥 Menor Preço Flexível ()` com Parênteses Vazios**:
+  - `src/services/flight_scanner.js`: termômetro flexível agora formata rótulos limpos (`melhorOpcaoFlexivel.label ? ' (${melhorOpcaoFlexivel.label})' : ''`).
+  - `src/public/js/card_rota.js` (`renderizarCardRota`): regex de sanitização global `replace(/\s*\(\s*\)/g, '').trim()` protegendo o card visual contra qualquer renderização de parênteses vazios.
+- **Bug 4 — Subtítulo Preciso de Ida e Volta e Rodapé Sanitizado no Cockpit PWA**:
+  - `src/public/js/card_rota.js`: novas funções defensivas `ehRotaSoIdaVisual` e `calcularDataVoltaSegura`. O subtítulo `periodoTexto` exibe o período completo de Ida e Volta (`data_ida ➔ data_volta (${dias}d)` ou `data_ida até data_volta (${dias}d)`) para rotas de Ida e Volta (tanto fixas quanto flexíveis), reservando `(Só Ida)` estritamente para rotas com `tipo_viagem === 'one_way'` ou volta explícita de só-ida.
+- **Suíte de Testes Automatizados**:
+  - 438/438 testes aprovados (100% de sucesso no `./validate.sh fast`).
+
 ## [v3.5.0] - 2026-10-14 — Motor de Exploração Multi-Hub por Região/Continente (Multi-Airport Routing)
 
 ### 🌍 Novas Funcionalidades de Exploração & Domínio Multi-Hub:

@@ -178,6 +178,19 @@ export function formatarDataParaBusca(valor) {
 }
 
 /**
+ * Formata data ISO ("YYYY-MM-DD") para "DD/MM" sem desvio de timezone UTC-3
+ */
+export function formatarDiaMes(dataIso) {
+  if (!dataIso || typeof dataIso !== 'string') return '';
+  const partes = dataIso.split('-');
+  if (partes.length === 3) {
+    const [, mes, dia] = partes;
+    return `${dia.slice(0, 2)}/${mes}`;
+  }
+  return dataIso;
+}
+
+/**
  * Extrai o número de dias de estadia de campos de texto ou números (ex: "10 dias", "10", "14d")
  */
 export function extrairDiasEstadia(valor, padrao = 10) {
@@ -359,7 +372,11 @@ export function resolverCodigoParaLink(cod) {
 }
 
 /**
- * Determina se uma rota ou dados de rota configuram um voo de Só Ida
+ * Determina se uma rota ou dados de rota configuram um voo de Só Ida.
+ * Regra canônica: por padrão na aviação comercial, viagens são Ida e Volta (round-trip),
+ * a menos que explicitamente marcadas pelo usuário como só-ida (tipo one_way ou texto 'Só Ida').
+ * Se a rota possuir duração de estadia (ex: 7, 10, 14 dias) ou data_volta nula sem marcação de só-ida,
+ * ela é estritamente de Ida e Volta.
  */
 export function rotaEhSoIda(rotaOuDados) {
   if (!rotaOuDados) return false;
@@ -374,22 +391,78 @@ export function rotaEhSoIda(rotaOuDados) {
   if (tipo === 'round_trip' || tipo === 'ida_e_volta' || tipoViagem === 'round_trip' || tipoViagem === 'ida_e_volta') return false;
 
   const campoVolta = rotaOuDados.data_volta !== undefined ? rotaOuDados.data_volta : rotaOuDados.dataVolta;
-  const semData = rotaOuDados.sem_data === 1 || Boolean(rotaOuDados.sem_data);
-  const diasEstadia = rotaOuDados.dias_estadia || rotaOuDados.diasEstadia;
+  const diasEstadia = rotaOuDados.dias_estadia !== undefined ? rotaOuDados.dias_estadia : rotaOuDados.diasEstadia;
+  const semData = rotaOuDados.sem_data || rotaOuDados.semData;
 
-  if (semData) {
-    if (typeof campoVolta === 'string') {
-      if (ehSoIda(campoVolta)) return true;
-      if (/\d/.test(campoVolta)) return false;
-    }
-    // Se tiver dias de estadia configurados (> 0), é Ida e Volta!
-    if (diasEstadia && Number(diasEstadia) > 0) return false;
+  // Se o campo volta for string com texto explícito de só-ida
+  if (typeof campoVolta === 'string' && campoVolta.trim() !== '') {
+    if (ehSoIda(campoVolta)) return true;
+    if (/\d/.test(campoVolta)) return false;
+  }
 
-    // Se campoVolta for nulo/indefinido e não tem dias de estadia
+  // Se explicitamente definiu dias_estadia como 0 ou null com volta nula em sem_data ou rota, é só ida
+  if ((diasEstadia === null || Number(diasEstadia) === 0) && (campoVolta === null || campoVolta === undefined || ehSoIda(campoVolta))) {
     return true;
   }
 
-  return ehSoIda(campoVolta);
+  // Se tiver dias de estadia configurados (> 0), é obrigatoriamente Ida e Volta
+  if (diasEstadia !== undefined && diasEstadia !== null && Number(diasEstadia) > 0) {
+    return false;
+  }
+
+  // Se campoVolta contiver uma data ou número de dias válido, é Ida e Volta
+  if (typeof campoVolta === 'number' && Number.isFinite(campoVolta) && campoVolta > 0) {
+    return false;
+  }
+
+  // Se for rota flexível (sem_data) sem especificação contrária, assume Ida e Volta
+  if (semData) {
+    return false;
+  }
+
+  // Se é data fixa (tem data_ida ou não tem sem_data) e campoVolta é nulo/indefinido/falsy, é Só Ida
+  if (campoVolta === null || campoVolta === undefined || campoVolta === '') {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Resolve e calcula as datas efetivas e duração de viagem da rota de forma unificada.
+ * Garante que rotas de Ida e Volta sempre possuam dataVolta calculada (somarDiasData),
+ * evitando buscas e links de só-ida indevidos.
+ *
+ * @param {object} rotaOuDados
+ * @returns {{ dataIda: string, dataVolta: string|null, soIda: boolean, diasEstadia: number|null, semData: number }}
+ */
+export function obterDatasEfetivasRota(rotaOuDados) {
+  if (!rotaOuDados || typeof rotaOuDados !== 'object') {
+    const dataIda = gerarDataPadraoInicial(25);
+    return { dataIda, dataVolta: null, soIda: false, diasEstadia: 10, semData: 0 };
+  }
+  const semData = (rotaOuDados.sem_data || rotaOuDados.semData) ? 1 : 0;
+  const soIda = rotaEhSoIda(rotaOuDados);
+  const dataIda = formatarDataParaBusca(rotaOuDados.data_ida || rotaOuDados.dataIda) || gerarDataPadraoInicial(25);
+  const diasEstadia = extrairDiasEstadia(
+    rotaOuDados.dias_estadia || rotaOuDados.diasEstadia || rotaOuDados.data_volta || rotaOuDados.dataVolta,
+    10
+  );
+
+  if (soIda) {
+    return { dataIda, dataVolta: null, soIda: true, diasEstadia: null, semData };
+  }
+
+  const campoVolta = rotaOuDados.data_volta !== undefined ? rotaOuDados.data_volta : rotaOuDados.dataVolta;
+  let dataVolta = null;
+  if (campoVolta && !ehSoIda(campoVolta)) {
+    dataVolta = calcularDataVolta(dataIda, campoVolta) || formatarDataParaBusca(campoVolta);
+  }
+  if (!dataVolta || dataVolta < dataIda) {
+    dataVolta = somarDiasData(dataIda, diasEstadia);
+  }
+
+  return { dataIda, dataVolta, soIda: false, diasEstadia, semData };
 }
 
 /**

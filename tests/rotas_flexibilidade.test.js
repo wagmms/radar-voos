@@ -450,5 +450,42 @@ describe('Domínio: Flexibilidade de Datas (Matriz ±0 a ±7 dias)', () => {
     const resExtremo = gerarDataPadraoInicial(99999999);
     assert.match(resExtremo, /^\d{4}-\d{2}-\d{2}$/, 'Offset extremo deve ser limitado defensivamente a ISO válida');
   });
+
+  describe('Bug 1: Garantia de Ida e Volta Real no Domínio e no Banco SQLite', () => {
+    it('rota de Ida e Volta cadastrada sem data_volta explícita NUNCA deve ser classificada como Só Ida', () => {
+      const rota = rotasRepo.criar({
+        origem: 'São Paulo',
+        destino: 'Santiago',
+        data_ida: '2026-11-10',
+        data_volta: null,
+        dias_estadia: 10,
+        preco_alvo: 1500
+      });
+
+      assert.strictEqual(rotaEhSoIda(rota), false, 'Rota com 10 dias de estadia deve ser Ida e Volta');
+      assert.ok(rota.data_volta, 'data_volta deve ser calculada automaticamente a partir da estadia');
+      assert.strictEqual(rota.data_volta, '2026-11-20', 'data_volta deve ser 10 dias após 2026-11-10');
+      assert.ok(!rota.link_google_flights.includes('one-way'), 'Link não deve ser one-way');
+      assert.ok(rota.link_google_flights.includes('returning') || rota.link_google_flights.includes('tfs='), 'Link deve ser round-trip');
+
+      rotasRepo.excluir(rota.id);
+    });
+
+    it('rota flexível (sem_data=1) de Ida e Volta deve gerar link do Google Flights com trecho de volta', () => {
+      const rotaFlex = rotasRepo.criar({
+        origem: 'São Paulo',
+        destino: 'Lisboa',
+        sem_data: 1,
+        dias_estadia: 14,
+        preco_alvo: 3800
+      });
+
+      assert.strictEqual(rotaEhSoIda(rotaFlex), false, 'Rota flexível sem data deve ser Ida e Volta quando tem dias de estadia');
+      assert.ok(rotaFlex.data_volta, 'Deve ter data_volta preenchida');
+      assert.ok(!rotaFlex.link_google_flights.includes('one-way'), 'Link flexível não pode conter one-way');
+
+      rotasRepo.excluir(rotaFlex.id);
+    });
+  });
 });
 

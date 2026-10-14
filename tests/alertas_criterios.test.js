@@ -451,5 +451,41 @@ describe('Inteligência de Alertas e Critérios Estritos (alertasRepo.deveDispar
       notifierTelegram.enviarMensagem = backupEnviar;
     }
   });
+
+  it('15. Bug 4: sanitizarRotasIdaEVolta deve invalidar cotações espúrias no teto com link one-way e calcular volta', async () => {
+    const { rotasRepo } = await import('../src/db.js');
+    const rotaEspuria = rotasRepo.criar({
+      origem: 'São Paulo',
+      destino: 'Lisboa',
+      data_ida: '2026-11-10',
+      data_volta: null,
+      dias_estadia: 10,
+      preco_alvo: 2000
+    });
+
+    const db = getDb();
+    // Simular estado corrompido de produção: cotado como só-ida cravado no teto
+    db.prepare(`
+      UPDATE rotas SET
+        preco_atual = 2000,
+        menor_preco_historico = 2000,
+        termometro = '🎯 Meta Batida • R$ 2.000 (No teto)',
+        link_google_flights = 'https://www.google.com/travel/flights?q=Flights%20from%20SAO%20to%20LIS%20on%202026-11-10%20one-way',
+        data_volta = null
+      WHERE id = ?
+    `).run(rotaEspuria.id);
+
+    // Executa a sanitização
+    rotasRepo.sanitizarRotasIdaEVolta();
+
+    const limpa = rotasRepo.buscarPorId(rotaEspuria.id);
+    assert.strictEqual(limpa.data_volta, '2026-11-20', 'Deve calcular a data_volta da rota de ida e volta');
+    assert.strictEqual(limpa.preco_atual, null, 'Cotação espúria do teto deve ser resetada');
+    assert.strictEqual(limpa.menor_preco_historico, null, 'Menor preço espúrio deve ser resetado');
+    assert.ok(!limpa.link_google_flights.includes('one-way'), 'Link não pode continuar como one-way');
+    assert.ok(limpa.link_google_flights.includes('returning') || limpa.link_google_flights.includes('tfs='), 'Link deve ser regenerado como round-trip');
+
+    rotasRepo.excluir(rotaEspuria.id);
+  });
 });
 

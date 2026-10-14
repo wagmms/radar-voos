@@ -296,6 +296,6 @@ export const TERMOS_MARKETING_BANIDOS = [
   "cruzeiro", "navio", "ingressos", "disney"
 ];
 
-// Padrões de textos e carrosséis promocionais/rodapé do Google Flights que NÃO devem ser confundidos com voos da pesquisa
-export const PADROES_IGNORAR_RODAPE = /(?:Encontre voos de|Explore flights from|Find flights from|Viagens a partir de|Destinos em alta|Voos populares|Popular flights|Sugestões de voo|Voos recomendados|Viagens de fim de semana|Destinos populares)/i;
+// Padrões de textos, carrosséis promocionais/rodapé e nós de filtros/sliders do Google Flights que NÃO devem ser confundidos com voos da pesquisa
+export const PADROES_IGNORAR_RODAPE = /(?:Encontre voos de|Explore flights from|Find flights from|Viagens a partir de|Destinos em alta|Voos populares|Popular flights|Sugestões de voo|Voos recomendados|Viagens de fim de semana|Destinos populares|preço\s+(?:até|máximo|max)|price\s+(?:up\s+to|under|max)|filtro|filtrar|slider|intervalo|remover\s+filtro)/i;
 
