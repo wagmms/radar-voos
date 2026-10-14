@@ -9,8 +9,10 @@ describe('Serviço de Sincronização Canônica Two-Way Sync (rotasSync)', () =>
   const testDbPath = path.resolve('./data/test_sync.sqlite');
 
   before(() => {
+    closeDb();
     if (fs.existsSync(testDbPath)) fs.unlinkSync(testDbPath);
-    getDb(testDbPath);
+    const db = getDb(testDbPath);
+    db.prepare('DELETE FROM rotas').run();
   });
 
   after(() => {

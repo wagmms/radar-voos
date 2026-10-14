@@ -300,6 +300,7 @@ describe('FlightScanner — propagação de filtros avançados Protobuf', () => 
       max_stops: 0,
       carry_on_bags: 1,
       checked_bags: 2,
+      max_price: 3000,
       preco_alvo: 3000,
       hide_separate_and_self_transfer: 1,
       exclude_basic_economy: 1,
@@ -517,6 +518,90 @@ describe('FlightScanner — Janela de Datas Flexíveis & Termômetro priceInsigh
 
     // Limpeza
     rotasRepo.excluir(rotaRegional.id);
+  });
+
+  it('Bug 1 & 2: scanner regional com rota sem data_volta explícita deve varrer com data_volta calculada, links round-trip e SEM maxPrice contaminante', async () => {
+    const chamadas = [];
+    FlightScanner.buscarOfertas = async (origem, destino, ida, volta, duracao, cabine, adultos, moeda, filtros) => {
+      chamadas.push({ origem, destino, ida, volta, filtros });
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco: destino === 'LIS' ? 3200 : 3500,
+          nivelPreco: 'NORMAL',
+          duracaoHoras: 10,
+          cia: 'TAP',
+          termometro: '🟢 Preço Normal',
+          link: `https://www.google.com/travel/flights?q=Flights%20to%20${destino}`
+        }
+      };
+    };
+
+    const rotaRegionalSemVolta = rotasRepo.criar({
+      origem: 'São Paulo',
+      codigo_origem: 'GRU',
+      destino: 'Europa',
+      codigo_destino: 'EUR',
+      data_ida: '2026-11-10',
+      data_volta: null,
+      dias_estadia: 10,
+      preco_alvo: 2000,
+      sem_data: 0
+    });
+
+    const res = await FlightScanner.escanearRota(rotaRegionalSemVolta);
+    assert.strictEqual(res.sucesso, true);
+
+    // 1. Nenhuma busca aos hubs regionais pode ter volta nula (deve ser 2026-11-20)
+    assert.ok(chamadas.length > 0);
+    chamadas.forEach(c => {
+      assert.strictEqual(c.volta, '2026-11-20', `Hub ${c.destino} deve ser buscado com volta calculada 2026-11-20`);
+      // 2. maxPrice NUNCA deve ser preenchido com preco_alvo
+      assert.strictEqual(c.filtros.maxPrice, null, 'maxPrice NUNCA deve conter o preco_alvo da rota');
+    });
+
+    // 3. Links do ranking regional devem ser round-trip (conter volta ou returning)
+    assert.ok(Array.isArray(res.rankingDestinosRegionais));
+    res.rankingDestinosRegionais.forEach(item => {
+      assert.ok(!item.linkGoogleFlights.includes('one-way'), `Link de ${item.destinoIata} não pode ser one-way`);
+      assert.ok(item.linkGoogleFlights.includes('2026-11-20') || item.linkGoogleFlights.includes('returning') || item.linkGoogleFlights.includes('tfs='), `Link de ${item.destinoIata} deve conter a volta`);
+    });
+
+    rotasRepo.excluir(rotaRegionalSemVolta.id);
+  });
+
+  it('Bug 3: scanner em rota flexível (sem_data=1) NUNCA deve gerar termômetro com "()" vazio', async () => {
+    FlightScanner.buscarOfertas = async () => ({
+      ok: true,
+      encontrouVoos: true,
+      oferta: {
+        preco: 2500,
+        nivelPreco: 'NORMAL',
+        duracaoHoras: 10,
+        cia: 'TAP',
+        termometro: '🟢 Preço Normal',
+        link: 'https://flights.google.com/test'
+      }
+    });
+
+    const rotaFlex = rotasRepo.criar({
+      origem: 'São Paulo',
+      codigo_origem: 'GRU',
+      destino: 'Europa',
+      codigo_destino: 'EUR',
+      data_ida: '2026-11-10',
+      sem_data: 1,
+      dias_estadia: 10
+    });
+
+    const res = await FlightScanner.escanearRota(rotaFlex);
+    assert.strictEqual(res.sucesso, true);
+
+    const rotaSalva = rotasRepo.buscarPorId(rotaFlex.id);
+    assert.ok(!rotaSalva.termometro.includes('()'), 'termometro salvo no banco NUNCA deve conter "()" vazio');
+
+    rotasRepo.excluir(rotaFlex.id);
   });
 });
 

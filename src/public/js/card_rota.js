@@ -362,6 +362,38 @@ export function renderizarRankingDestinosRegionais(rankingDestinosRegionais) {
 }
 
 /**
+ * Determina defensivamente se a rota deve ser exibida como Só Ida
+ */
+export function ehRotaSoIdaVisual(rota) {
+  if (!rota) return false;
+  if (rota.tipo_viagem === 'one_way' || rota.tipo === 'one_way') return true;
+  const voltaStr = String(rota.data_volta || '').toLowerCase().trim();
+  if (voltaStr === 'só ida' || voltaStr === 'so ida' || voltaStr === 'one-way' || voltaStr === 'one_way') return true;
+  return false;
+}
+
+/**
+ * Calcula defensivamente a data de volta estimada a partir dos dias de estadia
+ */
+export function calcularDataVoltaSegura(dataIda, dataVolta, diasEstadia = 10) {
+  if (dataVolta && /^\d{4}-\d{2}-\d{2}$/.test(String(dataVolta).trim())) {
+    return String(dataVolta).trim();
+  }
+  if (!dataIda || !/^\d{4}-\d{2}-\d{2}$/.test(String(dataIda).trim())) {
+    return null;
+  }
+  const dias = Number(diasEstadia) || 10;
+  try {
+    const [ano, mes, dia] = dataIda.split('-').map(Number);
+    const d = new Date(Date.UTC(ano, mes - 1, dia));
+    d.setUTCDate(d.getUTCDate() + dias);
+    return d.toISOString().split('T')[0];
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
  * Renderiza o card completo da rota
  */
 export function renderizarCardRota(rota) {
@@ -374,7 +406,9 @@ export function renderizarCardRota(rota) {
   const precoStr = Number.isFinite(precoAtual) && precoAtual > 0 ? `R$ ${formatarPreco(precoAtual)}` : 'Aguardando checagem';
   const menorHist = Number(rota.menor_preco_historico);
   const menorHistStr = Number.isFinite(menorHist) && menorHist > 0 ? `Menor: R$ ${formatarPreco(menorHist)}` : '';
-  const termometro = rota.termometro || '⚪ Sem dados recentes';
+  let termometro = rota.termometro || '⚪ Sem dados recentes';
+  // Sanitizar contra parênteses vazios gerados por labels ausentes
+  termometro = String(termometro).replace(/\s*\(\s*\)/g, '').trim();
 
   const priceInsights = rota.price_insights || rota.priceInsights;
   const melhorDataAlt = rota.melhor_data_alternativa || rota.melhorDataAlternativa;
@@ -392,9 +426,33 @@ export function renderizarCardRota(rota) {
   const blocoRankingRegional = renderizarRankingDestinosRegionais(rankingRegionais);
   const graficoCalendario = renderizarGraficoCalendarioSvg(calendario, precoAtual);
 
-  const periodoTexto = rota.sem_data
-    ? `🗓️ Flexível • ${escapeHtml(rota.data_ida || 'Próximos meses')}`
-    : `📅 ${escapeHtml(rota.data_ida || '')}${rota.data_volta ? ` até ${escapeHtml(rota.data_volta)}` : ' (Só Ida)'}`;
+  const soIdaVisual = ehRotaSoIdaVisual(rota);
+  const diasEstadiaVisual = Number(rota.dias_estadia) || 10;
+  const dataVoltaCalculada = !soIdaVisual ? calcularDataVoltaSegura(rota.data_ida, rota.data_volta, diasEstadiaVisual) : null;
+  const duracaoTexto = !soIdaVisual ? ` (${diasEstadiaVisual}d)` : '';
+
+  let periodoTexto = '';
+  if (rota.sem_data) {
+    if (soIdaVisual) {
+      periodoTexto = `🗓️ Flexível • ${escapeHtml(rota.data_ida || 'Próximos meses')} (Só Ida)`;
+    } else if (rota.data_ida) {
+      const voltaExibicao = dataVoltaCalculada ? ` ➔ ${escapeHtml(dataVoltaCalculada)}` : '';
+      periodoTexto = `🗓️ Flexível • ${escapeHtml(rota.data_ida)}${voltaExibicao}${duracaoTexto}`;
+    } else {
+      periodoTexto = `🗓️ Flexível • Próximos meses${duracaoTexto}`;
+    }
+  } else {
+    if (soIdaVisual) {
+      periodoTexto = `📅 ${escapeHtml(rota.data_ida || '')} (Só Ida)`;
+    } else {
+      const voltaExibicao = dataVoltaCalculada || rota.data_volta;
+      if (voltaExibicao) {
+        periodoTexto = `📅 ${escapeHtml(rota.data_ida || '')} até ${escapeHtml(voltaExibicao)}${duracaoTexto}`;
+      } else {
+        periodoTexto = `📅 ${escapeHtml(rota.data_ida || '')}${duracaoTexto}`;
+      }
+    }
+  }
 
   const linkGoogle = rota.link_google_flights || '#';
   const silenciada = rota.esta_silenciada ? '<span class="badge badge-silenciada">🔕 Silenciada</span>' : '';

@@ -14,8 +14,13 @@ import {
   gerarJanelaDatasFlexiveis,
   gerarJanelasExploracaoSemData,
   ehSoIda,
+  rotaEhSoIda,
+  obterDatasEfetivasRota,
+  formatarDataParaBusca,
+  formatarDiaMes,
   gerarLinkGoogleFlightsCheapest,
-  gerarLinkGoogleFlights
+  gerarLinkGoogleFlights,
+  gerarDataPadraoInicial
 } from '../domain/rotas.js';
 import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
@@ -68,17 +73,25 @@ export class FlightScanner {
     try {
       const moedaEfetiva = (opcoes?.moeda || opcoes?.curr || rota?.moeda || rota?.curr || 'BRL').trim().toUpperCase();
 
+      // Determinação unificada e segura das datas da rota (prevenção de buscas espúrias de só ida)
+      const datasEfetivas = obterDatasEfetivasRota(rota);
+      const ehSoIda = datasEfetivas.soIda;
+      let dataIdaEfetiva = datasEfetivas.dataIda;
+      let dataVoltaEfetiva = datasEfetivas.dataVolta;
+
+      // NUNCA repassar preco_alvo como maxPrice para busca de voos no Google Flights
+      // (oculta voos de mercado, impede rastreamento de tendências e contamina o parser com nós de filtro)
       const filtrosAvancados = {
         maxStops: rota.max_stops ?? rota.maxStops ?? null,
         carryOnBags: rota.carry_on_bags ?? rota.carryOnBags ?? null,
         checkedBags: rota.checked_bags ?? rota.checkedBags ?? null,
-        maxPrice: rota.preco_alvo ?? rota.maxPrice ?? null,
+        maxPrice: (rota.max_price !== undefined && rota.max_price !== null && !isNaN(Number(rota.max_price))) ? Number(rota.max_price) : null,
         hideSeparateAndSelfTransfer: rota.hide_separate_and_self_transfer ?? rota.hideSeparateAndSelfTransfer ?? null,
         excludeBasicEconomy: rota.exclude_basic_economy ?? rota.excludeBasicEconomy ?? null
       };
 
       // 1. Consulta meteorológica do destino em paralelo
-      const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
+      const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, dataIdaEfetiva);
 
       const hubsDestino = expandirDestinoOuOrigemRegional(rota.codigo_destino || rota.destino);
       const ehRegional = hubsDestino.length > 0;
@@ -96,8 +109,6 @@ export class FlightScanner {
       let melhorOpcaoFlexivel = null;
       let calendarioPrecos = [];
       let melhorDataAlternativa = null;
-      let dataIdaEfetiva = rota.data_ida;
-      let dataVoltaEfetiva = rota.data_volta;
       let rankingDestinosRegionais = [];
       let destinoVencedorIata = null;
       let destinoVencedorNome = null;
@@ -110,8 +121,8 @@ export class FlightScanner {
             const resHub = await FlightScanner.buscarOfertas(
               origemBusca,
               hubIata,
-              rota.data_ida,
-              rota.data_volta,
+              dataIdaEfetiva,
+              dataVoltaEfetiva,
               rota.duracao_max_horas,
               rota.cabine || 'economy',
               1,
@@ -120,6 +131,11 @@ export class FlightScanner {
             );
             if (resHub.ok && resHub.encontrouVoos && resHub.oferta && resHub.oferta.preco > 0) {
               const nomeCidade = NOMES_CIDADES_IATA[hubIata] || resHub.oferta.destinoReal || hubIata;
+              const linkHub = (dataIdaEfetiva && hubIata)
+                ? (gerarLinkGoogleFlightsCheapest(origemBusca, hubIata, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
+                   || gerarLinkGoogleFlights(origemBusca, hubIata, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
+                : resHub.oferta.link;
+
               const item = {
                 destinoIata: hubIata,
                 nomeCidade,
@@ -128,7 +144,7 @@ export class FlightScanner {
                 escalas: resHub.oferta.escalas ?? 0,
                 duracaoTexto: resHub.oferta.detalhes || `${resHub.oferta.duracaoHoras?.toFixed(1)}h`,
                 horarioPartida: resHub.oferta.horarioPartida || null,
-                linkGoogleFlights: resHub.oferta.link
+                linkGoogleFlights: linkHub
               };
               rankingDestinosRegionais.push(item);
               if (!menorOfertaRegional || resHub.oferta.preco < menorOfertaRegional.oferta.preco) {
@@ -166,12 +182,11 @@ export class FlightScanner {
         oferta.codigoDestinoReal = destinoVencedorIata;
         oferta.destinoReal = destinoVencedorNome;
       } else if (rota.sem_data === 1) {
-        const soIda = ehSoIda(rota.data_volta);
         const janelas = gerarJanelasExploracaoSemData({
-          dataBase: rota.data_ida,
-          diasEstadia: rota.dias_estadia || 10,
+          dataBase: dataIdaEfetiva,
+          diasEstadia: datasEfetivas.diasEstadia || 10,
           qtdAmostras: 4,
-          soIda
+          soIda: ehSoIda
         });
 
         const resultadosAmostras = [];
@@ -223,11 +238,13 @@ export class FlightScanner {
         dataVoltaEfetiva = campeao.dataVolta;
         resultadoFinal = { ok: true, encontrouVoos: true, oferta };
 
+        const labelAmostra = campeao.label || `${formatarDiaMes(campeao.dataIda)}${campeao.dataVolta ? ` a ${formatarDiaMes(campeao.dataVolta)}` : ''}`;
+
         melhorOpcaoFlexivel = {
           data_ida: campeao.dataIda,
           data_volta: campeao.dataVolta,
           preco: campeao.oferta.preco,
-          label: campeao.label,
+          label: labelAmostra,
           modo: 'sem_data',
           totalAmostras: resultadosAmostras.length,
           link: campeao.oferta.link
@@ -237,8 +254,8 @@ export class FlightScanner {
         const resultadoBase = await FlightScanner.buscarOfertas(
           rota.codigo_origem,
           rota.codigo_destino,
-          rota.data_ida,
-          rota.data_volta,
+          dataIdaEfetiva,
+          dataVoltaEfetiva,
           rota.duracao_max_horas,
           rota.cabine || 'economy',
           1,
@@ -442,13 +459,21 @@ export class FlightScanner {
          || gerarLinkGoogleFlights(origemParaLink, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
       : oferta.link;
 
+    let labelFlex = melhorOpcaoFlexivel?.label || '';
+    if (!labelFlex && melhorOpcaoFlexivel?.data_ida) {
+      const idaFmt = formatarDiaMes(melhorOpcaoFlexivel.data_ida);
+      const voltaFmt = melhorOpcaoFlexivel.data_volta ? ` a ${formatarDiaMes(melhorOpcaoFlexivel.data_volta)}` : '';
+      labelFlex = `${idaFmt}${voltaFmt}`;
+    }
+    const termometroFlex = labelFlex ? `🔥 Menor Preço Flexível (${labelFlex})` : '🔥 Menor Preço Flexível';
+
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
       data_ida: rota.sem_data === 1 ? dataIdaEfetiva : undefined,
       data_volta: rota.sem_data === 1 ? dataVoltaEfetiva : undefined,
       preco: oferta.preco,
       moeda: moedaEfetiva,
       variacao_texto: variacao.texto,
-      termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : (rota.sem_data === 1 ? `🔥 Menor Preço Flexível (${melhorOpcaoFlexivel?.label || ''})` : oferta.termometro),
+      termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : (rota.sem_data === 1 ? termometroFlex : oferta.termometro),
       custo_destino_texto: custoInfo.textoResumo,
       detalhes_voo: `${oferta.duracaoHoras.toFixed(1)}h | ${oferta.detalhes}`,
       dica_stopover: oferta.dicaStopover,
@@ -481,7 +506,7 @@ export class FlightScanner {
     // 5. Inteligência de Alertas Regulares
     const chaveAlerta = rota.sem_data === 1
       ? `${rota.codigo_origem}_${rota.codigo_destino}_FLEXIVEL`
-      : `${rota.codigo_origem}_${rota.codigo_destino}_${rota.data_ida}_${rota.data_volta || 'SO_IDA'}`;
+      : `${rota.codigo_origem}_${rota.codigo_destino}_${dataIdaEfetiva}_${dataVoltaEfetiva || 'SO_IDA'}`;
     const ehRecorde = !rota.menor_preco_historico || oferta.preco < rota.menor_preco_historico;
 
     const decisaoAlerta = alertasRepo.deveDisparar(
@@ -520,7 +545,7 @@ export class FlightScanner {
         duracaoHoras: oferta.duracaoHoras,
         detalhes: oferta.detalhes,
         dicaStopover: oferta.dicaStopover,
-        link: oferta.link,
+        link: linkCanonicoRota || oferta.link,
         clima: clima.ok ? clima : null,
         semData: rota.sem_data === 1,
         labelJanela: melhorOpcaoFlexivel?.label,

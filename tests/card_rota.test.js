@@ -508,5 +508,70 @@ describe('Cockpit PWA: Módulo Card de Rota (card_rota.js)', () => {
       assert.ok(cardHtml.includes('Lisboa (LIS)'));
     });
   });
+
+  describe('Correções de Produção: Subtítulo Ida e Volta e Prevenção de () vazio', () => {
+    it('Bug 3: renderizarCardRota NUNCA deve renderizar badge ou termômetro com "()" vazio', () => {
+      const rotaComParentesesVazio = {
+        id: 99,
+        origem: 'São Paulo',
+        destino: 'Lisboa',
+        preco_atual: 3500,
+        termometro: '🔥 Menor Preço Flexível ()'
+      };
+
+      const html = renderizarCardRota(rotaComParentesesVazio);
+      assert.ok(!html.includes('()'), 'Card nunca deve renderizar parênteses vazios "()"');
+      assert.ok(html.includes('🔥 Menor Preço Flexível'), 'Deve preservar o texto do termômetro sem "()"');
+    });
+
+    it('Bug 3 & 4: subtítulo em modo Flexível (sem_data=1) deve exibir período de Ida e Volta (10/11 a 20/11 ou 2026-11-10 ➔ 2026-11-20 (10d)) quando for Ida e Volta', () => {
+      const rotaFlexIdaVolta = {
+        id: 101,
+        origem: 'São Paulo',
+        destino: 'Lisboa',
+        sem_data: 1,
+        data_ida: '2026-11-10',
+        data_volta: '2026-11-20',
+        dias_estadia: 10,
+        preco_atual: 3500
+      };
+
+      const html = renderizarCardRota(rotaFlexIdaVolta);
+      assert.ok(!html.includes('(Só Ida)'), 'Rota de Ida e Volta flexível não pode exibir (Só Ida)');
+      assert.ok(html.includes('2026-11-10') && (html.includes('2026-11-20') || html.includes('10d')), 'Subtítulo deve exibir período completo de Ida e Volta');
+    });
+
+    it('Bug 4: subtítulo em data fixa não deve cair em "(Só Ida)" se a rota for de Ida e Volta com estadia padrão', () => {
+      const rotaSemVoltaExplicita = {
+        id: 102,
+        origem: 'São Paulo',
+        destino: 'Santiago',
+        sem_data: 0,
+        data_ida: '2026-11-10',
+        data_volta: null,
+        dias_estadia: 10,
+        preco_atual: 1500
+      };
+
+      const html = renderizarCardRota(rotaSemVoltaExplicita);
+      assert.ok(!html.includes('(Só Ida)'), 'Rota com estadia de 10 dias não deve cair em (Só Ida)');
+      assert.ok(html.includes('2026-11-20') || html.includes('10d'), 'Deve calcular e exibir data de volta ou dias de estadia');
+    });
+
+    it('subtítulo DEVE exibir "(Só Ida)" se a rota for estritamente só ida', () => {
+      const rotaSoIdaReal = {
+        id: 103,
+        origem: 'Rio de Janeiro',
+        destino: 'Belém',
+        tipo_viagem: 'one_way',
+        sem_data: 0,
+        data_ida: '2027-01-17',
+        data_volta: null
+      };
+
+      const html = renderizarCardRota(rotaSoIdaReal);
+      assert.ok(html.includes('(Só Ida)'), 'Rota configurada como one_way deve exibir (Só Ida)');
+    });
+  });
 });
 
