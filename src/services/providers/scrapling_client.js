@@ -799,7 +799,7 @@ export function extrairVoosDoPayloadJs(html) {
 
         voos.push({
           preco,
-          precoOriginal: ehUsd ? precoBruto : preco,
+          precoOriginal: ehUsd ? precoBruto : null,
           moeda: 'BRL',
           moedaOriginal: moedaDetectada || 'BRL',
           cia,

@@ -608,6 +608,36 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
     }
   });
 
+  it('compara SerpAPI quando preço BRL do ds:1 não representa desconto OTA', async () => {
+    const { FlightProviderManager } = await import('../src/services/providers/provider_manager.js');
+    const { GoogleFlightsDirectProvider } = await import('../src/services/providers/google_flights_direct_provider.js');
+    const { SerpApiProvider } = await import('../src/services/providers/serpapi_provider.js');
+    const trecho = [null, null, null, 'GIG', '', '', 'BEL', null, [7, 50], null, [11, 30],
+      null, null, null, null, null, null, '', null, null, [2027, 1, 17], [2027, 1, 17], ['G3', '2006', null, 'Gol']];
+    const direto = [['G3', ['Gol'], [trecho], 'GIG', null, null, 'BEL', null, null, 220], [[null, 1002]]];
+    const html = `<script class="ds:1">AF_initDataCallback({key:'ds:1',data:${JSON.stringify([null, null, [[direto]]])},sideChannel:{}});</script>`;
+    const fetchOriginal = globalThis.fetch;
+    globalThis.fetch = async () => ({ ok: true, status: 200, url: 'https://www.google.com/travel/flights', text: async () => html });
+
+    try {
+      const serpApi = new SerpApiProvider();
+      let consultasSerpApi = 0;
+      serpApi.estaDisponivel = () => true;
+      serpApi.buscarOfertas = async () => {
+        consultasSerpApi++;
+        return { ok: true, encontrouVoos: true, oferta: { preco: 539, cia: 'LATAM', escalas: 1 } };
+      };
+      const manager = new FlightProviderManager();
+      manager.providers = [new ScraplingProvider(), new GoogleFlightsDirectProvider(), serpApi];
+
+      const resultado = await manager.buscarOfertas({ origemCod: 'RIO', destinoCod: 'BEL', dataIda: '2027-01-17', duracaoMaxHoras: 8 });
+      assert.equal(consultasSerpApi, 1);
+      assert.equal(resultado.oferta.preco, 539);
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+
   it('deve retornar topOfertas e calcular melhorOpcaoDiretaOuRapida quando a melhor oferta tem conexões', async () => {
     const provider = new ScraplingProvider();
     const fetchOriginal = globalThis.fetch;
