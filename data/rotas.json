@@ -190,5 +190,21 @@
     "dias_estadia": 10,
     "tipo_viagem": "round_trip",
     "ativa": 1
+  },
+  {
+    "origem": "São Paulo",
+    "destino": "Nova York",
+    "codigo_origem": "SAO",
+    "codigo_destino": "NYC",
+    "data_ida": "2026-12-10",
+    "data_volta": "2026-12-20",
+    "duracao_max_horas": 999,
+    "preco_alvo": 5000,
+    "cabine": "economy",
+    "flexibilidade_dias": 0,
+    "sem_data": 0,
+    "dias_estadia": 10,
+    "tipo_viagem": "round_trip",
+    "ativa": 1
   }
 ]
