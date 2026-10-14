@@ -3,6 +3,7 @@ import {
   gerarLinkGoogleFlightsCheapest,
   gerarLinkGoogleFlights,
   gerarTfs,
+  construirTfu,
   normalizarParaSerpApi,
   resolverCodigoParaLink,
   ehSoIda
@@ -479,17 +480,34 @@ export function extrairPrecoCheapestTab(html, urlResposta = null) {
 
 /**
  * Constrói URL para a aba Cheapest do Google Flights com Protobuf tfs,
- * garantindo distinção precisa entre One-Way e Round-Trip no payload binário.
+ * garantindo distinção precisa entre One-Way e Round-Trip no payload binário
+ * e propagando filtros avançados (passageiros, cabine, maxStops, layover, bagagem).
  *
  * @param {string} origemCod - Código de origem (IATA ou metrópole)
  * @param {string} destinoCod - Código de destino (IATA, metrópole ou KGMID)
  * @param {string} dataIda - Data de ida YYYY-MM-DD
  * @param {string|null} dataVolta - Data de volta YYYY-MM-DD, ou null/string de só-ida
  * @param {number|null} duracaoMaxHoras - Duração máxima em horas (filtro opcional)
+ * @param {string} [moeda='BRL'] - Moeda ISO (padrão 'BRL')
+ * @param {object} [opcoesExtras={}] - Filtros avançados: { adultos, criancas, bebes, cabine, classeViagem, maxStops, carryOnBags, maxLayoverMinutes }
  * @returns {{ url: string, tipoViagem: 'one_way'|'round_trip', tfs: string }}
  */
-export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = null, moeda = 'BRL') {
-  const moedaEfetiva = (moeda || 'BRL').trim().toUpperCase();
+export function construirUrlCheapest(
+  origemCod,
+  destinoCod,
+  dataIda,
+  dataVolta = null,
+  duracaoMaxHoras = null,
+  moeda = 'BRL',
+  opcoesExtras = {}
+) {
+  let moedaArg = moeda;
+  let opts = opcoesExtras;
+  if (typeof moedaArg === 'object' && moedaArg !== null) {
+    opts = moedaArg;
+    moedaArg = opts.moeda || 'BRL';
+  }
+  const moedaEfetiva = (typeof moedaArg === 'string' && moedaArg.trim()) ? moedaArg.trim().toUpperCase() : 'BRL';
   const origResolvido = resolverCodigoParaLink(origemCod);
   const destResolvido = resolverCodigoParaLink(destinoCod);
 
@@ -504,17 +522,147 @@ export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta =
     ? Math.round(duracaoMaxHoras * 60)
     : null;
 
+  const {
+    adultos = 1,
+    criancas = 0,
+    bebes = 0,
+    infantsInSeat = null,
+    infantsOnLap = null,
+    cabine = 'economy',
+    classeViagem = 'economy',
+    maxStops = null,
+    carryOnBags = null,
+    checkedBags = null,
+    maxPrice = null,
+    hideSeparateAndSelfTransfer = null,
+    excludeBasicEconomy = null,
+    airlines = null,
+    connectingAirports = null,
+    minLayoverMinutes = null,
+    maxLayoverMinutes = null,
+    earliestDepartureHour = null,
+    latestDepartureHour = null,
+    earliestArrivalHour = null,
+    latestArrivalHour = null
+  } = opts || {};
+
+  const cabineFinal = classeViagem || cabine || 'economy';
+
   const tfsPayload = gerarTfs({
     origens,
     destinos,
     dataIda,
     dataVolta: voltaEfetiva,
-    maxDurationMinutes: maxMin
+    maxDurationMinutes: maxMin,
+    adultos,
+    criancas,
+    bebes,
+    infantsInSeat,
+    infantsOnLap,
+    classeViagem: cabineFinal,
+    maxStops,
+    carryOnBags,
+    checkedBags,
+    maxPrice,
+    hideSeparateAndSelfTransfer,
+    excludeBasicEconomy,
+    airlines,
+    connectingAirports,
+    minLayoverMinutes,
+    maxLayoverMinutes,
+    earliestDepartureHour,
+    latestDepartureHour,
+    earliestArrivalHour,
+    latestArrivalHour
   });
 
-  const url = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaEfetiva}&tfs=${tfsPayload}&tfu=EgoIABAAGAAgAigD`;
+  const tfuPayload = (adultos > 1 || criancas > 0 || bebes > 0 || (cabineFinal && cabineFinal !== 'economy'))
+    ? construirTfu(adultos, criancas, bebes, cabineFinal)
+    : 'EgoIABAAGAAgAigD';
+
+  const url = `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaEfetiva}&tfs=${tfsPayload}&tfu=${tfuPayload}`;
 
   return { url, tipoViagem, tfs: tfsPayload };
+}
+
+/**
+ * Formata horário de trecho [hora, minuto] para string "HH:MM".
+ * @param {Array<number>|null} arr
+ * @returns {string|null}
+ */
+export function formatarHorarioTrecho(arr) {
+  if (!Array.isArray(arr) || arr.length < 2) return null;
+  const [h, m] = arr;
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
+ * Extrai número de voo do trecho (legs[0][22]), ex: ["LA", "8004"] -> "LA 8004".
+ * @param {Array|null} leg
+ * @returns {string|null}
+ */
+export function extrairNumeroVooTrecho(leg) {
+  if (!Array.isArray(leg) || !leg[22]) return null;
+  const raw = leg[22];
+  if (Array.isArray(raw)) {
+    const cod = raw[0];
+    const num = raw[1];
+    if (cod && num) return `${String(cod).trim()} ${String(num).trim()}`.trim();
+    if (cod) return String(cod).trim();
+    if (num) return String(num).trim();
+  } else if (typeof raw === 'string') {
+    return raw.trim() || null;
+  }
+  return null;
+}
+
+/**
+ * Calcula a diferença real em minutos entre a chegada do trecho anterior e a partida do seguinte.
+ * @param {Array|null} legChegada
+ * @param {Array|null} legPartida
+ * @returns {number|null}
+ */
+export function calcularTempoConexaoTrechos(legChegada, legPartida) {
+  if (!Array.isArray(legChegada) || !Array.isArray(legPartida)) return null;
+  const horaChegada = legChegada[10];
+  const horaPartida = legPartida[8];
+  if (!Array.isArray(horaChegada) || horaChegada.length < 2 || !Array.isArray(horaPartida) || horaPartida.length < 2) {
+    return null;
+  }
+  const [hChegada, mChegada] = horaChegada;
+  const [hPartida, mPartida] = horaPartida;
+  if (!Number.isFinite(hChegada) || !Number.isFinite(mChegada) || !Number.isFinite(hPartida) || !Number.isFinite(mPartida)) {
+    return null;
+  }
+
+  const dataChegada = legChegada[21];
+  const dataPartida = legPartida[20];
+
+  if (Array.isArray(dataChegada) && dataChegada.length >= 3 && Array.isArray(dataPartida) && dataPartida.length >= 3) {
+    const tsChegada = Date.UTC(dataChegada[0], dataChegada[1] - 1, dataChegada[2], hChegada, mChegada);
+    const tsPartida = Date.UTC(dataPartida[0], dataPartida[1] - 1, dataPartida[2], hPartida, mPartida);
+    const diffMin = Math.round((tsPartida - tsChegada) / 60000);
+    return diffMin >= 0 ? diffMin : null;
+  }
+
+  let diffMin = (hPartida * 60 + mPartida) - (hChegada * 60 + mChegada);
+  if (diffMin < 0) diffMin += 1440; // transição da meia-noite
+  return diffMin;
+}
+
+/**
+ * Formata minutos em string amigável "Xh Ymin", "Xh" ou "Ymin".
+ * @param {number|null} minutos
+ * @returns {string|null}
+ */
+export function formatarTempoConexaoTexto(minutos) {
+  if (!Number.isFinite(minutos) || minutos <= 0) return null;
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (h > 0 && m > 0) return `${h}h ${m}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
 }
 
 /**
@@ -523,7 +671,7 @@ export function construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta =
  * do Google sem dependência de seletores DOM, atributos aria-label ou variações linguísticas de layout.
  *
  * @param {string} html
- * @returns {Array<{preco:number, cia:string, duracaoTexto:string, duracaoHoras:number, escalas:number, detalhesEscalas:string, tempoConexao:string|null, aeroportoConexao:string|null, bagagem:object}>}
+ * @returns {Array<{preco:number, cia:string, numeroVoo:string|null, horarioPartida:string|null, horarioChegada:string|null, duracaoTexto:string, duracaoHoras:number, escalas:number, detalhesEscalas:string, tempoConexao:string|null, tempoConexaoMinutos:number|null, aeroportoConexao:string|null, isBest:boolean, bagagem:object}>}
  */
 export function extrairVoosDoPayloadJs(html) {
   if (!html || typeof html !== 'string') return [];
@@ -555,14 +703,16 @@ export function extrairVoosDoPayloadJs(html) {
     }
 
     const payload = JSON.parse(dataStr);
-    if (!Array.isArray(payload) || payload.length < 4) return [];
+    if (!Array.isArray(payload) || payload.length < 3) return [];
 
     const groups = [];
-    if (Array.isArray(payload[2]) && payload[2][0]) groups.push(payload[2][0]);
-    if (Array.isArray(payload[3]) && payload[3][0]) groups.push(payload[3][0]);
+    if (Array.isArray(payload[2]) && payload[2][0]) groups.push({ list: payload[2][0], isBest: true });
+    if (Array.isArray(payload[3]) && payload[3][0]) groups.push({ list: payload[3][0], isBest: false });
 
     const voos = [];
-    for (const g of groups) {
+    for (const group of groups) {
+      const g = group.list;
+      const isBest = group.isBest;
       if (!Array.isArray(g)) continue;
       for (const k of g) {
         if (!Array.isArray(k) || k.length < 2) continue;
@@ -597,6 +747,11 @@ export function extrairVoosDoPayloadJs(html) {
         let detalhesEscalas = 'Direto';
         let aeroportoConexao = null;
         let tempoConexao = null;
+        let tempoConexaoMinutos = null;
+
+        const horarioPartida = legs.length > 0 ? formatarHorarioTrecho(legs[0]?.[8]) : null;
+        const horarioChegada = legs.length > 0 ? formatarHorarioTrecho(legs[legs.length - 1]?.[10]) : null;
+        const numeroVoo = legs.length > 0 ? extrairNumeroVooTrecho(legs[0]) : null;
 
         if (escalas > 0) {
           const conexoesIatas = [];
@@ -611,17 +766,30 @@ export function extrairVoosDoPayloadJs(html) {
           }
           aeroportoConexao = conexoesIatas[0] || null;
           detalhesEscalas = `${escalas} ${escalas === 1 ? 'parada' : 'paradas'}${aeroportoConexao ? ` em ${aeroportoConexao}` : ''}`;
+
+          if (legs.length >= 2) {
+            const minConexao = calcularTempoConexaoTrechos(legs[0], legs[1]);
+            if (minConexao !== null) {
+              tempoConexaoMinutos = minConexao;
+              tempoConexao = formatarTempoConexaoTexto(minConexao);
+            }
+          }
         }
 
         voos.push({
           preco,
           cia,
+          numeroVoo,
+          horarioPartida,
+          horarioChegada,
           duracaoTexto,
           duracaoHoras,
           escalas,
           detalhesEscalas,
           tempoConexao,
+          tempoConexaoMinutos,
           aeroportoConexao,
+          isBest,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
       }
@@ -630,6 +798,125 @@ export function extrairVoosDoPayloadJs(html) {
     return voos;
   } catch {
     return [];
+  }
+}
+
+/**
+ * Extrai dados de termômetro de preço (priceInsights) do modelo de dados interno do Google (script ds:1).
+ * Identifica o nível ('baixo' | 'tipico' | 'alto') e a faixa típica de tarifas (faixaMinima, faixaMaxima).
+ *
+ * @param {Array|string} payloadOuHtml
+ * @returns {{ nivel: 'baixo'|'tipico'|'alto', faixaMinima: number|null, faixaMaxima: number|null } | null}
+ */
+export function extrairPriceInsightsDoPayloadJs(payloadOuHtml) {
+  if (!payloadOuHtml) return null;
+
+  let payload = payloadOuHtml;
+
+  // Se receber string HTML, extrai o JSON da tag script ds:1
+  if (typeof payloadOuHtml === 'string') {
+    try {
+      const matchScript = payloadOuHtml.match(/<script[^>]*class=["'][^"']*ds:1[^"']*["'][^>]*>([\s\S]*?)<\/script>/i) ||
+                          payloadOuHtml.match(/AF_initDataCallback\s*\(\s*\{[^}]*?key:\s*['"]ds:1['"][\s\S]*?data:\s*(\[[\s\S]*?\])\s*\}\s*\)\s*;/i);
+      if (!matchScript) return null;
+
+      const scriptContent = matchScript[1] || matchScript[0];
+      const idxData = scriptContent.indexOf('data:');
+      if (idxData === -1) return null;
+
+      const resto = scriptContent.slice(idxData + 5).trim();
+      let dataStr;
+      const idxSc = resto.lastIndexOf(', sideChannel:');
+      const idxSc2 = resto.lastIndexOf(',sideChannel:');
+      const corte = Math.max(idxSc, idxSc2);
+      if (corte !== -1) {
+        dataStr = resto.slice(0, corte).trim();
+      } else {
+        const lastComma = resto.lastIndexOf(',');
+        dataStr = (lastComma !== -1 ? resto.slice(0, lastComma) : resto).trim();
+      }
+
+      if (!dataStr.startsWith('[') || dataStr.includes('errorHasStatus: true')) {
+        return null;
+      }
+
+      // Remove comentários de linha defensivamente antes de fazer o parse
+      const dataStrSemComentarios = dataStr.replace(/\/\/.*$/gm, '');
+      payload = JSON.parse(dataStrSemComentarios);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  if (!Array.isArray(payload) || payload.length < 3) return null;
+
+  try {
+    const normalizarNivel = (val) => {
+      if (val === null || val === undefined) return null;
+      if (typeof val === 'number') {
+        if (val === 1 || val === 0) return 'baixo';
+        if (val === 2) return 'tipico';
+        if (val === 3) return 'alto';
+      }
+      const str = String(val).toLowerCase().trim();
+      if (str === 'low' || str === 'baixo' || str === 'lowest') return 'baixo';
+      if (str === 'typical' || str === 'tipico' || str === 'médio' || str === 'medio') return 'tipico';
+      if (str === 'high' || str === 'alto' || str === 'highest') return 'alto';
+      return null;
+    };
+
+    const extrairParFaixa = (arr) => {
+      if (!Array.isArray(arr)) return null;
+      if (arr.length >= 2 && Number.isFinite(arr[0]) && Number.isFinite(arr[1]) && arr[0] > 0 && arr[1] > 0) {
+        const min = Math.round(Math.min(arr[0], arr[1]));
+        const max = Math.round(Math.max(arr[0], arr[1]));
+        return { min, max };
+      }
+      if (Array.isArray(arr[0]) && arr[0].length >= 2 && Number.isFinite(arr[0][0]) && Number.isFinite(arr[0][1])) {
+        const min = Math.round(Math.min(arr[0][0], arr[0][1]));
+        const max = Math.round(Math.max(arr[0][0], arr[0][1]));
+        return { min, max };
+      }
+      return null;
+    };
+
+    const candidatos = [payload[5], payload[4], payload[6]].filter(Boolean);
+
+    for (const bloco of candidatos) {
+      if (!Array.isArray(bloco)) continue;
+
+      let nivelEncontrado = null;
+      let faixaEncontrada = null;
+
+      for (const item of bloco) {
+        if (nivelEncontrado === null) {
+          const nivel = normalizarNivel(item);
+          if (nivel) {
+            nivelEncontrado = nivel;
+            continue;
+          }
+        }
+        if (faixaEncontrada === null) {
+          const faixa = extrairParFaixa(item);
+          if (faixa) {
+            faixaEncontrada = faixa;
+            continue;
+          }
+        }
+      }
+
+      if (nivelEncontrado !== null || faixaEncontrada !== null) {
+        return {
+          nivel: nivelEncontrado || 'tipico',
+          faixaMinima: faixaEncontrada ? faixaEncontrada.min : null,
+          faixaMaxima: faixaEncontrada ? faixaEncontrada.max : null
+        };
+      }
+    }
+
+    return null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -715,12 +1002,17 @@ export function extrairVoosDoHtml(html) {
     voos.push({
       preco,
       cia,
+      numeroVoo: null,
+      horarioPartida: null,
+      horarioChegada: null,
       duracaoTexto: durTexto,
       duracaoHoras,
       escalas: conexoes.escalas,
       detalhesEscalas: conexoes.detalhesEscalas,
       tempoConexao: conexoes.tempoConexao,
+      tempoConexaoMinutos: null,
       aeroportoConexao: conexoes.aeroportoConexao,
+      isBest: false,
       bagagem
     });
   }
@@ -741,12 +1033,17 @@ export function extrairVoosDoHtml(html) {
         voos.push({
           preco,
           cia,
+          numeroVoo: null,
+          horarioPartida: null,
+          horarioChegada: null,
           duracaoTexto: '12 h',
           duracaoHoras: 12.0,
           escalas: 0,
           detalhesEscalas: 'Direto',
           tempoConexao: null,
+          tempoConexaoMinutos: null,
           aeroportoConexao: null,
+          isBest: false,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
       }
@@ -768,12 +1065,17 @@ export function extrairVoosDoHtml(html) {
         voos.push({
           preco: num,
           cia,
+          numeroVoo: null,
+          horarioPartida: null,
+          horarioChegada: null,
           duracaoTexto: '12 h',
           duracaoHoras: 12.0,
           escalas: 0,
           detalhesEscalas: 'Direto',
           tempoConexao: null,
+          tempoConexaoMinutos: null,
           aeroportoConexao: null,
+          isBest: false,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
       }
@@ -823,7 +1125,35 @@ export class ScraplingProvider extends FlightProviderInterface {
    * @param {string} [params.curr]
    * @returns {Promise<{ok:boolean, encontrouVoos?:boolean, oferta?:object, erro?:boolean, mensagemErro?:string}>}
    */
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
+  async buscarOfertas({
+    origemCod,
+    destinoCod,
+    dataIda,
+    dataVolta = null,
+    duracaoMaxHoras = 999,
+    cabine = 'economy',
+    adultos = 1,
+    moeda = 'BRL',
+    curr = null,
+    criancas = 0,
+    bebes = 0,
+    infantsInSeat = null,
+    infantsOnLap = null,
+    maxStops = null,
+    carryOnBags = null,
+    checkedBags = null,
+    maxPrice = null,
+    hideSeparateAndSelfTransfer = null,
+    excludeBasicEconomy = null,
+    airlines = null,
+    connectingAirports = null,
+    minLayoverMinutes = null,
+    maxLayoverMinutes = null,
+    earliestDepartureHour = null,
+    latestDepartureHour = null,
+    earliestArrivalHour = null,
+    latestArrivalHour = null
+  }) {
     // Validação de entrada defensiva
     if (!origemCod || !destinoCod || !dataIda) {
       return { ok: false, erro: true, mensagemErro: 'ScraplingProvider: parâmetros de busca incompletos (origemCod, destinoCod e dataIda são obrigatórios).' };
@@ -831,12 +1161,70 @@ export class ScraplingProvider extends FlightProviderInterface {
 
     const moedaEfetiva = (curr || moeda || 'BRL').trim().toUpperCase();
 
-    // Constrói URL Cheapest com distinção One-Way vs Round-Trip
-    const { url: urlCheapest, tipoViagem } = construirUrlCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, moedaEfetiva);
+    // Constrói URL Cheapest com distinção One-Way vs Round-Trip e propagação de filtros avançados
+    const { url: urlCheapest, tipoViagem } = construirUrlCheapest(
+      origemCod,
+      destinoCod,
+      dataIda,
+      dataVolta,
+      duracaoMaxHoras,
+      moedaEfetiva,
+      {
+        adultos,
+        criancas,
+        bebes,
+        infantsInSeat,
+        infantsOnLap,
+        classeViagem: cabine,
+        maxStops,
+        carryOnBags,
+        checkedBags,
+        maxPrice,
+        hideSeparateAndSelfTransfer,
+        excludeBasicEconomy,
+        airlines,
+        connectingAirports,
+        minLayoverMinutes,
+        maxLayoverMinutes,
+        earliestDepartureHour,
+        latestDepartureHour,
+        earliestArrivalHour,
+        latestArrivalHour
+      }
+    );
 
-    // Link canônico de fallback para exibição (sem tfs)
+    // Link canônico de fallback para exibição
     const linkCanônico = dataIda
-      ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaEfetiva) || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva)
+      ? gerarLinkGoogleFlightsCheapest(
+          origemCod,
+          destinoCod,
+          dataIda,
+          dataVolta,
+          duracaoMaxHoras,
+          adultos,
+          criancas,
+          cabine,
+          moedaEfetiva,
+          {
+            bebes,
+            infantsInSeat,
+            infantsOnLap,
+            maxStops,
+            carryOnBags,
+            checkedBags,
+            maxPrice,
+            hideSeparateAndSelfTransfer,
+            excludeBasicEconomy,
+            airlines,
+            connectingAirports,
+            minLayoverMinutes,
+            maxLayoverMinutes,
+            earliestDepartureHour,
+            latestDepartureHour,
+            earliestArrivalHour,
+            latestArrivalHour
+          }
+        ) || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva)
       : gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaEfetiva);
 
     let ultimoErro = 'Nenhuma tentativa realizada';
@@ -958,6 +1346,51 @@ export class ScraplingProvider extends FlightProviderInterface {
 
         const detalhesVoo = partesDetalhes.join(' | ');
 
+        // Top 3 ofertas estruturadas
+        const topOfertas = listaFinal.slice(0, 3).map(v => ({
+          preco: v.preco,
+          cia: v.cia,
+          numeroVoo: v.numeroVoo ?? null,
+          horarioPartida: v.horarioPartida ?? null,
+          horarioChegada: v.horarioChegada ?? null,
+          duracaoTexto: v.duracaoTexto,
+          duracaoHoras: v.duracaoHoras,
+          escalas: v.escalas ?? 0,
+          detalhesEscalas: v.detalhesEscalas || 'Direto',
+          tempoConexao: v.tempoConexao ?? null,
+          aeroportoConexao: v.aeroportoConexao ?? null,
+          isBest: Boolean(v.isBest)
+        }));
+
+        // Comparativo "Mais Barato vs. Melhor Voo Direto/Rápido":
+        // Se a melhorOferta tiver conexão (escalas > 0), busca a opção direta mais barata
+        // ou uma opção significativamente mais rápida.
+        let melhorOpcaoDiretaOuRapida = null;
+        if (melhorOferta.escalas > 0) {
+          const opcaoDireta = listaFinal.find(v => v.escalas === 0);
+          const opcaoCandidata = opcaoDireta || listaFinal.find(v => v.duracaoHoras <= melhorOferta.duracaoHoras - 1.0);
+          if (opcaoCandidata && (opcaoCandidata.preco !== melhorOferta.preco || opcaoCandidata.duracaoHoras !== melhorOferta.duracaoHoras)) {
+            const diferencaPreco = opcaoCandidata.preco - melhorOferta.preco;
+            const economiaHoras = Math.round((melhorOferta.duracaoHoras - opcaoCandidata.duracaoHoras) * 10) / 10;
+            melhorOpcaoDiretaOuRapida = {
+              preco: opcaoCandidata.preco,
+              cia: opcaoCandidata.cia,
+              numeroVoo: opcaoCandidata.numeroVoo ?? null,
+              horarioPartida: opcaoCandidata.horarioPartida ?? null,
+              horarioChegada: opcaoCandidata.horarioChegada ?? null,
+              duracaoTexto: opcaoCandidata.duracaoTexto,
+              duracaoHoras: opcaoCandidata.duracaoHoras,
+              escalas: opcaoCandidata.escalas ?? 0,
+              detalhesEscalas: opcaoCandidata.detalhesEscalas || 'Direto',
+              tempoConexao: opcaoCandidata.tempoConexao ?? null,
+              aeroportoConexao: opcaoCandidata.aeroportoConexao ?? null,
+              isBest: Boolean(opcaoCandidata.isBest),
+              diferencaPreco,
+              economiaHoras
+            };
+          }
+        }
+
         return {
           ok: true,
           encontrouVoos: true,
@@ -978,8 +1411,14 @@ export class ScraplingProvider extends FlightProviderInterface {
             detalhesEscalas: melhorOferta.detalhesEscalas || 'Direto',
             tempoConexao: melhorOferta.tempoConexao || null,
             aeroportoConexao: melhorOferta.aeroportoConexao || null,
+            horarioPartida: melhorOferta.horarioPartida || null,
+            horarioChegada: melhorOferta.horarioChegada || null,
+            numeroVoo: melhorOferta.numeroVoo || null,
             bagagem: melhorOferta.bagagem || null,
             cheapestTabAtivada: ehCheapestTab,
+            topOfertas,
+            melhorOpcaoDiretaOuRapida,
+            priceInsights: extrairPriceInsightsDoPayloadJs(html) || null,
             amostraVoos: voosDetalhados.slice(0, 10).map(v =>
               `${v.cia}: R$ ${v.preco} (${v.duracaoTexto}, ${v.detalhesEscalas || 'Direto'}${v.bagagem?.texto ? ', ' + v.bagagem.texto : ''})`
             )

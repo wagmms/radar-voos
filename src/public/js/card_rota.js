@@ -1,30 +1,12 @@
 /**
- * RADAR DE VOOS - COCKPIT PWA: CARD DE ROTA & AÇÕES
- * Renderização modular de cards de voos com botão de cópia rápida do Google Flights,
- * sparklines em SVG puro, arcos geodésicos ortodrômicos e badges contextuais.
+ * Módulo Card de Rota (Cockpit PWA)
+ * Renderização Vanilla JS moderna com design system Aero Dark Mode.
+ * Suporta consumo dual: navegador (ESM) e Node.js (node:test).
  */
 
-import { renderizarSparkline } from './sparkline.js';
-import { renderizarArcoVooSvg } from './geo_routes.js';
-import {
-  extrairInfoTarifaEspecial,
-  renderizarTagTarifaEspecial,
-  renderizarBannerTarifaEspecial
-} from './tarifa_tags.js';
-import {
-  renderizarWeatherBadge
-} from './clima_filtro.js';
-import {
-  extrairInfoConexao,
-  renderizarBadgeConexao,
-  renderizarBannerStopover
-} from './conexao_badges.js';
-
-/**
- * Escapa strings para inserção segura no DOM / atributos HTML.
- */
-export function escapeHtml(str) {
-  return String(str ?? '')
+export function escapeHtml(texto) {
+  if (texto === null || texto === undefined) return '';
+  return String(texto)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -32,466 +14,388 @@ export function escapeHtml(str) {
     .replace(/'/g, '&#39;');
 }
 
-/**
- * Formata data no padrão brasileiro DD/MM/AAAA.
- */
-export function formatarDataBr(isoStr) {
-  if (!isoStr) return '-';
-  const partes = String(isoStr).split('-');
-  if (partes.length === 3) return `${partes[2]}/${partes[1]}/${partes[0]}`;
-  return String(isoStr);
+export function formatarPreco(valor, moeda = 'BRL') {
+  const num = Number(valor);
+  if (!Number.isFinite(num)) return '—';
+  return num.toLocaleString('pt-BR', {
+    minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2
+  });
 }
 
 /**
- * Normaliza código IATA ou KGMID para badge de destino.
+ * Formata data ISO ("YYYY-MM-DD") para "DD/MM" sem desvio de timezone UTC-3
  */
-export function formatarCodigoBadge(cod) {
-  if (!cod) return 'DEST';
-  if (cod === '/m/06_1') return 'AMSUL';
-  if (cod === '/m/02j9z') return 'EUROPA';
-  if (cod === '/m/02j1x') return 'ÁSIA';
-  if (cod === '/m/02_286') return 'AMNORTE';
-  if (cod === '/m/056_y') return 'AMCENTRAL';
-  if (cod === '/m/0164v') return 'ÁFRICA';
-  if (cod === '/m/05h_p') return 'OCEANIA';
-  return String(cod).toUpperCase();
+export function formatarDiaMes(dataIso) {
+  if (!dataIso || typeof dataIso !== 'string') return '';
+  const partes = dataIso.split('-');
+  if (partes.length === 3) {
+    const [, mes, dia] = partes;
+    return `${dia.slice(0, 2)}/${mes}`;
+  }
+  return dataIso;
 }
 
 /**
- * Copia o link do Google Flights para a área de transferência com feedback visual toast.
- * Suporta navigator.clipboard.writeText com fallback gracioso e opções injetáveis para testes.
- *
- * @param {Event|null} event Evento de clique
- * @param {string} link URL a ser copiada
- * @param {object} options Opções com callbacks para teste ou desacoplamento
- * @returns {Promise<boolean>}
+ * Validação estrita de protocolo para prevenção contra injeção de links maliciosos (javascript:, data:, etc.)
  */
-export async function copiarLinkGoogleFlights(event, link, options = {}) {
-  if (event && typeof event.stopPropagation === 'function') {
-    event.stopPropagation();
-  }
-
-  if (typeof options.vibrar === 'function') {
-    options.vibrar();
-  } else if (typeof window !== 'undefined' && typeof window.vibrarAoTocar === 'function') {
-    window.vibrarAoTocar();
-  }
-
-  const fnToast = options.mostrarToast ||
-    (typeof window !== 'undefined' && typeof window.mostrarToast === 'function' ? window.mostrarToast : null);
-
-  if (!link || link === '#' || typeof link !== 'string' || link.trim() === '') {
-    if (fnToast) fnToast('Link não disponível para cópia', true);
-    return false;
-  }
-
-  try {
-    let copiado = false;
-    const clipApi = options.clipboard || (typeof navigator !== 'undefined' ? navigator.clipboard : null);
-
-    if (clipApi && typeof clipApi.writeText === 'function') {
-      await clipApi.writeText(link);
-      copiado = true;
-    } else if (typeof document !== 'undefined' && typeof document.createElement === 'function') {
-      const textarea = document.createElement('textarea');
-      textarea.value = link;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      copiado = document.execCommand ? document.execCommand('copy') : false;
-      document.body.removeChild(textarea);
-    }
-
-    if (copiado) {
-      if (fnToast) fnToast('Link copiado! ✓', false, 2000);
-      return true;
-    } else {
-      if (fnToast) fnToast('Erro ao copiar link', true);
-      return false;
-    }
-  } catch (err) {
-    if (fnToast) fnToast('Erro ao copiar link', true);
-    return false;
-  }
-}
-
-/** Cotações de referência R$/milheiro por programa de fidelidade */
-export const COTACOES_MILHA_MILHEIRO = {
-  smiles:   17.50,
-  latam:    24.00,
-  latampass: 24.00,
-  livelo:   35.00,
-  azul:     20.00,
-  tudoazul: 20.00,
-  iberia:   65.00,
-  tap:      32.00
-};
-
-/**
- * Calcula a estimativa de milhas necessárias para emitir o voo pelo preço atual.
- *
- * @param {number|null} precoAtual Preço atual em BRL
- * @param {number|null} paridadeMilheiro Cotação R$ por milheiro (ex: 17.50 → 1.000 milhas = R$ 17,50)
- * @param {string} [programa='smiles'] Chave do programa de fidelidade (para label)
- * @returns {{ milhas: number, programa: string, cotacaoMilheiro: number } | null}
- *   Retorna null quando preço ou paridade são inválidos.
- */
-export function calcularMilhasEstimadas(precoAtual, paridadeMilheiro, programa = 'smiles') {
-  const preco = typeof precoAtual === 'number' ? precoAtual : parseFloat(precoAtual);
-  if (!Number.isFinite(preco) || preco <= 0) return null;
-
-  const progKey = String(programa || 'smiles').toLowerCase().trim();
-  const cotacaoPadrao = COTACOES_MILHA_MILHEIRO[progKey] || COTACOES_MILHA_MILHEIRO.smiles;
-  const cotacao = typeof paridadeMilheiro === 'number' && Number.isFinite(paridadeMilheiro) && paridadeMilheiro > 0
-    ? paridadeMilheiro
-    : cotacaoPadrao;
-
-  // milhas = (preço / R$-por-milheiro) * 1.000
-  const milhas = Math.ceil((preco / cotacao) * 1000);
-  return { milhas, programa: progKey, cotacaoMilheiro: cotacao };
+export function ehUrlSegura(url) {
+  if (typeof url !== 'string') return false;
+  const limpa = url.trim().toLowerCase();
+  return limpa.startsWith('https://') || limpa.startsWith('http://');
 }
 
 /**
- * Renderiza a badge visual de milhas estimadas para o card de rota,
- * com widget de edição inline de paridade_milhas e programa_milhas.
- * O formulário inline é exibido ao clicar no botão ✏️ e permite
- * persistência imediata via PATCH /api/rotas/:id/milhas.
- *
- * @param {object} rota Dados da rota
- * @returns {string} HTML da badge com editor inline ou ''
+ * Renderiza badge de meta / teto em R$
+ * Destaca visualmente em verde/sucesso quando o menor preço atual estiver abaixo ou igual à meta
  */
-export function renderizarBadgeMilhas(rota) {
-  if (!rota || !rota.id) return '';
-
-  const paridade = rota.paridade_milhas ?? null;
-  const programa = String(rota.programa_milhas || 'smiles').toLowerCase().trim();
-
-  // Opções de programa disponíveis
-  const programasDisponiveis = Object.keys(COTACOES_MILHA_MILHEIRO);
-
-  // Monta opções do <select>
-  const opcoesSelect = programasDisponiveis.map(prog => {
-    const label = prog.charAt(0).toUpperCase() + prog.slice(1);
-    const selected = prog === programa ? ' selected' : '';
-    return `<option value="${escapeHtml(prog)}"${selected}>${escapeHtml(label)}</option>`;
-  }).join('');
-
-  // Calcula badge de estimativa quando há preço
-  let badgeEstimativaHtml = '';
-  if (rota.preco_atual && rota.preco_atual > 0) {
-    const resultado = calcularMilhasEstimadas(rota.preco_atual, paridade, programa);
-    if (resultado) {
-      const milhasFormatadas = resultado.milhas.toLocaleString('pt-BR');
-      const nomePrograma = resultado.programa.charAt(0).toUpperCase() + resultado.programa.slice(1);
-      const cotacaoFormatada = resultado.cotacaoMilheiro.toFixed(2).replace('.', ',');
-      badgeEstimativaHtml = `
-        <div class="milhas-estimativa-row" title="Estimativa p/ emissão em milhas (R$ ${cotacaoFormatada}/milheiro ${nomePrograma})">
-          <span class="milhas-icon">✈️🏆</span>
-          <span class="milhas-valor">~${milhasFormatadas} milhas</span>
-          <span class="milhas-programa">${nomePrograma}</span>
-        </div>`;
-    }
+export function renderizarBadgeMeta(rota) {
+  if (!rota || rota.preco_alvo === null || rota.preco_alvo === undefined) {
+    return '';
   }
 
-  const paridadeFormatada = paridade ? paridade.toFixed(2).replace('.', ',') : '';
-  const paridadePlaceholder = COTACOES_MILHA_MILHEIRO[programa]
-    ? COTACOES_MILHA_MILHEIRO[programa].toFixed(2).replace('.', ',')
-    : '17,50';
+  const precoAlvo = Number(rota.preco_alvo);
+  const precoAtual = Number(rota.preco_atual);
 
-  return `<div class="badge-milhas-estimadas" id="badge-milhas-${escapeHtml(String(rota.id))}">
-    ${badgeEstimativaHtml}
-    <div class="milhas-editor-toggle">
-      <button
-        class="btn-milhas-editar"
-        onclick="toggleMilhasEditor(${rota.id})"
-        title="${paridade ? 'Editar cotação de milhas (R$/' + paridadeFormatada + '/milheiro)' : 'Configurar cotação de milhas'}"
-        aria-label="Editar cotação de milhas"
-        type="button"
-      >${paridade ? `✏️ R$&nbsp;${paridadeFormatada}` : '✏️ Configurar milhas'}</button>
-    </div>
-    <div class="milhas-editor-form" id="milhas-form-${escapeHtml(String(rota.id))}" style="display:none;" role="form" aria-label="Editor de cotação de milhas">
-      <label class="milhas-form-label" for="milhas-prog-${escapeHtml(String(rota.id))}">Programa</label>
-      <select
-        id="milhas-prog-${escapeHtml(String(rota.id))}"
-        class="milhas-select"
-        onchange="atualizarPlaceholderMilhas(${rota.id})"
-        aria-label="Programa de milhas"
-      >${opcoesSelect}</select>
-      <label class="milhas-form-label" for="milhas-cot-${escapeHtml(String(rota.id))}">R$/milheiro</label>
-      <input
-        type="number"
-        id="milhas-cot-${escapeHtml(String(rota.id))}"
-        class="milhas-input-cot"
-        value="${escapeHtml(paridadeFormatada.replace(',', '.'))}"
-        placeholder="${escapeHtml(paridadePlaceholder.replace(',', '.'))}"
-        min="1"
-        max="999"
-        step="0.01"
-        aria-label="Cotação em reais por milheiro"
-      />
-      <div class="milhas-form-actions">
-        <button
-          class="btn-milhas-salvar"
-          onclick="salvarMilhasInline(${rota.id})"
-          type="button"
-          aria-label="Salvar cotação de milhas"
-        >✓ Salvar</button>
-        <button
-          class="btn-milhas-cancelar"
-          onclick="toggleMilhasEditor(${rota.id})"
-          type="button"
-          aria-label="Cancelar edição de milhas"
-        >✕</button>
-      </div>
-    </div>
-  </div>`;
+  if (Number.isFinite(precoAtual) && precoAtual > 0 && precoAtual <= precoAlvo) {
+    const economia = precoAlvo - precoAtual;
+    const econTexto = economia > 0 ? ` (Economia de R$ ${formatarPreco(economia)})` : ' (No teto)';
+    return `<span class="badge badge-meta badge-meta-batida" data-testid="badge-meta-batida">🎯 Meta Batida • R$ ${formatarPreco(precoAlvo)}${escapeHtml(econTexto)}</span>`;
+  }
+
+  return `<span class="badge badge-meta" data-testid="badge-meta">🎯 Meta: R$ ${formatarPreco(precoAlvo)}</span>`;
 }
 
 /**
- * Salva paridade_milhas e programa_milhas via PATCH /api/rotas/:id/milhas.
- * Deve ser exposta em window.salvarMilhasInline pelo app.js.
- *
- * @param {number} rotaId ID da rota
- * @param {object} options Opções injetáveis para testes (fetch, mostrarToast, document)
- * @returns {Promise<boolean>}
+ * Renderiza badge semântica do Termômetro Google (Preço Baixo / Típico / Alto)
  */
-export async function salvarMilhasInline(rotaId, options = {}) {
-  const doc = options.document || (typeof document !== 'undefined' ? document : null);
-  const fnFetch = options.fetch || (typeof fetch !== 'undefined' ? fetch : null);
-  const fnToast = options.mostrarToast ||
-    (typeof window !== 'undefined' && typeof window.mostrarToast === 'function' ? window.mostrarToast : null);
-  const fnRecarregar = options.recarregarDados ||
-    (typeof window !== 'undefined' && typeof window.carregarDadosCompletos === 'function' ? window.carregarDadosCompletos : null);
+export function renderizarBadgeTermometro(priceInsights) {
+  if (!priceInsights || typeof priceInsights !== 'object') return '';
 
-  if (!doc || !fnFetch) return false;
+  const nivelRaw = String(priceInsights.nivel || '').toLowerCase().trim();
+  if (!nivelRaw) return '';
 
-  const selectEl = doc.getElementById(`milhas-prog-${rotaId}`);
-  const inputEl = doc.getElementById(`milhas-cot-${rotaId}`);
+  let nivelClasse = '';
+  let nivelLabel = '';
 
-  if (!selectEl || !inputEl) {
-    if (fnToast) fnToast('Erro: formulário de milhas não encontrado', true);
-    return false;
+  if (nivelRaw === 'baixo' || nivelRaw === 'low') {
+    nivelClasse = 'badge-termometro-baixo';
+    nivelLabel = '🟢 Preço Baixo';
+  } else if (nivelRaw === 'tipico' || nivelRaw === 'typical') {
+    nivelClasse = 'badge-termometro-tipico';
+    nivelLabel = '🟡 Preço Típico';
+  } else if (nivelRaw === 'alto' || nivelRaw === 'high') {
+    nivelClasse = 'badge-termometro-alto';
+    nivelLabel = '🔴 Preço Alto';
+  } else {
+    return '';
   }
 
-  const programa = selectEl.value.trim().toLowerCase();
-  const paridadeRaw = parseFloat(String(inputEl.value).replace(',', '.'));
-
-  // Validação visual defensiva
-  if (!Number.isFinite(paridadeRaw) || paridadeRaw <= 0) {
-    inputEl.classList.add('milhas-input-erro');
-    if (fnToast) fnToast('Cotação inválida. Informe um valor positivo (ex: 17.50)', true);
-    return false;
+  const min = Number(priceInsights.faixaMinima ?? priceInsights.faixa_minima);
+  const max = Number(priceInsights.faixaMaxima ?? priceInsights.faixa_maxima);
+  let faixaTexto = '';
+  if (Number.isFinite(min) && min > 0 && Number.isFinite(max) && max > 0) {
+    faixaTexto = ` (R$ ${formatarPreco(min)} – R$ ${formatarPreco(max)})`;
   }
-  inputEl.classList.remove('milhas-input-erro');
 
-  try {
-    const res = await fnFetch(`/api/rotas/${rotaId}/milhas`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paridade_milhas: paridadeRaw, programa_milhas: programa })
-    });
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      if (fnToast) fnToast(`Erro ao salvar: ${data.erro || 'Falha no servidor'}`, true);
-      return false;
-    }
-
-    if (fnToast) fnToast('Cotação de milhas salva! ✓', false, 2000);
-    // Fecha o editor inline e recarrega cards
-    const formEl = doc.getElementById(`milhas-form-${rotaId}`);
-    if (formEl) formEl.style.display = 'none';
-    if (fnRecarregar) fnRecarregar(true);
-    return true;
-  } catch (_) {
-    if (fnToast) fnToast('Falha na comunicação com o servidor', true);
-    return false;
-  }
+  return `<span class="badge badge-termometro ${nivelClasse}" data-testid="badge-termometro">${nivelLabel}${escapeHtml(faixaTexto)}</span>`;
 }
 
 /**
- * Cria a marcação HTML completa de um card de rota para o Cockpit PWA.
- *
- * @param {object} rota Dados da rota monitorada
- * @returns {string} Fragmento HTML do card
+ * Renderiza badge de janela flexível ativa (±1d a ±3d)
  */
-export function criarCardRota(rota) {
+export function renderizarBadgeJanelaFlex(diasFlex) {
+  const num = Number(diasFlex);
+  if (!Number.isFinite(num) || num <= 0) return '';
+  return `<span class="badge badge-filtro badge-janela-flex" data-testid="badge-janela-flex">📅 ±${num}d</span>`;
+}
+
+/**
+ * Renderiza badges de filtros ativos fast-flights (paradas, bagagem)
+ */
+export function renderizarBadgesFiltros(rota) {
   if (!rota) return '';
+  const badges = [];
 
-  const precoFormatado = rota.preco_atual && rota.preco_atual > 0
-    ? `R$ ${rota.preco_atual.toFixed(2).replace('.', ',')}`
-    : 'Aguardando';
-
-  const menorHistorico = rota.menor_preco_historico ? `R$ ${rota.menor_preco_historico.toFixed(2).replace('.', ',')}` : '-';
-
-  const classes = [];
-  let termoClass = '';
-  if (rota.sem_data === 1) {
-    classes.push('status-flexivel');
-  }
-  if (rota.preco_atual && rota.preco_alvo && rota.preco_atual <= rota.preco_alvo) {
-    classes.push('status-meta');
-    termoClass = 'low';
-  } else if (rota.termometro && rota.termometro.includes('Caro')) {
-    classes.push('status-alta');
-    termoClass = 'high';
-  } else if (rota.termometro && (rota.termometro.includes('Super Barato') || rota.termometro.includes('Excelente'))) {
-    classes.push('status-promo');
-    termoClass = 'low';
-  }
-  const cardClass = classes.join(' ');
-
-  const ehSoIda =
-    rota.tipo_viagem === 'one_way' ||
-    rota.tipo === 'one_way' ||
-    (typeof rota.data_volta === 'string' && (rota.data_volta.toLowerCase().includes('só ida') || rota.data_volta.toLowerCase().includes('so ida'))) ||
-    (!rota.data_volta && (!rota.dias_estadia || rota.sem_data !== 1));
-
-  const tipoViagem = rota.sem_data === 1
-    ? (ehSoIda ? '🗓️ FLEXÍVEL • SÓ IDA' : `🗓️ FLEXÍVEL • IDA E VOLTA (${rota.dias_estadia || 10}d)`)
-    : (ehSoIda ? 'SÓ IDA' : 'IDA E VOLTA');
-  const flexTag = rota.flexibilidade_dias && rota.flexibilidade_dias > 0 && rota.sem_data !== 1 ? ` • ±${rota.flexibilidade_dias}d FLEX` : '';
-  const cabineTag = rota.cabine && rota.cabine !== 'economy' ? ` • ${rota.cabine.toUpperCase()}` : '';
-  const arcoSvg = renderizarArcoVooSvg(rota.codigo_origem, rota.codigo_destino, 150, 36);
-  const sparklineSvg = renderizarSparkline(rota.historico_recente || [], { width: 110, height: 32 });
-
-  const infoTarifa = extrairInfoTarifaEspecial(rota);
-  const tagTarifaHtml = renderizarTagTarifaEspecial(infoTarifa);
-  const bannerTarifaHtml = renderizarBannerTarifaEspecial(infoTarifa);
-
-  const infoConexao = extrairInfoConexao(rota);
-  const badgeConexaoHtml = renderizarBadgeConexao(infoConexao);
-  const bannerStopoverHtml = renderizarBannerStopover(infoConexao, rota.dica_stopover);
-
-  let melhorOpcaoFlexivel = null;
-  if (rota.melhor_opcao_flexivel) {
-    try {
-      melhorOpcaoFlexivel = typeof rota.melhor_opcao_flexivel === 'string'
-        ? JSON.parse(rota.melhor_opcao_flexivel)
-        : rota.melhor_opcao_flexivel;
-    } catch (_) {}
+  // Armadilha de falsy evitada: max_stops === 0 é estritamente voo direto
+  if (rota.max_stops !== null && rota.max_stops !== undefined) {
+    const stops = Number(rota.max_stops);
+    if (stops === 0) {
+      badges.push('<span class="badge badge-filtro" data-testid="badge-direto">✈️ Voo Direto</span>');
+    } else if (stops === 1) {
+      badges.push('<span class="badge badge-filtro" data-testid="badge-1-parada">1 Parada máx.</span>');
+    } else if (stops > 1) {
+      badges.push(`<span class="badge badge-filtro">Máx. ${stops} paradas</span>`);
+    }
   }
 
-  const linkVoo = rota.link_google_flights || '#';
+  if (rota.carry_on_bags !== null && rota.carry_on_bags !== undefined && Number(rota.carry_on_bags) > 0) {
+    badges.push('<span class="badge badge-filtro" data-testid="badge-mala-mao">🧳 Mala de mão inclusa</span>');
+  }
+
+  if (rota.checked_bags !== null && rota.checked_bags !== undefined && Number(rota.checked_bags) > 0) {
+    badges.push('<span class="badge badge-filtro">🧳 Mala despachada</span>');
+  }
+
+  return badges.join(' ');
+}
+
+/**
+ * Renderiza linha de horários e voo quando disponíveis
+ */
+export function renderizarLinhaHorarios(rota) {
+  if (!rota) return '';
+  const partida = rota.horario_partida || (rota.oferta && rota.oferta.horarioPartida);
+  const chegada = rota.horario_chegada || (rota.oferta && rota.oferta.horarioChegada);
+  const voo = rota.numero_voo || (rota.oferta && rota.oferta.numeroVoo);
+  const conexao = rota.tempo_conexao || (rota.oferta && rota.oferta.tempoConexao);
+
+  if (!partida || !chegada) return '';
+
+  const vooStr = voo ? ` • <span class="voo-tag">${escapeHtml(voo)}</span>` : '';
+  const conexaoStr = conexao ? ` • <span class="conexao-tag">⏱️ Espera: ${escapeHtml(conexao)}</span>` : '';
 
   return `
-      <div class="flight-card ${cardClass}" id="card-rota-${rota.id}">
-        <div class="card-route-header">
-          <div class="route-airports">
-            <span class="airport-badge">${escapeHtml(rota.codigo_origem || 'SAO')}</span>
-            <span class="route-arrow">➔</span>
-            <span class="airport-badge">${escapeHtml(formatarCodigoBadge(rota.codigo_destino))}</span>
-            <div class="city-names">
-              ${escapeHtml(rota.origem)} ➔ ${escapeHtml(rota.destino)}
-              ${rota.destino_real && rota.destino_real !== rota.destino && rota.destino_real !== rota.codigo_destino ? `<span style="display:block; font-size:0.75rem; color:#10b981; font-weight:600; margin-top:2px;">📍 ${escapeHtml(rota.destino_real)}</span>` : ''}
-            </div>
-          </div>
-          <div class="card-header-tags">
-            <span class="trip-type-tag ${rota.sem_data === 1 ? 'tag-flexivel' : ''}">${tipoViagem}${flexTag}${cabineTag}</span>
-            ${badgeConexaoHtml}
-            ${tagTarifaHtml}
-          </div>
-        </div>
+    <div class="card-horarios" data-testid="card-horarios">
+      <span class="horario-icon">🕒</span>
+      <span class="horario-texto">${escapeHtml(partida)} ➔ ${escapeHtml(chegada)}</span>
+      ${vooStr}
+      ${conexaoStr}
+    </div>
+  `.trim();
+}
 
-        <!-- Arco Geodésico Great Circle (remotion-maps) -->
-        ${arcoSvg}
+/**
+ * Renderiza trade-off entre voo mais barato e melhor opção direta/rápida
+ */
+export function renderizarTradeOff(rota) {
+  if (!rota) return '';
+  const opcao = rota.melhor_opcao_direta_rapida || (rota.oferta && rota.oferta.melhorOpcaoDiretaOuRapida);
+  if (!opcao || typeof opcao !== 'object') return '';
 
-        <div class="card-dates-box">
-          ${rota.sem_data === 1 ? `
-            <div>🗓️ Período: <strong>${rota.preco_atual ? 'Melhor: ' + formatarDataBr(rota.data_ida) + (rota.data_volta && !ehSoIda ? ' a ' + formatarDataBr(rota.data_volta) : '') : 'Qualquer data (Flexível)'}</strong></div>
-            <div>⏱️ Modalidade: <strong>${ehSoIda ? '➡️ Apenas Ida' : '🔄 Ida e Volta (' + (rota.dias_estadia || 10) + 'd estadia)'}</strong></div>
-          ` : `
-            <div>📅 Ida: <strong>${formatarDataBr(rota.data_ida)}</strong></div>
-            <div>${!ehSoIda && rota.data_volta ? `Volta: <strong>${formatarDataBr(rota.data_volta)}</strong>` : '➡️ Apenas Ida'}</div>
-          `}
-        </div>
+  const preco = Number(opcao.preco) || 0;
+  const difPreco = opcao.diferencaPreco !== undefined ? Number(opcao.diferencaPreco) : 0;
+  const econHoras = opcao.economiaHoras !== undefined ? Number(opcao.economiaHoras) : 0;
+  const difTexto = difPreco >= 0 ? `+R$ ${formatarPreco(difPreco)}` : `-R$ ${formatarPreco(Math.abs(difPreco))}`;
 
-        ${melhorOpcaoFlexivel && melhorOpcaoFlexivel.preco ? `
-          <div class="flex-saving-badge">
-            <div>
-              ✨ <strong>${melhorOpcaoFlexivel.modo === 'sem_data' ? 'Menor Tarifa do Período' : 'Janela Flexível'} (${ehSoIda ? 'Apenas Ida' : 'Ida e Volta'}):</strong> ${formatarDataBr(melhorOpcaoFlexivel.data_ida)}${melhorOpcaoFlexivel.data_volta && !ehSoIda ? ' a ' + formatarDataBr(melhorOpcaoFlexivel.data_volta) : ''}
-              (R$ ${melhorOpcaoFlexivel.preco.toFixed(2).replace('.', ',')})
-            </div>
-            ${melhorOpcaoFlexivel.economia && melhorOpcaoFlexivel.economia > 0 ? `
-              <span class="badge-saving">Economia de R$ ${melhorOpcaoFlexivel.economia.toFixed(2).replace('.', ',')}</span>
-            ` : ''}
-          </div>
-        ` : ''}
-
-        ${renderizarWeatherBadge(rota)}
-
-        <div class="flight-specs">
-          ${rota.detalhes_voo && rota.detalhes_voo !== '-' ? `✈️ ${escapeHtml(rota.detalhes_voo)}` : '⏱️ Duração máx: ' + (rota.duracao_max_horas || 16) + 'h'}
-        </div>
-
-        ${bannerTarifaHtml}
-
-        <div class="card-pricing-block">
-          <div class="price-main">
-            <span class="price-label">Preço Atual</span>
-            <span class="price-amount">${precoFormatado}</span>
-          </div>
-          <!-- Badge de Milhas Estimadas (paridade configurada da rota) -->
-          ${renderizarBadgeMilhas(rota)}
-          <!-- Sparkline de Tendência (smart-charts) -->
-          <div class="sparkline-wrap">
-            ${sparklineSvg}
-            <span style="font-size:0.7rem; color:var(--text-dim); margin-top:2px;">Recorde: ${menorHistorico}</span>
-          </div>
-        </div>
-
-        <!-- Teto / Preço Alvo Monitorado com Escopo Claro -->
-        <div class="card-teto-row">
-          <span class="card-teto-label">🎯 Teto Monitorado:</span>
-          <span class="card-teto-val">
-            ${rota.preco_alvo ? `<strong>R$ ${Number(rota.preco_alvo).toFixed(2).replace('.', ',')}</strong> <span class="teto-scope-pill ${ehSoIda ? 'pill-oneway' : 'pill-roundtrip'}">${ehSoIda ? 'Apenas Ida' : 'Ida e Volta'}</span>` : '<span class="teto-sem-meta">Sem teto definido</span>'}
-          </span>
-        </div>
-
-        ${rota.termometro ? `
-          <div class="thermometer-tag ${termoClass}">
-            ${escapeHtml(rota.termometro)}
-            ${rota.variacao_texto && rota.variacao_texto !== '-' ? `• ${escapeHtml(rota.variacao_texto)}` : ''}
-          </div>
-        ` : ''}
-
-        ${rota.custo_destino_texto && rota.custo_destino_texto !== '-' ? `
-          <div class="trip-total-cost-box">
-            <span>🏨 Custo Destino</span>
-            <strong>${escapeHtml(rota.custo_destino_texto)}</strong>
-          </div>
-        ` : ''}
-
-        ${bannerStopoverHtml}
-
-        <div class="card-actions">
-          <a href="${escapeHtml(linkVoo)}" target="_blank" rel="noopener noreferrer" class="btn-flights-external">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3m-2 16H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z"/></svg>
-            Google Flights
-          </a>
-          <button class="btn-icon-action btn-copy-link" onclick="copiarLinkGoogleFlights(event, '${escapeHtml(rota.link_google_flights || '')}')" title="Copiar link do Google Flights" aria-label="Copiar link do Google Flights">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-            </svg>
-          </button>
-          <button class="btn-icon-action ${rota.esta_silenciada ? 'active-muted' : ''}" onclick="alternarSilenciamentoRota(${rota.id})" title="${rota.esta_silenciada ? 'Silenciada por 24h (clique para reativar)' : 'Silenciar alertas por 24h'}">
-            ${rota.esta_silenciada ? '🔕' : '🔔'}
-          </button>
-          <button class="btn-icon-action" onclick="abrirEdicaoRota(${rota.id})" title="Alterar opções desta rota">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-          </button>
-          <button class="btn-icon-action" onclick="verificarRotaIndividual(${rota.id})" title="Verificar preço agora">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          </button>
-          <button class="btn-icon-action" onclick="abrirHistorico(${rota.id})" title="Ver histórico de preços">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
-          </button>
-          <button class="btn-icon-action danger" onclick="excluirRota(${rota.id})" title="Excluir rota">
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-          </button>
-        </div>
+  return `
+    <div class="card-tradeoff" data-testid="card-tradeoff">
+      <div class="tradeoff-header">
+        <span class="tradeoff-badge">⚡ Opção Direta/Rápida</span>
+        <span class="tradeoff-preco">R$ ${formatarPreco(preco)}</span>
       </div>
-    `;
+      <div class="tradeoff-detalhes">
+        ${difTexto} para economizar <strong>${econHoras.toFixed(1)}h</strong> de viagem
+      </div>
+    </div>
+  `.trim();
+}
+
+/**
+ * Renderiza callout de melhor data alternativa vizinha quando há economia comprovada
+ */
+export function renderizarCalloutDataAlternativa(melhorDataAlternativa) {
+  if (!melhorDataAlternativa || typeof melhorDataAlternativa !== 'object') return '';
+
+  const econReais = Number(melhorDataAlternativa.economiaReais ?? melhorDataAlternativa.economia_reais);
+  if (!Number.isFinite(econReais) || econReais <= 0) return '';
+
+  const offset = Number(melhorDataAlternativa.offset) || 0;
+  const offsetStr = offset > 0 ? `+${offset}d` : `${offset}d`;
+  const dataIda = melhorDataAlternativa.dataIda ?? melhorDataAlternativa.data_ida;
+  const dataVolta = melhorDataAlternativa.dataVolta ?? melhorDataAlternativa.data_volta;
+  const dataIdaFmt = formatarDiaMes(dataIda);
+  const dataVoltaFmt = dataVolta ? ` ➔ ${formatarDiaMes(dataVolta)}` : '';
+  const preco = Number(melhorDataAlternativa.preco);
+  const econPct = Number(melhorDataAlternativa.economiaPercentual ?? melhorDataAlternativa.economia_percentual);
+
+  const link = melhorDataAlternativa.linkGoogleFlights ?? melhorDataAlternativa.link_google_flights;
+  const temLinkSeguro = ehUrlSegura(link);
+
+  const linkHtml = temLinkSeguro
+    ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer" class="link-data-alternativa">Ver voo alternativo ➔</a>`
+    : '';
+
+  return `
+    <div class="card-data-alternativa" data-testid="card-data-alternativa">
+      <div class="data-alternativa-header">
+        <span class="data-alternativa-tag">💡 Dia Vizinho Mais Barato (${escapeHtml(offsetStr)})</span>
+        <span class="data-alternativa-economia">-R$ ${formatarPreco(econReais)}${Number.isFinite(econPct) && econPct > 0 ? ` (-${econPct}%)` : ''}</span>
+      </div>
+      <div class="data-alternativa-corpo">
+        <span>📅 <strong>${escapeHtml(dataIdaFmt)}${escapeHtml(dataVoltaFmt)}</strong> por <strong>R$ ${formatarPreco(preco)}</strong></span>
+        ${linkHtml}
+      </div>
+    </div>
+  `.trim();
+}
+
+/**
+ * Renderiza gráfico SVG responsivo e acessível da janela flexível de datas
+ * Imune a divisão por zero (maxPreco === minPreco) e sanitizado contra NaN
+ */
+export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = null) {
+  if (!Array.isArray(calendarioPrecos)) return '';
+
+  const itensValidos = calendarioPrecos.filter(item => item && Number(item.preco) > 0);
+  if (itensValidos.length < 2) return '';
+
+  const precos = itensValidos.map(item => Number(item.preco));
+  const minPreco = Math.min(...precos);
+  const maxPreco = Math.max(...precos);
+
+  const barWidth = 38;
+  const gap = 12;
+  const paddingX = 14;
+  const topPadding = 24;
+  const maxBarHeight = 52;
+  const minBarHeight = 14;
+  const totalWidth = paddingX * 2 + itensValidos.length * barWidth + (itensValidos.length - 1) * gap;
+  const totalHeight = topPadding + maxBarHeight + 36;
+
+  // Prevenção de divisão por zero: se todos os preços forem iguais, usa altura estável
+  const denominadorSeguro = maxPreco > minPreco ? (maxPreco - minPreco) : Math.max(1, maxPreco);
+
+  const barrasSvg = itensValidos.map((item, index) => {
+    const preco = Number(item.preco);
+    const offset = Number(item.offset) || 0;
+    const offsetStr = offset > 0 ? `+${offset}d` : (offset === 0 ? 'Base' : `${offset}d`);
+    const ehBase = offset === 0;
+    const ehMenor = preco === minPreco;
+
+    let barHeight = minBarHeight;
+    if (maxPreco === minPreco) {
+      barHeight = Math.round(maxBarHeight * 0.7);
+    } else {
+      barHeight = Math.round(minBarHeight + ((preco - minPreco) / denominadorSeguro) * (maxBarHeight - minBarHeight));
+    }
+
+    const x = paddingX + index * (barWidth + gap);
+    const y = topPadding + (maxBarHeight - barHeight);
+
+    let fillColor = 'rgba(148, 163, 184, 0.35)';
+    let precoColor = '#94a3b8';
+    if (ehMenor) {
+      fillColor = '#10b981';
+      precoColor = '#34d399';
+    } else if (ehBase) {
+      fillColor = '#38bdf8';
+      precoColor = '#38bdf8';
+    }
+
+    const dataFmt = formatarDiaMes(item.dataIda ?? item.data_ida);
+    const precoFmt = `R$ ${formatarPreco(preco)}`;
+
+    return `
+      <g class="grafico-coluna" data-offset="${offset}">
+        <title>${escapeHtml(dataFmt)} (${offsetStr}): ${precoFmt}</title>
+        <text x="${x + barWidth / 2}" y="${y - 6}" text-anchor="middle" font-size="10" font-weight="700" fill="${precoColor}">${precoFmt}</text>
+        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="3" fill="${fillColor}" />
+        <text x="${x + barWidth / 2}" y="${topPadding + maxBarHeight + 16}" text-anchor="middle" font-size="11" font-weight="600" fill="#e2e8f0">${escapeHtml(dataFmt)}</text>
+        <text x="${x + barWidth / 2}" y="${topPadding + maxBarHeight + 28}" text-anchor="middle" font-size="9" font-weight="500" fill="${ehBase ? '#38bdf8' : '#64748b'}">${offsetStr}</text>
+      </g>
+    `.trim();
+  }).join('');
+
+  return `
+    <div class="grafico-calendario-container" data-testid="grafico-calendario">
+      <div class="grafico-calendario-header">
+        <span>📊 Janela Flexível</span>
+        <span>Menor tarifa: <strong>R$ ${formatarPreco(minPreco)}</strong></span>
+      </div>
+      <svg role="img" aria-label="Gráfico de preços da janela flexível" viewBox="0 0 ${totalWidth} ${totalHeight}" class="grafico-calendario-svg">
+        <title>Gráfico de preços da janela flexível</title>
+        ${barrasSvg}
+      </svg>
+    </div>
+  `.trim();
+}
+
+/**
+ * Renderiza o card completo da rota
+ */
+export function renderizarCardRota(rota) {
+  if (!rota) return '';
+
+  const id = rota.id ?? '';
+  const origem = rota.origem || 'Origem';
+  const destino = rota.destino_real || rota.destino || 'Destino';
+  const precoAtual = Number(rota.preco_atual);
+  const precoStr = Number.isFinite(precoAtual) && precoAtual > 0 ? `R$ ${formatarPreco(precoAtual)}` : 'Aguardando checagem';
+  const menorHist = Number(rota.menor_preco_historico);
+  const menorHistStr = Number.isFinite(menorHist) && menorHist > 0 ? `Menor: R$ ${formatarPreco(menorHist)}` : '';
+  const termometro = rota.termometro || '⚪ Sem dados recentes';
+
+  const priceInsights = rota.price_insights || rota.priceInsights;
+  const melhorDataAlt = rota.melhor_data_alternativa || rota.melhorDataAlternativa;
+  const calendario = rota.calendario_precos || rota.calendarioPrecos;
+  const diasFlex = rota.dias_flexiveis ?? rota.diasFlexiveis ?? 0;
+
+  const badgeMeta = renderizarBadgeMeta(rota);
+  const badgeTermometro = renderizarBadgeTermometro(priceInsights);
+  const badgeJanelaFlex = renderizarBadgeJanelaFlex(diasFlex);
+  const badgesFiltros = renderizarBadgesFiltros(rota);
+  const linhaHorarios = renderizarLinhaHorarios(rota);
+  const blocoTradeOff = renderizarTradeOff(rota);
+  const calloutDataAlt = renderizarCalloutDataAlternativa(melhorDataAlt);
+  const graficoCalendario = renderizarGraficoCalendarioSvg(calendario, precoAtual);
+
+  const periodoTexto = rota.sem_data
+    ? `🗓️ Flexível • ${escapeHtml(rota.data_ida || 'Próximos meses')}`
+    : `📅 ${escapeHtml(rota.data_ida || '')}${rota.data_volta ? ` até ${escapeHtml(rota.data_volta)}` : ' (Só Ida)'}`;
+
+  const linkGoogle = rota.link_google_flights || '#';
+  const silenciada = rota.esta_silenciada ? '<span class="badge badge-silenciada">🔕 Silenciada</span>' : '';
+
+  return `
+    <article class="rota-card" data-id="${id}" data-testid="rota-card-${id}">
+      <header class="rota-card-header">
+        <div class="rota-trajeto">
+          <h3 class="rota-titulo">${escapeHtml(origem)} <span class="rota-seta">➔</span> ${escapeHtml(destino)}</h3>
+          <span class="rota-periodo">${periodoTexto}</span>
+        </div>
+        <div class="rota-badges-top">
+          ${silenciada}
+          ${badgeMeta}
+          ${badgeTermometro}
+          ${badgeJanelaFlex}
+        </div>
+      </header>
+
+      <div class="rota-preco-bloco">
+        <div class="preco-principal">
+          <span class="preco-valor">${escapeHtml(precoStr)}</span>
+          ${menorHistStr ? `<span class="preco-menor">${escapeHtml(menorHistStr)}</span>` : ''}
+        </div>
+        <div class="termometro-tag">${escapeHtml(termometro)}</div>
+      </div>
+
+      ${badgesFiltros ? `<div class="rota-filtros-badges">${badgesFiltros}</div>` : ''}
+      ${linhaHorarios}
+      ${blocoTradeOff}
+      ${calloutDataAlt}
+      ${graficoCalendario}
+
+      ${rota.custo_destino_texto && rota.custo_destino_texto !== '-' ? `
+        <div class="rota-custo-destino">
+          🏨 ${escapeHtml(rota.custo_destino_texto)}
+        </div>
+      ` : ''}
+
+      <footer class="rota-card-actions">
+        <a href="${escapeHtml(linkGoogle)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+          ✈️ Google Flights
+        </a>
+        <button type="button" class="btn btn-secondary btn-sm" data-action="verificar" data-id="${id}">
+          🔍 Checar Agora
+        </button>
+        <button type="button" class="btn btn-outline btn-sm" data-action="editar" data-id="${id}">
+          ✏️ Editar
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm btn-danger" data-action="excluir" data-id="${id}">
+          🗑️
+        </button>
+      </footer>
+    </article>
+  `.trim();
 }

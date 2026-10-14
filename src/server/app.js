@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,12 +23,21 @@ export async function buildApp(opts = {}) {
     origin: true
   });
 
-  // Servir frontend PWA Cockpit
+  // Servir frontend estático se a pasta existir; caso contrário, expor endpoint raiz da API
   const publicPath = path.resolve(__dirname, '..', 'public');
-  await app.register(fastifyStatic, {
-    root: publicPath,
-    prefix: '/'
-  });
+  if (fs.existsSync(publicPath)) {
+    await app.register(fastifyStatic, {
+      root: publicPath,
+      prefix: '/'
+    });
+  } else {
+    app.get('/', async () => ({
+      status: 'ok',
+      nome: 'Radar de Voos API',
+      versao: '2.21.0',
+      mensagem: 'Motor de APIs ativo. Frontend pronto para recriação.'
+    }));
+  }
 
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));

@@ -1,5 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+
+process.env.NODE_ENV = 'test';
+
 import {
   detectarBloqueioBot,
   extrairPrecoCheapestTab,
@@ -221,6 +224,66 @@ describe('ScraplingClient: construirUrlCheapest', () => {
     const { tfs: tfsGru } = construirUrlCheapest('GRU', 'RAO', '2027-02-10', null);
     // SAO expande para GRU,CGH → payload maior que single GRU
     assert.ok(tfsSao.length >= tfsGru.length, 'Metrópole SAO deve gerar tfs ≥ aeroporto único GRU');
+  });
+
+  it('deve propagar filtros avançados (passageiros, cabine, maxStops, bagagem) mantendo distinção One-Way e Round-Trip', () => {
+    const { url: urlOw, tipoViagem: tvOw, tfs: tfsOw } = construirUrlCheapest(
+      'GRU',
+      'MIA',
+      '2027-03-15',
+      null,
+      12,
+      'USD',
+      { adultos: 2, criancas: 1, cabine: 'business', maxStops: 0, carryOnBags: 1 }
+    );
+    assert.equal(tvOw, 'one_way');
+    assert.match(urlOw, /curr=USD/);
+    const bufOw = Buffer.from(tfsOw, 'base64url');
+    // maxStops = 0 ([0x28, 0x00])
+    assert.ok(bufOw.indexOf(Buffer.from([0x28, 0x00])) >= 0, 'Deve conter maxStops=0');
+    // carryOnBags = 1 ([0x6a, 0x02, 0x10, 0x01])
+    assert.ok(bufOw.indexOf(Buffer.from([0x6a, 0x02, 0x10, 0x01])) >= 0, 'Deve conter carryOnBags=1');
+    // Trip enum no final = 0x02 (ONE_WAY)
+    assert.strictEqual(bufOw[bufOw.length - 1], 0x02, 'Trip deve ser ONE_WAY (0x02)');
+
+    const { tipoViagem: tvRt, tfs: tfsRt } = construirUrlCheapest(
+      'GRU',
+      'MIA',
+      '2027-03-15',
+      '2027-03-29',
+      12,
+      'BRL',
+      { maxStops: 1, maxLayoverMinutes: 180 }
+    );
+    assert.equal(tvRt, 'round_trip');
+    const bufRt = Buffer.from(tfsRt, 'base64url');
+    // Trip enum no final = 0x01 (ROUND_TRIP)
+    assert.strictEqual(bufRt[bufRt.length - 1], 0x01, 'Trip deve ser ROUND_TRIP (0x01)');
+  });
+
+  it('deve propagar novos filtros Protobuf (checkedBags, maxPrice, hideSeparateAndSelfTransfer, excludeBasicEconomy)', () => {
+    const { tfs } = construirUrlCheapest(
+      'GRU',
+      'MIA',
+      '2027-03-15',
+      null,
+      12,
+      'BRL',
+      {
+        checkedBags: 2,
+        maxPrice: 3500,
+        hideSeparateAndSelfTransfer: true,
+        excludeBasicEconomy: true
+      }
+    );
+    assert.ok(tfs);
+    const buf = Buffer.from(tfs, 'base64url');
+    // Field 13 (Baggage) com checked_bags=2 -> submensagem Baggage tem [0x18, 0x02]
+    assert.ok(buf.indexOf(Buffer.from([0x18, 0x02])) >= 0, 'Deve conter checked_bags=2');
+    // Field 17: hideSeparateAndSelfTransfer = true ([0x88, 0x01, 0x01])
+    assert.ok(buf.indexOf(Buffer.from([0x88, 0x01, 0x01])) >= 0, 'Deve conter hideSeparateAndSelfTransfer=true');
+    // Field 25: excludeBasicEconomy = true ([0xc8, 0x01, 0x01])
+    assert.ok(buf.indexOf(Buffer.from([0xc8, 0x01, 0x01])) >= 0, 'Deve conter excludeBasicEconomy=true');
   });
 });
 
@@ -499,6 +562,160 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
       assert.equal(res.oferta.preco, 587, 'Tarifa R$ 587 deve ser extraída do parâmetro tfu da URL de resposta');
       assert.ok(res.oferta.cheapestTabAtivada, 'Flag cheapestTabAtivada deve ser true');
       assert.ok(res.oferta.detalhes.includes('Cheapest'), 'Detalhes devem mencionar Cheapest');
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+
+  it('deve retornar topOfertas e calcular melhorOpcaoDiretaOuRapida quando a melhor oferta tem conexões', async () => {
+    const provider = new ScraplingProvider();
+    const fetchOriginal = globalThis.fetch;
+
+    const HTML_DS1_RANKING = `
+      <html>
+      <head>
+        <script class="ds:1">
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [
+              null, null,
+              [
+                [
+                  [
+                    ["LA", ["LATAM"], [
+                      [null, null, null, "GRU", "Guarulhos", "Jorge Chavez", "LIM", null, [3, 35], null, [6, 45], null, null, null, null, null, null, "A321", null, null, [2026, 11, 10], [2026, 11, 10], ["LA", "8004", null, "LATAM"]],
+                      [null, null, null, "LIM", "Jorge Chavez", "Miami Intl", "MIA", null, [8, 20], null, [14, 15], null, null, null, null, null, null, "A320", null, null, [2026, 11, 10], [2026, 11, 10], ["LA", "2990", null, "LATAM"]]
+                    ], "GRU", null, null, "MIA", null, null, 760],
+                    [[null, 3714]]
+                  ],
+                  [
+                    ["G3", ["GOL"], [
+                      [null, null, null, "GRU", "Guarulhos", "Miami Intl", "MIA", null, [9, 0], null, [17, 30], null, null, null, null, null, null, "B737", null, null, [2026, 11, 10], [2026, 11, 10], ["G3", "7710", null, "GOL"]]
+                    ], "GRU", null, null, "MIA", null, null, 510],
+                    [[null, 4120]]
+                  ]
+                ]
+              ],
+              [
+                [
+                  [
+                    ["AA", ["American Airlines"], [
+                      [null, null, null, "GRU", "Guarulhos", "Miami Intl", "MIA", null, [22, 10], null, [6, 35], null, null, null, null, null, null, "B777", null, null, [2026, 11, 10], [2026, 11, 11], ["AA", "906", null, "American Airlines"]]
+                    ], "GRU", null, null, "MIA", null, null, 505],
+                    [[null, 4550]]
+                  ]
+                ]
+              ]
+            ],
+            sideChannel: {}
+          });
+        </script>
+      </head>
+      </html>
+    `;
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: 'https://www.google.com/travel/flights',
+      text: async () => HTML_DS1_RANKING
+    });
+
+    try {
+      const res = await provider.buscarOfertas({
+        origemCod: 'GRU',
+        destinoCod: 'MIA',
+        dataIda: '2026-11-10'
+      });
+
+      assert.ok(res.ok);
+      assert.ok(res.encontrouVoos);
+      const oferta = res.oferta;
+
+      // 1. Melhor oferta é a mais barata (LATAM com 1 escala por R$ 3714)
+      assert.equal(oferta.preco, 3714);
+      assert.equal(oferta.escalas, 1);
+
+      // 2. topOfertas com até 3 voos mais baratos estruturados
+      assert.ok(Array.isArray(oferta.topOfertas));
+      assert.equal(oferta.topOfertas.length, 3);
+      assert.equal(oferta.topOfertas[0].preco, 3714);
+      assert.equal(oferta.topOfertas[0].cia, 'LATAM');
+      assert.equal(oferta.topOfertas[0].numeroVoo, 'LA 8004');
+      assert.equal(oferta.topOfertas[0].horarioPartida, '03:35');
+      assert.equal(oferta.topOfertas[0].horarioChegada, '14:15');
+      assert.equal(oferta.topOfertas[0].tempoConexao, '1h 35min');
+      assert.equal(oferta.topOfertas[0].isBest, true);
+
+      assert.equal(oferta.topOfertas[1].preco, 4120);
+      assert.equal(oferta.topOfertas[1].cia, 'GOL');
+      assert.equal(oferta.topOfertas[1].numeroVoo, 'G3 7710');
+      assert.equal(oferta.topOfertas[1].escalas, 0);
+
+      assert.equal(oferta.topOfertas[2].preco, 4550);
+      assert.equal(oferta.topOfertas[2].cia, 'American Airlines');
+      assert.equal(oferta.topOfertas[2].isBest, false);
+
+      // 3. melhorOpcaoDiretaOuRapida identifica o voo direto da GOL e calcula o trade-off
+      assert.ok(oferta.melhorOpcaoDiretaOuRapida);
+      const opcao = oferta.melhorOpcaoDiretaOuRapida;
+      assert.equal(opcao.cia, 'GOL');
+      assert.equal(opcao.preco, 4120);
+      assert.equal(opcao.escalas, 0);
+      assert.equal(opcao.diferencaPreco, 406); // 4120 - 3714
+      assert.equal(opcao.economiaHoras, 4.2); // 12.7h - 8.5h = 4.2h
+    } finally {
+      globalThis.fetch = fetchOriginal;
+    }
+  });
+
+  it('deve retornar melhorOpcaoDiretaOuRapida: null quando a melhor oferta já for um voo direto', async () => {
+    const provider = new ScraplingProvider();
+    const fetchOriginal = globalThis.fetch;
+
+    const HTML_DIRETO_VENCEDOR = `
+      <html>
+      <head>
+        <script class="ds:1">
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [
+              null, null,
+              [
+                [
+                  [
+                    ["G3", ["GOL"], [
+                      [null, null, null, "GRU", "Guarulhos", "Miami Intl", "MIA", null, [9, 0], null, [17, 30], null, null, null, null, null, null, "B737", null, null, [2026, 11, 10], [2026, 11, 10], ["G3", "7710", null, "GOL"]]
+                    ], "GRU", null, null, "MIA", null, null, 510],
+                    [[null, 2500]]
+                  ]
+                ]
+              ]
+            ],
+            sideChannel: {}
+          });
+        </script>
+      </head>
+      </html>
+    `;
+
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      url: 'https://www.google.com/travel/flights',
+      text: async () => HTML_DIRETO_VENCEDOR
+    });
+
+    try {
+      const res = await provider.buscarOfertas({
+        origemCod: 'GRU',
+        destinoCod: 'MIA',
+        dataIda: '2026-11-10'
+      });
+
+      assert.ok(res.ok);
+      assert.equal(res.oferta.escalas, 0);
+      assert.equal(res.oferta.melhorOpcaoDiretaOuRapida, null);
     } finally {
       globalThis.fetch = fetchOriginal;
     }

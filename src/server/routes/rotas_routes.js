@@ -1,9 +1,18 @@
 import { rotasRepo } from '../../db.js';
 import { resolverDestino, validarPeriodo, calcularDataVolta, extrairDiasEstadia, ehSoIda, rotaEhSoIda } from '../../domain/rotas.js';
-import { FlightScanner, calcularMilhasRota } from '../../services/flight_scanner.js';
+import { FlightScanner } from '../../services/flight_scanner.js';
 import { weatherService } from '../../services/weather_service.js';
 import { telemetryEvents } from '../../services/telemetry_events.js';
 import { rotasSync } from '../../services/rotas_sync.js';
+
+function safeJsonParse(val, fallback = null) {
+  if (!val || typeof val !== 'string') return fallback;
+  try {
+    return JSON.parse(val);
+  } catch (_) {
+    return fallback;
+  }
+}
 
 export async function rotasRoutes(fastify) {
   // Listar todas as rotas com histórico recente para sparklines
@@ -17,14 +26,21 @@ export async function rotasRoutes(fastify) {
     const rotasCompletas = rotas.map(r => {
       const paridadeMilhas = r.paridade_milhas ?? null;
       const programaMilhas = r.programa_milhas || 'smiles';
-      const milhasEstimadas = r.preco_atual
-        ? calcularMilhasRota(r.preco_atual, paridadeMilhas, programaMilhas)
-        : null;
       return {
         ...r,
+        max_stops: (r.max_stops !== undefined && r.max_stops !== null) ? Number(r.max_stops) : null,
+        carry_on_bags: (r.carry_on_bags !== undefined && r.carry_on_bags !== null) ? Number(r.carry_on_bags) : null,
+        checked_bags: (r.checked_bags !== undefined && r.checked_bags !== null) ? Number(r.checked_bags) : null,
+        dias_flexiveis: (r.dias_flexiveis !== undefined && r.dias_flexiveis !== null) ? Number(r.dias_flexiveis) : 0,
+        top_ofertas: safeJsonParse(r.top_ofertas, null),
+        melhor_opcao_direta_rapida: safeJsonParse(r.melhor_opcao_direta_rapida, null),
+        melhor_opcao_flexivel: safeJsonParse(r.melhor_opcao_flexivel, null),
+        calendario_precos: safeJsonParse(r.calendario_precos, null),
+        melhor_data_alternativa: safeJsonParse(r.melhor_data_alternativa, null),
+        price_insights: safeJsonParse(r.price_insights, null),
         paridade_milhas: paridadeMilhas,
         programa_milhas: programaMilhas,
-        milhas_estimadas: milhasEstimadas,
+        milhas_estimadas: null,
         esta_silenciada: rotasRepo.estaSilenciada(r),
         historico_recente: rotasRepo.obterHistoricoRecente(r.id, 10)
       };
@@ -44,6 +60,16 @@ export async function rotasRoutes(fastify) {
       ok: true,
       rota: {
         ...rota,
+        max_stops: (rota.max_stops !== undefined && rota.max_stops !== null) ? Number(rota.max_stops) : null,
+        carry_on_bags: (rota.carry_on_bags !== undefined && rota.carry_on_bags !== null) ? Number(rota.carry_on_bags) : null,
+        checked_bags: (rota.checked_bags !== undefined && rota.checked_bags !== null) ? Number(rota.checked_bags) : null,
+        dias_flexiveis: (rota.dias_flexiveis !== undefined && rota.dias_flexiveis !== null) ? Number(rota.dias_flexiveis) : 0,
+        top_ofertas: safeJsonParse(rota.top_ofertas, null),
+        melhor_opcao_direta_rapida: safeJsonParse(rota.melhor_opcao_direta_rapida, null),
+        melhor_opcao_flexivel: safeJsonParse(rota.melhor_opcao_flexivel, null),
+        calendario_precos: safeJsonParse(rota.calendario_precos, null),
+        melhor_data_alternativa: safeJsonParse(rota.melhor_data_alternativa, null),
+        price_insights: safeJsonParse(rota.price_insights, null),
         esta_silenciada: rotasRepo.estaSilenciada(rota)
       },
       historico
@@ -192,6 +218,15 @@ export async function rotasRoutes(fastify) {
     const dataClima = data_ida || new Date().toISOString().split('T')[0];
     const climaPreliminar = await weatherService.obterClimaDestino(codDestino, dataClima).catch(() => null);
 
+    const parseNumParam = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null);
+    const maxStops = parseNumParam(body.max_stops !== undefined ? body.max_stops : body.maxStops);
+    const carryOnBags = parseNumParam(body.carry_on_bags !== undefined ? body.carry_on_bags : body.carryOnBags);
+    const checkedBags = parseNumParam(body.checked_bags !== undefined ? body.checked_bags : body.checkedBags);
+    const diasFlexiveisParam = body.dias_flexiveis !== undefined ? body.dias_flexiveis : body.flexibilidade_dias;
+    const diasFlexiveis = (diasFlexiveisParam !== undefined && diasFlexiveisParam !== null && diasFlexiveisParam !== '' && !isNaN(Number(diasFlexiveisParam)))
+      ? Math.min(3, Math.max(0, Number(diasFlexiveisParam)))
+      : 0;
+
     const novaRota = rotasRepo.criar({
       origem,
       destino,
@@ -201,13 +236,17 @@ export async function rotasRoutes(fastify) {
       preco_alvo: parseFloat(preco_alvo) || null,
       cabine: cabine || 'economy',
       flexibilidade_dias: parseInt(flexibilidade_dias, 10) || 0,
+      dias_flexiveis: diasFlexiveis,
       sem_data: ehSemData ? 1 : 0,
       dias_estadia: soIda ? null : diasEstadiaEfetivo,
       tipo: soIda ? 'one_way' : 'round_trip',
       tipo_viagem: soIda ? 'one_way' : 'round_trip',
       moeda: body.moeda || body.curr || 'BRL',
       clima_destino_resumo: climaPreliminar?.ok ? climaPreliminar.resumo : null,
-      clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null
+      clima_temp_media: climaPreliminar?.ok ? climaPreliminar.tempMedia : null,
+      max_stops: maxStops,
+      carry_on_bags: carryOnBags,
+      checked_bags: checkedBags
     });
 
     try {
@@ -250,13 +289,30 @@ export async function rotasRoutes(fastify) {
       dias_estadia: body.dias_estadia !== undefined ? body.dias_estadia : (body.tipo === 'one_way' || ehSoIda(body.data_volta) ? null : rota.dias_estadia)
     });
 
+    const parseNumParam = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null);
+    const temMaxStops = body.max_stops !== undefined || body.maxStops !== undefined;
+    const maxStops = temMaxStops ? parseNumParam(body.max_stops !== undefined ? body.max_stops : body.maxStops) : undefined;
+    const temCarryOn = body.carry_on_bags !== undefined || body.carryOnBags !== undefined;
+    const carryOnBags = temCarryOn ? parseNumParam(body.carry_on_bags !== undefined ? body.carry_on_bags : body.carryOnBags) : undefined;
+    const temChecked = body.checked_bags !== undefined || body.checkedBags !== undefined;
+    const checkedBags = temChecked ? parseNumParam(body.checked_bags !== undefined ? body.checked_bags : body.checkedBags) : undefined;
+
+    const temDiasFlexiveis = body.dias_flexiveis !== undefined || body.flexibilidade_dias !== undefined;
+    const diasFlexiveis = temDiasFlexiveis
+      ? Math.min(3, Math.max(0, Number(body.dias_flexiveis !== undefined ? body.dias_flexiveis : body.flexibilidade_dias) || 0))
+      : undefined;
+
     const rotaAtualizada = rotasRepo.atualizar(id, {
       ...body,
       tipo: soIda ? 'one_way' : 'round_trip',
       tipo_viagem: soIda ? 'one_way' : 'round_trip',
       data_volta: soIda ? null : body.data_volta,
       dias_estadia: soIda ? null : (body.dias_estadia !== undefined ? extrairDiasEstadia(body.dias_estadia, 10) : rota.dias_estadia),
-      sem_data: body.sem_data !== undefined ? (ehSemData ? 1 : 0) : undefined
+      sem_data: body.sem_data !== undefined ? (ehSemData ? 1 : 0) : undefined,
+      ...(temMaxStops ? { max_stops: maxStops } : {}),
+      ...(temCarryOn ? { carry_on_bags: carryOnBags } : {}),
+      ...(temChecked ? { checked_bags: checkedBags } : {}),
+      ...(temDiasFlexiveis ? { dias_flexiveis: diasFlexiveis, flexibilidade_dias: diasFlexiveis } : {})
     });
 
     try {

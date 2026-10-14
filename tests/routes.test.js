@@ -163,8 +163,8 @@ describe('Servidor Fastify: Endpoints REST', () => {
     }
   });
 
-  it('GET /api/rotas deve retornar milhas_estimadas calculado quando preco_atual existe', async () => {
-    // Cria rota com paridade_milhas configurada
+  it('GET /api/rotas deve retornar milhas_estimadas como null (descontinuado)', async () => {
+    // Cria rota com parâmetros
     const resCreate = await app.inject({
       method: 'POST',
       url: '/api/rotas',
@@ -192,7 +192,7 @@ describe('Servidor Fastify: Endpoints REST', () => {
     const db = getDb();
     db.prepare('UPDATE rotas SET preco_atual = 4500 WHERE id = ?').run(novaRota.id);
 
-    // Verifica se GET /api/rotas retorna milhas_estimadas calculadas
+    // Verifica se GET /api/rotas retorna milhas_estimadas como null
     const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
     const json = resList.json();
     const rotaTeste = json.rotas.find(r => r.id === novaRota.id);
@@ -200,14 +200,8 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.ok(rotaTeste, 'Rota recém-criada deve aparecer no listAll');
     assert.strictEqual(rotaTeste.programa_milhas, 'latam');
     assert.strictEqual(rotaTeste.paridade_milhas, 20.00);
-    // milhas_estimadas deve existir e conter { milhas, programa, cotacaoMilheiro }
-    assert.ok(rotaTeste.milhas_estimadas !== null, 'milhas_estimadas não deve ser null quando há preco_atual');
-    assert.ok(typeof rotaTeste.milhas_estimadas.milhas === 'number', 'milhas_estimadas.milhas deve ser número');
-    assert.ok(rotaTeste.milhas_estimadas.milhas > 0, 'milhas_estimadas.milhas deve ser positivo');
-    assert.strictEqual(rotaTeste.milhas_estimadas.programa, 'latam');
-    assert.strictEqual(rotaTeste.milhas_estimadas.cotacaoMilheiro, 20.00);
-    // Verificação de valor: ceil(4500 / 20.00 * 1000) = 225000 milhas
-    assert.strictEqual(rotaTeste.milhas_estimadas.milhas, Math.ceil((4500 / 20.00) * 1000));
+    // milhas_estimadas deve ser null
+    assert.strictEqual(rotaTeste.milhas_estimadas, null, 'milhas_estimadas deve ser null');
   });
 
   it('PUT /api/rotas/:id deve alterar parâmetros de uma rota existente', async () => {
@@ -323,6 +317,140 @@ describe('Servidor Fastify: Endpoints REST', () => {
     const json = res.json();
     assert.strictEqual(json.ok, true);
     assert.ok(json.resultado);
+  });
+
+  it('POST /api/rotas com filtros fast-flights (max_stops: 0, carry_on_bags: 1) deve preservar max_stops 0 sem falsy bug', async () => {
+    const rotaFiltros = {
+      origem: 'Belo Horizonte',
+      destino: 'Buenos Aires',
+      data_ida: '2026-11-20',
+      data_volta: '7',
+      preco_alvo: 1950,
+      max_stops: 0,
+      carry_on_bags: 1
+    };
+
+    const resPost = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: rotaFiltros
+    });
+
+    assert.strictEqual(resPost.statusCode, 201);
+    const rotaCriada = resPost.json().rota;
+    assert.strictEqual(rotaCriada.max_stops, 0, 'max_stops 0 deve ser preservado na criação');
+    assert.strictEqual(rotaCriada.carry_on_bags, 1);
+    assert.strictEqual(rotaCriada.preco_alvo, 1950);
+
+    // Verifica se GET /api/rotas retorna os campos corretamente
+    const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const rotaNaLista = resList.json().rotas.find(r => r.id === rotaCriada.id);
+    assert.ok(rotaNaLista, 'Rota criada deve constar no listAll');
+    assert.strictEqual(rotaNaLista.max_stops, 0, 'max_stops 0 deve ser número 0 no GET');
+    assert.strictEqual(rotaNaLista.carry_on_bags, 1);
+
+    // Atualiza via PUT para max_stops: 1
+    const resPut = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${rotaCriada.id}`,
+      payload: { max_stops: 1 }
+    });
+    assert.strictEqual(resPut.statusCode, 200);
+    assert.strictEqual(resPut.json().rota.max_stops, 1);
+  });
+
+  it('POST /api/rotas e GET /api/rotas devem suportar dias_flexiveis e desserializar calendario_precos, melhor_data_alternativa e price_insights', async () => {
+    const rotaFlex = {
+      origem: 'São Paulo',
+      destino: 'Madrid',
+      data_ida: '2027-05-15',
+      data_volta: '2027-05-25',
+      duracao_max_horas: 16,
+      cabine: 'economy',
+      dias_flexiveis: 2,
+      preco_alvo: 3800
+    };
+
+    const resPost = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: rotaFlex
+    });
+
+    assert.strictEqual(resPost.statusCode, 201);
+    const criada = resPost.json().rota;
+    assert.strictEqual(criada.dias_flexiveis, 2);
+
+    // Simula checagem persistindo json nos novos campos
+    const { getDb } = await import('../src/db.js');
+    const db = getDb();
+    const calendarioMock = [
+      { offset: -1, dataIda: '2027-05-14', preco: 3200 },
+      { offset: 0, dataIda: '2027-05-15', preco: 3600 },
+      { offset: 1, dataIda: '2027-05-16', preco: 4000 }
+    ];
+    const melhorAltMock = {
+      offset: -1,
+      dataIda: '2027-05-14',
+      preco: 3200,
+      economiaReais: 400
+    };
+    const priceInsightsMock = {
+      nivel: 'baixo',
+      faixaMinima: 3300,
+      faixaMaxima: 4500
+    };
+
+    db.prepare(`
+      UPDATE rotas SET
+        calendario_precos = ?,
+        melhor_data_alternativa = ?,
+        price_insights = ?
+      WHERE id = ?
+    `).run(
+      JSON.stringify(calendarioMock),
+      JSON.stringify(melhorAltMock),
+      JSON.stringify(priceInsightsMock),
+      criada.id
+    );
+
+    // Verifica GET /api/rotas
+    const resList = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const rotaNaLista = resList.json().rotas.find(r => r.id === criada.id);
+    assert.ok(rotaNaLista);
+    assert.strictEqual(rotaNaLista.dias_flexiveis, 2);
+    assert.ok(Array.isArray(rotaNaLista.calendario_precos));
+    assert.strictEqual(rotaNaLista.calendario_precos.length, 3);
+    assert.strictEqual(rotaNaLista.melhor_data_alternativa?.economiaReais, 400);
+    assert.strictEqual(rotaNaLista.price_insights?.nivel, 'baixo');
+
+    // Verifica GET /api/rotas/:id
+    const resGetId = await app.inject({ method: 'GET', url: `/api/rotas/${criada.id}` });
+    assert.strictEqual(resGetId.statusCode, 200);
+    const rotaDetalhada = resGetId.json().rota;
+    assert.strictEqual(rotaDetalhada.dias_flexiveis, 2);
+    assert.strictEqual(rotaDetalhada.calendario_precos.length, 3);
+    assert.strictEqual(rotaDetalhada.melhor_data_alternativa.offset, -1);
+    assert.strictEqual(rotaDetalhada.price_insights.faixaMinima, 3300);
+
+    // Testa PUT alterando dias_flexiveis para 3
+    const resPut = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${criada.id}`,
+      payload: { dias_flexiveis: 3 }
+    });
+    assert.strictEqual(resPut.statusCode, 200);
+    assert.strictEqual(resPut.json().rota.dias_flexiveis, 3);
+  });
+
+  it('GET / e /js/card_rota.js devem servir os assets estáticos do Cockpit PWA com sucesso', async () => {
+    const resIndex = await app.inject({ method: 'GET', url: '/' });
+    assert.strictEqual(resIndex.statusCode, 200);
+    assert.ok(resIndex.body.includes('Radar de Voos'));
+
+    const resCardRota = await app.inject({ method: 'GET', url: '/js/card_rota.js' });
+    assert.strictEqual(resCardRota.statusCode, 200);
+    assert.ok(resCardRota.body.includes('renderizarCardRota'));
   });
 });
 

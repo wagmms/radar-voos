@@ -2,374 +2,721 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Radar de Voos • Travel Hacking Cockpit</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Radar de Voos • Caçador de Tarifas & Bug Fares</title>
+  <meta name="description" content="Monitoramento inteligente de voos, bug fares e economia real em passagens aéreas.">
+  <meta name="theme-color" content="#0b0f17">
   <link rel="manifest" href="/manifest.json">
-  <link rel="icon" type="image/svg+xml" href="/icon-192.svg">
-  <meta name="theme-color" content="#06b6d4">
-  <link rel="stylesheet" href="/styles.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0f17;
+      --card-bg: #131926;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-hover: rgba(255, 255, 255, 0.12);
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0284c7;
+      --primary-glow: rgba(56, 189, 248, 0.15);
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --danger-hover: #dc2626;
+      --radius: 12px;
+      --radius-sm: 8px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+      padding-bottom: 80px;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    /* Header */
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px 0;
+      border-bottom: 1px solid var(--card-border);
+      margin-bottom: 24px;
+    }
+
+    .app-title-group h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .app-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 10px 16px;
+      border-radius: var(--radius-sm);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-decoration: none;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: #0b0f17;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: rgba(255, 255, 255, 0.08);
+      color: var(--text);
+      border-color: var(--card-border);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border-color: var(--card-border);
+    }
+    .btn-outline:hover:not(:disabled) {
+      border-color: var(--card-hover);
+      background-color: rgba(255, 255, 255, 0.04);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      color: var(--text-muted);
+      border: none;
+    }
+    .btn-ghost:hover:not(:disabled) {
+      color: var(--text);
+    }
+
+    .btn-danger {
+      color: var(--danger);
+    }
+    .btn-danger:hover:not(:disabled) {
+      background-color: rgba(239, 68, 68, 0.1);
+      color: #fca5a5;
+    }
+
+    /* Toast */
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 360px;
+    }
+
+    .toast {
+      padding: 12px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      background: #1e293b;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+      box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+      animation: slideIn 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .toast-success { border-color: var(--success); }
+    .toast-error { border-color: var(--danger); }
+    .toast-info { border-color: var(--primary); }
+
+    @keyframes slideIn {
+      from { transform: translateY(10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Grid de Rotas */
+    .rotas-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+
+    @media (min-width: 680px) {
+      .rotas-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
+    /* Card Rota */
+    .rota-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+
+    .rota-card:hover {
+      border-color: var(--card-hover);
+    }
+
+    .rota-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .rota-trajeto h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+
+    .rota-seta {
+      color: var(--primary);
+      font-size: 0.9rem;
+    }
+
+    .rota-periodo {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    .rota-badges-top {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 9999px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .badge-meta {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+    }
+
+    .badge-meta-batida {
+      background: var(--success-glow);
+      color: var(--success);
+      border-color: rgba(16, 185, 129, 0.3);
+      font-weight: 700;
+    }
+
+    .badge-filtro {
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--primary);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .badge-silenciada {
+      background: rgba(245, 158, 11, 0.1);
+      color: var(--warning);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+    }
+
+    /* Preço Bloco */
+    .rota-preco-bloco {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: var(--radius-sm);
+    }
+
+    .preco-principal {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .preco-valor {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #fff;
+    }
+
+    .preco-menor {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .termometro-tag {
+      font-size: 0.78rem;
+      font-weight: 500;
+      color: var(--text-muted);
+    }
+
+    /* Horários */
+    .card-horarios {
+      font-size: 0.8rem;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border);
+    }
+
+    .voo-tag {
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .conexao-tag {
+      color: var(--warning);
+      font-size: 0.75rem;
+    }
+
+    /* Trade-off */
+    .card-tradeoff {
+      padding: 8px 10px;
+      background: rgba(56, 189, 248, 0.04);
+      border: 1px dashed rgba(56, 189, 248, 0.25);
+      border-radius: var(--radius-sm);
+      font-size: 0.78rem;
+    }
+
+    .tradeoff-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+
+    .tradeoff-badge {
+      font-weight: 700;
+      color: var(--primary);
+    }
+
+    .tradeoff-preco {
+      font-weight: 800;
+      color: #fff;
+    }
+
+    .tradeoff-detalhes {
+      color: var(--text-muted);
+    }
+
+    .rota-custo-destino {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    /* Termômetro e Janela Flexível */
+    .badge-termometro {
+      font-weight: 600;
+    }
+    .badge-termometro-baixo {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .badge-termometro-tipico {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .badge-termometro-alto {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .badge-janela-flex {
+      background: rgba(56, 189, 248, 0.12);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.25);
+    }
+
+    /* Callout Melhor Data Alternativa */
+    .card-data-alternativa {
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+      font-size: 0.8rem;
+    }
+    .data-alternativa-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+    .data-alternativa-tag {
+      font-weight: 700;
+      color: #34d399;
+    }
+    .data-alternativa-economia {
+      font-weight: 800;
+      color: #10b981;
+    }
+    .data-alternativa-corpo {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      gap: 6px;
+    }
+    .link-data-alternativa {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+    .link-data-alternativa:hover {
+      text-decoration: underline;
+    }
+
+    /* Gráfico Calendário SVG */
+    .grafico-calendario-container {
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 8px 10px;
+    }
+    .grafico-calendario-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+    .grafico-calendario-svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      overflow: visible;
+    }
+
+    /* Actions */
+    .rota-card-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 900;
+      padding: 16px;
+    }
+
+    .modal-backdrop.hidden {
+      display: none;
+    }
+
+    .modal-content {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 480px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .modal-header h2 {
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    /* Forms */
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .form-control {
+      width: 100%;
+      background: #0b0f17;
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+
+    .form-control:focus {
+      border-color: var(--primary);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.85rem;
+    }
+
+    .form-check input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    /* Empty & Loading */
+    .empty-state {
+      text-align: center;
+      padding: 48px 16px;
+      background: var(--card-bg);
+      border: 1px dashed var(--card-border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+    }
+
+    .empty-state h3 {
+      font-size: 1.1rem;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .loading-spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255, 255, 255, 0.2);
+      border-radius: 50%;
+      border-top-color: var(--primary);
+      animation: spin 0.6s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
-  <div class="cockpit-container">
-    <!-- Top Navigation Bar -->
-    <header class="top-nav">
-      <div class="brand">
-        <div class="radar-pulse-icon">
-          <span class="pulse-ring"></span>
-          <svg class="plane-svg" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>
-          </svg>
-        </div>
-        <div class="brand-text">
-          <h1>RADAR DE VOOS</h1>
-          <span class="sub-badge">TRAVEL HACKING ENGINE • NODE 24</span>
-        </div>
+  <div class="container">
+    <header class="app-header">
+      <div class="app-title-group">
+        <h1>✈️ Radar de Voos</h1>
+        <p class="app-subtitle">Caçador proativo de tarifas & economia em R$</p>
       </div>
-
-      <div class="top-actions">
-        <div class="system-status" id="system-status-indicator">
-          <span class="status-dot online"></span>
-          <span class="status-label" id="status-text">SENTINELA ATIVO</span>
-        </div>
-        <div class="sse-live-badge" id="sse-badge">
-          <span class="sse-pulse-dot"></span> AO VIVO
-        </div>
-        <button class="btn btn-secondary" id="btn-forcar-varredura" title="Executar checagem da próxima rota na fila justa">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-          <span>Varredura</span>
+      <div class="header-actions">
+        <button id="btn-sync" class="btn btn-secondary btn-sm" title="Recarregar rotas">
+          🔄 Atualizar
         </button>
-        <button class="btn btn-secondary" id="btn-testar-telegram" title="Testar envio no Telegram">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-          <span>Telegram</span>
-        </button>
-        <button class="btn btn-secondary" id="btn-backup-rotas" title="Fazer download de backup das rotas em JSON">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span>Backup</span>
-        </button>
-        <button class="btn btn-secondary" id="btn-restaurar-rotas" title="Restaurar rotas a partir de arquivo JSON">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          <span>Restaurar</span>
-        </button>
-        <button class="btn btn-secondary" id="btn-sync-github" title="Sincronizar rotas com o repositório GitHub (via de mão dupla)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-          <span>Sync GitHub</span>
-        </button>
-        <input type="file" id="input-importar-rotas" accept=".json" style="display: none;">
-        <button class="btn btn-primary" id="btn-abrir-modal-rota">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          <span>Nova Rota</span>
+        <button id="btn-nova-rota" class="btn btn-primary btn-sm">
+          ➕ Nova Rota
         </button>
       </div>
     </header>
 
-    <!-- Metrics Bar -->
-    <section class="metrics-grid">
-      <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-title">ROTAS ATIVAS</span>
-          <span class="metric-icon">🛫</span>
-        </div>
-        <div class="metric-value" id="metric-rotas-total">0</div>
-        <div class="metric-caption">Monitoramento em ciclo contínuo</div>
-      </div>
-
-      <div class="metric-card highlight-card">
-        <div class="metric-header">
-          <span class="metric-title">OPORTUNIDADES NA META</span>
-          <span class="metric-icon">🎯</span>
-        </div>
-        <div class="metric-value text-emerald" id="metric-oportunidades">0</div>
-        <div class="metric-caption">Preço atual abaixo da meta</div>
-      </div>
-
-      <div class="metric-card">
-        <div class="metric-header">
-          <span class="metric-title">COTAS SERPAPI HOJE</span>
-          <span class="metric-icon">📊</span>
-        </div>
-        <div class="metric-value" id="metric-cotas-hoje">0 / 32</div>
-        <div class="metric-caption" id="metric-cotas-mes">Restante mês: 1.000</div>
-      </div>
-
-      <div class="metric-card danger-card">
-        <div class="metric-header">
-          <span class="metric-title">BUG FARES DETECTADOS</span>
-          <span class="metric-icon">🚨</span>
-        </div>
-        <div class="metric-value text-rose" id="metric-bugfares">0</div>
-        <div class="metric-caption">Motor estatístico GDS</div>
-      </div>
-    </section>
-
-    <!-- Navigation Tabs -->
-    <nav class="cockpit-tabs">
-      <button class="tab-btn active" data-tab="tab-rotas">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></svg>
-        Rotas Monitoradas
-      </button>
-      <button class="tab-btn" data-tab="tab-bugfares">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        🚨 Bug Fares & Promos
-        <span class="tab-badge" id="badge-bugfares">0</span>
-      </button>
-      <button class="tab-btn" data-tab="tab-cotas">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-        Saúde do Pool & Chaves
-      </button>
-    </nav>
-
-    <!-- TAB 1: Rotas Monitoradas -->
-    <main class="tab-content active" id="tab-rotas">
-      <div class="section-toolbar">
-        <div class="search-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input type="text" id="filtro-rotas" placeholder="Filtrar por cidade, país ou aeroporto...">
-        </div>
-        <div class="filter-toggles-wrapper">
-          <div class="filter-toggles" id="filter-categorias">
-            <button class="filter-chip active" data-filter="todas">Todas</button>
-            <button class="filter-chip" data-filter="flexivel">🗓️ Flexíveis</button>
-            <button class="filter-chip" data-filter="cheapest">⚡ Cheapest / OTAs</button>
-            <button class="filter-chip" data-filter="meta">Na Meta</button>
-            <button class="filter-chip" data-filter="promo">Super Baratos</button>
-          </div>
-          <div class="filter-clima-group" id="filter-clima-group">
-            <span class="filter-group-label">🌡️ Clima:</span>
-            <button class="filter-chip-clima active" data-filter-clima="todos">Todos</button>
-            <button class="filter-chip-clima chip-clima-quente" data-filter-clima="quente" title="Destinos quentes com média acima de 25°C">☀️ Quente (&gt;25°C)</button>
-            <button class="filter-chip-clima chip-clima-ameno" data-filter-clima="ameno" title="Destinos amenos entre 15°C e 25°C">⛅ Ameno (15-25°C)</button>
-            <button class="filter-chip-clima chip-clima-frio" data-filter-clima="frio" title="Destinos frios com média abaixo de 15°C">❄️ Frio (&lt;15°C)</button>
-          </div>
-          <div class="sort-rotas-group" id="sort-rotas-group">
-            <span class="filter-group-label">↕️ Ordenar:</span>
-            <button class="sort-chip active" data-sort="padrao" title="Ordem cronológica cadastrada">Padrão</button>
-            <button class="sort-chip chip-sort-economia" data-sort="economia" id="btn-sort-economia" title="Ordenar por maior economia percentual em relação ao preço alvo/teto">🎯 Maior Economia (%)</button>
-            <button class="sort-chip" data-sort="preco" title="Ordenar por menor preço atual">💰 Menor Preço</button>
-          </div>
-        </div>
-      </div>
-
-      <div class="flight-cards-grid" id="rotas-container">
-        <!-- Renderizado dinamicamente via JS -->
+    <main id="rotas-container" class="rotas-grid">
+      <!-- Cards de rotas renderizados via JavaScript -->
+      <div class="empty-state" style="grid-column: 1 / -1;">
+        <div class="loading-spinner"></div>
+        <p style="margin-top: 12px;">Carregando rotas monitoradas...</p>
       </div>
     </main>
-
-    <!-- TAB 2: Bug Fares -->
-    <main class="tab-content" id="tab-bugfares">
-      <div class="section-header-box">
-        <div>
-          <h2>🚨 Bug Fares & Erros de Tarifa</h2>
-          <p>Detecção em tempo real via GDS: tarifas abaixo do piso regional e anomalias estatísticas de precificação.</p>
-        </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button class="btn btn-primary" id="btn-escanear-bugs" title="Disparar varredura proativa global em tempo real">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg>
-            <span id="label-btn-escanear-bugs">🔍 Varrer Corredores Globais</span>
-          </button>
-          <button class="btn btn-secondary" id="btn-testar-chime" title="Testar alerta sonoro de cabine de avião">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-            <span>🔊 Testar Som Cabine</span>
-          </button>
-        </div>
-      </div>
-
-      <div class="bugfares-feed" id="bugfares-container">
-        <!-- Renderizado dinamicamente via JS -->
-      </div>
-    </main>
-
-    <!-- TAB 3: Cotas & Saúde do Pool -->
-    <main class="tab-content" id="tab-cotas">
-      <div class="section-header-box">
-        <div>
-          <h2>🔑 Pool de Chaves SerpAPI (Google Flights Engine)</h2>
-          <p>Distribuição de carga balanceada em 4 contas, rotação round-robin atômica e proteção contra HTTP 429.</p>
-        </div>
-        <button class="btn btn-secondary" id="btn-reset-hoje">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-          <span>Zerar Contador Hoje</span>
-        </button>
-      </div>
-
-      <div class="pool-cards-grid" id="pool-keys-container">
-        <!-- Renderizado dinamicamente via JS -->
-      </div>
-    </main>
-
-    <!-- Modal Nova Rota / Editar Rota -->
-    <div class="modal-overlay" id="modal-rota">
-      <div class="modal-card">
-        <div class="modal-header">
-          <h3 id="modal-rota-titulo">✈️ Monitorar Nova Rota</h3>
-          <button class="btn-close" id="btn-fechar-modal-rota">&times;</button>
-        </div>
-        <form id="form-nova-rota">
-          <input type="hidden" id="input-rota-id" value="">
-          <div class="form-row">
-            <div class="form-group">
-              <label for="input-origem">Origem (Cidade ou Aeroporto)</label>
-              <input type="text" id="input-origem" required placeholder="Ex: São Paulo, Rio, BSB, RAO" list="cidades-sugestoes">
-            </div>
-            <div class="form-group">
-              <label for="input-destino">Destino ou Região</label>
-              <input type="text" id="input-destino" required placeholder="Ex: Europa, Buenos Aires, LIS, NYC" list="destinos-sugestoes">
-            </div>
-          </div>
-
-          <!-- Tipo de Viagem Explícito -->
-          <div class="trip-type-selector-card">
-            <span class="trip-type-selector-label">Tipo de Viagem:</span>
-            <div class="trip-type-buttons" id="group-trip-type-buttons">
-              <button type="button" class="btn-trip-select active" id="btn-tipo-roundtrip" data-tipo="round_trip">
-                🔄 Ida e Volta
-              </button>
-              <button type="button" class="btn-trip-select" id="btn-tipo-oneway" data-tipo="one_way">
-                ➡️ Apenas Ida
-              </button>
-            </div>
-          </div>
-
-          <!-- Opção Voo Flexível Sem Data Fixa -->
-          <div class="flex-mode-toggle-card">
-            <label class="checkbox-container" for="input-sem-data">
-              <input type="checkbox" id="input-sem-data">
-              <span class="checkbox-checkmark"></span>
-              <div class="checkbox-text-group">
-                <strong class="checkbox-title">🗓️ Voo Flexível / Sem Data Fixa (Movido a Menor Preço)</strong>
-                <span class="checkbox-sub">Varre continuamente o ano em busca da tarifa mais barata sem data rígida.</span>
-              </div>
-            </label>
-          </div>
-
-          <div class="form-row" id="row-datas-viagem">
-            <div class="form-group" id="group-data-ida">
-              <label for="input-data-ida" id="label-data-ida">Data de Ida</label>
-              <input type="date" id="input-data-ida" required>
-            </div>
-            <div class="form-group" id="group-data-volta">
-              <label for="input-data-volta" id="label-data-volta">Volta (Data, Dias de viagem ou 'Só Ida')</label>
-              <input type="text" id="input-data-volta" placeholder="Ex: 14 dias, 2026-11-24 ou Só Ida">
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group form-group-teto">
-              <div class="label-with-teto-badge">
-                <label for="input-preco-alvo" id="label-preco-alvo">Preço Alvo / Teto (R$)</label>
-                <span class="teto-scope-badge badge-roundtrip" id="badge-teto-escopo">🔄 Ida e Volta</span>
-              </div>
-              <input type="number" id="input-preco-alvo" step="50" placeholder="Ex: 3800">
-              <div class="teto-hint-box" id="hint-teto-explicacao">
-                💡 Teto pesquisado para o <strong>valor total de Ida e Volta</strong>.
-              </div>
-            </div>
-            <div class="form-group">
-              <label for="input-flexibilidade">Flexibilidade de Datas</label>
-              <select id="input-flexibilidade">
-                <option value="0">Data Fixa (±0 dias)</option>
-                <option value="1">±1 dia (3 combinações)</option>
-                <option value="2">±2 dias (5 combinações)</option>
-                <option value="3" selected>±3 dias (Recomendado)</option>
-                <option value="5">±5 dias (Semana flexível)</option>
-                <option value="7">±7 dias (Máxima flexibilidade)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-row" style="margin-bottom: 20px;">
-            <div class="form-group">
-              <label for="input-duracao-max">Duração Máxima (Horas)</label>
-              <input type="number" id="input-duracao-max" value="16" placeholder="Ex: 16">
-            </div>
-            <div class="form-group">
-              <label for="input-cabine">Classe da Cabine</label>
-              <select id="input-cabine">
-                <option value="economy" selected>Econômica (Padrão)</option>
-                <option value="premium_economy">Econômica Premium</option>
-                <option value="business">Executiva (Business)</option>
-                <option value="first">Primeira Classe (First)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="modal-actions">
-            <button type="button" class="btn btn-secondary" id="btn-cancelar-modal-rota">Cancelar</button>
-            <button type="submit" class="btn btn-primary" id="btn-salvar-rota-submit">Salvar Rastreamento</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- Modal Histórico de Preços -->
-    <div class="modal-overlay" id="modal-historico">
-      <div class="modal-card modal-lg">
-        <div class="modal-header">
-          <h3 id="historico-titulo">📈 Histórico de Cotações</h3>
-          <button class="btn-close" id="btn-fechar-modal-historico">&times;</button>
-        </div>
-        <div class="historico-content">
-          <div class="historico-tabela-wrap">
-            <table class="tabela-historico">
-              <thead>
-                <tr>
-                  <th>Data/Hora Checagem</th>
-                  <th>Preço do Voo</th>
-                  <th>Termômetro</th>
-                </tr>
-              </thead>
-              <tbody id="historico-tbody">
-                <!-- Linhas dinâmicas -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Datalists de Autocomplete Inteligente -->
-    <datalist id="cidades-sugestoes">
-      <option value="São Paulo"></option>
-      <option value="Rio de Janeiro"></option>
-      <option value="Belo Horizonte"></option>
-      <option value="Brasília"></option>
-      <option value="Curitiba"></option>
-      <option value="Porto Alegre"></option>
-      <option value="Salvador"></option>
-      <option value="Recife"></option>
-      <option value="Fortaleza"></option>
-      <option value="Ribeirão Preto"></option>
-      <option value="Campinas"></option>
-      <option value="Belém"></option>
-      <option value="Florianópolis"></option>
-    </datalist>
-
-    <datalist id="destinos-sugestoes">
-      <option value="Europa"></option>
-      <option value="Estados Unidos"></option>
-      <option value="América do Sul"></option>
-      <option value="Ásia"></option>
-      <option value="Buenos Aires"></option>
-      <option value="Santiago"></option>
-      <option value="Lisboa"></option>
-      <option value="Madrid"></option>
-      <option value="Paris"></option>
-      <option value="Roma"></option>
-      <option value="Londres"></option>
-      <option value="Nova York"></option>
-      <option value="Miami"></option>
-      <option value="Orlando"></option>
-      <option value="Tóquio"></option>
-      <option value="Bariloche"></option>
-      <option value="Mendoza"></option>
-      <option value="Cancun"></option>
-    </datalist>
-
-    <!-- Toast de Notificações In-App -->
-    <div class="toast-container" id="toast-container"></div>
   </div>
+
+  <!-- Modal Criação / Edição de Rota -->
+  <div id="modal-rota" class="modal-backdrop hidden">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2 id="modal-titulo">Nova Rota Monitorada</h2>
+        <button type="button" id="btn-fechar-modal" class="btn btn-ghost btn-sm">✕</button>
+      </header>
+
+      <form id="form-rota">
+        <input type="hidden" id="rota-id">
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="campo-origem">Origem *</label>
+            <input type="text" id="campo-origem" class="form-control" placeholder="Ex: SAO ou São Paulo" required>
+          </div>
+          <div class="form-group">
+            <label for="campo-destino">Destino *</label>
+            <input type="text" id="campo-destino" class="form-control" placeholder="Ex: LIS ou Lisboa" required>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-check">
+            <input type="checkbox" id="campo-sem-data">
+            <span>🗓️ Modo Flexível Sem Data (menor preço nos próximos meses)</span>
+          </label>
+        </div>
+
+        <div id="datas-container" class="form-row">
+          <div class="form-group">
+            <label for="campo-data-ida">Data de Ida *</label>
+            <input type="date" id="campo-data-ida" class="form-control">
+          </div>
+          <div class="form-group">
+            <label for="campo-data-volta">Data de Volta (ou dias)</label>
+            <input type="text" id="campo-data-volta" class="form-control" placeholder="Ex: 2026-11-20 ou 10">
+          </div>
+        </div>
+
+        <div class="form-group" id="grupo-dias-flexiveis">
+          <label for="campo-dias-flexiveis">📅 Janela Flexível</label>
+          <select id="campo-dias-flexiveis" class="form-control">
+            <option value="0">Data exata</option>
+            <option value="1">±1 dia</option>
+            <option value="2">±2 dias</option>
+            <option value="3">±3 dias</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="campo-preco-alvo">🎯 Meta/Teto de Preço em R$</label>
+            <input type="number" id="campo-preco-alvo" class="form-control" placeholder="Ex: 3500" min="0" step="10">
+          </div>
+          <div class="form-group">
+            <label for="campo-max-stops">Conexões / Paradas</label>
+            <select id="campo-max-stops" class="form-control">
+              <option value="">Qualquer número de escalas</option>
+              <option value="0">✈️ Apenas voos diretos</option>
+              <option value="1">1 Parada máxima</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-check">
+            <input type="checkbox" id="campo-carry-on-bags" value="1">
+            <span>🧳 Exigir 1 mala de mão inclusa no filtro</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" id="btn-cancelar" class="btn btn-outline">Cancelar</button>
+          <button type="submit" id="btn-salvar" class="btn btn-primary">
+            <span class="btn-text">Salvar Rota</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
 
   <script type="module" src="/app.js"></script>
 </body>

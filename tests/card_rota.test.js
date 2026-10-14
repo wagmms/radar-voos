@@ -1,535 +1,423 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  criarCardRota,
-  copiarLinkGoogleFlights,
-  formatarCodigoBadge,
-  formatarDataBr,
   escapeHtml,
-  calcularMilhasEstimadas,
-  renderizarBadgeMilhas,
-  salvarMilhasInline,
-  COTACOES_MILHA_MILHEIRO
+  formatarPreco,
+  formatarDiaMes,
+  ehUrlSegura,
+  renderizarBadgeMeta,
+  renderizarBadgeTermometro,
+  renderizarBadgeJanelaFlex,
+  renderizarBadgesFiltros,
+  renderizarLinhaHorarios,
+  renderizarTradeOff,
+  renderizarCalloutDataAlternativa,
+  renderizarGraficoCalendarioSvg,
+  renderizarCardRota
 } from '../src/public/js/card_rota.js';
 
-describe('Cockpit PWA: Card de Rota e Cópia Rápida de Link (card_rota.js)', () => {
-  const rotaPadrao = {
-    id: 101,
-    origem: 'São Paulo',
-    destino: 'Lisboa',
-    codigo_origem: 'GRU',
-    codigo_destino: 'LIS',
-    data_ida: '2026-11-15',
-    data_volta: '2026-11-28',
-    preco_atual: 2450.00,
-    preco_alvo: 2800.00,
-    menor_preco_historico: 2200.00,
-    termometro: '🟢 Preço Excelente',
-    detalhes_voo: 'TAP Air Portugal • Direto • 10h',
-    link_google_flights: 'https://www.google.com/travel/flights?tfs=CBEMA...&curr=BRL',
-    historico_recente: [2900, 2750, 2600, 2450]
-  };
-
-  it('deve gerar a estrutura HTML do card com botão de cópia rápida do Google Flights', () => {
-    const html = criarCardRota(rotaPadrao);
-
-    assert.ok(html.includes('id="card-rota-101"'), 'deve conter o ID do card');
-    assert.ok(html.includes('GRU'), 'deve exibir código de origem');
-    assert.ok(html.includes('LIS'), 'deve exibir código de destino');
-    assert.ok(html.includes('R$ 2450,00'), 'deve formatar preço atual');
-
-    // Botão de link externo tradicional
-    assert.ok(html.includes('class="btn-flights-external"'));
-    assert.ok(html.includes('target="_blank"'));
-    assert.ok(html.includes('rel="noopener noreferrer"'));
-
-    // Novo botão de cópia rápida
-    assert.ok(html.includes('btn-copy-link'), 'deve conter classe do botão de cópia rápida');
-    assert.ok(html.includes('title="Copiar link do Google Flights"'), 'deve ter tooltip de cópia rápida');
-    assert.ok(html.includes('aria-label="Copiar link do Google Flights"'), 'deve ser acessível');
-    assert.ok(html.includes('onclick="copiarLinkGoogleFlights(event,'), 'deve vincular evento onclick');
-    assert.ok(html.includes(escapeHtml(rotaPadrao.link_google_flights)), 'deve passar o link escapado para a função');
-  });
-
-  it('deve escapar atributos HTML defensivamente para evitar quebras por aspas ou caracteres especiais', () => {
-    const rotaComLinkEspecial = {
-      ...rotaPadrao,
-      id: 102,
-      link_google_flights: 'https://www.google.com/travel/flights?q="Lisboa"&destino=\'LIS\'&promo=1<2'
-    };
-
-    const html = criarCardRota(rotaComLinkEspecial);
-    assert.ok(html.includes('&quot;Lisboa&quot;'));
-    assert.ok(html.includes('&#39;LIS&#39;'));
-    assert.ok(!html.includes('onclick="copiarLinkGoogleFlights(event, \'https://www.google.com/travel/flights?q="Lisboa"'));
-  });
-
-  it('deve lidar graciosamente com rota vazia ou propriedades ausentes', () => {
-    assert.equal(criarCardRota(null), '');
-    assert.equal(criarCardRota(undefined), '');
-
-    const rotaMinima = {
-      id: 99,
-      origem: 'Rio de Janeiro',
-      destino: 'Madrid'
-    };
-
-    const html = criarCardRota(rotaMinima);
-    assert.ok(html.includes('id="card-rota-99"'));
-    assert.ok(html.includes('btn-copy-link'));
-    assert.ok(html.includes('Aguardando'));
-  });
-
-  it('deve aplicar status visual apropriado (meta atingida, promoção, flexível)', () => {
-    // Meta atingida (preço atual <= alvo)
-    const cardMeta = criarCardRota({
-      ...rotaPadrao,
-      preco_atual: 1500,
-      preco_alvo: 1600
-    });
-    assert.ok(cardMeta.includes('status-meta'));
-
-    // Flexível (sem data fixa)
-    const cardFlex = criarCardRota({
-      ...rotaPadrao,
-      sem_data: 1
-    });
-    assert.ok(cardFlex.includes('status-flexivel'));
-
-    // Promoção
-    const cardPromo = criarCardRota({
-      ...rotaPadrao,
-      preco_atual: 3000,
-      preco_alvo: 2000,
-      termometro: '🟢 Super Barato'
-    });
-    assert.ok(cardPromo.includes('status-promo'));
-  });
-
-  it('deve identificar Só Ida vs Ida e Volta e tags de cabine', () => {
-    const cardSoIda = criarCardRota({
-      ...rotaPadrao,
-      tipo_viagem: 'one_way',
-      data_volta: 'Só Ida'
-    });
-    assert.ok(cardSoIda.includes('SÓ IDA'));
-    assert.ok(cardSoIda.includes('➡️ Apenas Ida'));
-
-    const cardBusiness = criarCardRota({
-      ...rotaPadrao,
-      cabine: 'business'
-    });
-    assert.ok(cardBusiness.includes('BUSINESS'));
-  });
-
-  describe('copiarLinkGoogleFlights: Lógica de Cópia e Feedback Toast', () => {
-    it('deve copiar com sucesso via navigator.clipboard e exibir toast de 2s ("Link copiado! ✓")', async () => {
-      let textoCopiado = null;
-      let toastMensagem = null;
-      let toastErro = null;
-      let toastDuracao = null;
-      let vibracaoChamada = false;
-
-      const mockClipboard = {
-        writeText: async (txt) => {
-          textoCopiado = txt;
-        }
-      };
-
-      const mockToast = (msg, err, duracao) => {
-        toastMensagem = msg;
-        toastErro = err;
-        toastDuracao = duracao;
-      };
-
-      const mockVibrar = () => {
-        vibracaoChamada = true;
-      };
-
-      const fakeEvent = {
-        stopPropagation: () => {}
-      };
-
-      const url = 'https://www.google.com/travel/flights?tfs=CBEMA123';
-      const sucesso = await copiarLinkGoogleFlights(fakeEvent, url, {
-        clipboard: mockClipboard,
-        mostrarToast: mockToast,
-        vibrar: mockVibrar
-      });
-
-      assert.equal(sucesso, true);
-      assert.equal(textoCopiado, url);
-      assert.equal(toastMensagem, 'Link copiado! ✓');
-      assert.equal(toastErro, false);
-      assert.equal(toastDuracao, 2000, 'o feedback toast deve durar 2000ms (2s)');
-      assert.equal(vibracaoChamada, true);
+describe('Cockpit PWA: Módulo Card de Rota (card_rota.js)', () => {
+  describe('Sanitização e Formatação Base', () => {
+    it('escapeHtml: deve escapar caracteres perigosos contra XSS', () => {
+      const perigoso = '<script>alert("xss")</script> & \'teste\'';
+      const seguro = escapeHtml(perigoso);
+      assert.equal(seguro, '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt; &amp; &#39;teste&#39;');
     });
 
-    it('deve impedir propagação do evento para não acionar cliques indesejados no card', async () => {
-      let propagacaoParada = false;
-      const fakeEvent = {
-        stopPropagation: () => {
-          propagacaoParada = true;
-        }
-      };
-
-      await copiarLinkGoogleFlights(fakeEvent, 'https://flights.google.com', {
-        clipboard: { writeText: async () => {} },
-        mostrarToast: () => {}
-      });
-
-      assert.equal(propagacaoParada, true);
-    });
-
-    it('deve retornar falso e notificar erro quando o link for vazio, nulo ou inválido', async () => {
-      let toastMensagem = null;
-      let toastErro = null;
-
-      const mockToast = (msg, err) => {
-        toastMensagem = msg;
-        toastErro = err;
-      };
-
-      // String vazia
-      const resVazio = await copiarLinkGoogleFlights(null, '', { mostrarToast: mockToast });
-      assert.equal(resVazio, false);
-      assert.equal(toastMensagem, 'Link não disponível para cópia');
-      assert.equal(toastErro, true);
-
-      // Null
-      const resNull = await copiarLinkGoogleFlights(null, null, { mostrarToast: mockToast });
-      assert.equal(resNull, false);
-
-      // '#'
-      const resHash = await copiarLinkGoogleFlights(null, '#', { mostrarToast: mockToast });
-      assert.equal(resHash, false);
-    });
-
-    it('deve capturar falhas na API de clipboard defensivamente sem lançar erro não tratado', async () => {
-      let toastMensagem = null;
-      let toastErro = null;
-
-      const mockClipboardComErro = {
-        writeText: async () => {
-          throw new Error('NotAllowedError: Permission denied');
-        }
-      };
-
-      const mockToast = (msg, err) => {
-        toastMensagem = msg;
-        toastErro = err;
-      };
-
-      const sucesso = await copiarLinkGoogleFlights(null, 'https://test.com', {
-        clipboard: mockClipboardComErro,
-        mostrarToast: mockToast
-      });
-
-      assert.equal(sucesso, false);
-      assert.equal(toastMensagem, 'Erro ao copiar link');
-      assert.equal(toastErro, true);
-    });
-  });
-
-  describe('Funções Utilitárias: Formatação e Escape', () => {
-    it('formatarCodigoBadge deve mapear códigos especiais de continentes', () => {
-      assert.equal(formatarCodigoBadge('/m/06_1'), 'AMSUL');
-      assert.equal(formatarCodigoBadge('/m/02j9z'), 'EUROPA');
-      assert.equal(formatarCodigoBadge('/m/02j1x'), 'ÁSIA');
-      assert.equal(formatarCodigoBadge('/m/02_286'), 'AMNORTE');
-      assert.equal(formatarCodigoBadge('/m/056_y'), 'AMCENTRAL');
-      assert.equal(formatarCodigoBadge('/m/0164v'), 'ÁFRICA');
-      assert.equal(formatarCodigoBadge('/m/05h_p'), 'OCEANIA');
-      assert.equal(formatarCodigoBadge('gru'), 'GRU');
-      assert.equal(formatarCodigoBadge(null), 'DEST');
-    });
-
-    it('formatarDataBr deve formatar datas ISO para padrão brasileiro DD/MM/AAAA', () => {
-      assert.equal(formatarDataBr('2026-12-25'), '25/12/2026');
-      assert.equal(formatarDataBr('2026-01-01'), '01/01/2026');
-      assert.equal(formatarDataBr(null), '-');
-      assert.equal(formatarDataBr(''), '-');
-    });
-
-    it('escapeHtml deve escapar todos os caracteres perigosos', () => {
-      assert.equal(escapeHtml('<script>alert("xss")</script>'), '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;');
-      assert.equal(escapeHtml('Tom & Jerry'), 'Tom &amp; Jerry');
-      assert.equal(escapeHtml("it's"), 'it&#39;s');
+    it('escapeHtml: deve lidar com nulos, indefinidos e números', () => {
       assert.equal(escapeHtml(null), '');
       assert.equal(escapeHtml(undefined), '');
+      assert.equal(escapeHtml(0), '0');
+      assert.equal(escapeHtml(3500), '3500');
+    });
+
+    it('formatarPreco: deve formatar valores monetários em padrão pt-BR', () => {
+      assert.equal(formatarPreco(2500), '2.500');
+      assert.equal(formatarPreco(2500.5), '2.500,50');
+      assert.equal(formatarPreco('invalido'), '—');
+    });
+
+    it('formatarDiaMes: imunidade a fuso horário (-03:00 Brasília), preservando dia e mês exatos', () => {
+      // 2026-11-10 não pode virar 09/11 por recuo de fuso horário
+      assert.equal(formatarDiaMes('2026-11-10'), '10/11');
+      assert.equal(formatarDiaMes('2026-01-01'), '01/01');
+      assert.equal(formatarDiaMes('2026-12-31'), '31/12');
+      assert.equal(formatarDiaMes(''), '');
+      assert.equal(formatarDiaMes(null), '');
+      assert.equal(formatarDiaMes(undefined), '');
+    });
+
+    it('ehUrlSegura: deve aceitar estritamente protocolos http e https e rejeitar javascript: ou maliciosos', () => {
+      assert.equal(ehUrlSegura('https://flights.google.com/test'), true);
+      assert.equal(ehUrlSegura('http://localhost:3000'), true);
+      assert.equal(ehUrlSegura('HTTPS://WWW.GOOGLE.COM'), true);
+      assert.equal(ehUrlSegura('javascript:alert("xss")'), false);
+      assert.equal(ehUrlSegura('data:text/html,<script>alert(1)</script>'), false);
+      assert.equal(ehUrlSegura('ftp://servidor.com'), false);
+      assert.equal(ehUrlSegura(''), false);
+      assert.equal(ehUrlSegura(null), false);
+      assert.equal(ehUrlSegura(undefined), false);
     });
   });
 
-  describe('Badge de Milhas Estimadas: calcularMilhasEstimadas e renderizarBadgeMilhas', () => {
-    it('calcularMilhasEstimadas deve calcular milhas corretamente com paridade customizada', () => {
-      // R$ 1.750 / R$ 17,50 por milheiro = 100.000 milhas exatas (ceil de 100000.0 = 100000)
-      const res = calcularMilhasEstimadas(1750, 17.50, 'smiles');
-      assert.ok(res !== null, 'deve retornar objeto válido');
-      assert.equal(res.milhas, 100000);
-      assert.equal(res.programa, 'smiles');
-      assert.equal(res.cotacaoMilheiro, 17.50);
+  describe('Badge de Meta / Teto em R$', () => {
+    it('deve renderizar badge de meta batida quando preco_atual <= preco_alvo', () => {
+      const rota = {
+        preco_alvo: 3500,
+        preco_atual: 2900
+      };
+      const html = renderizarBadgeMeta(rota);
+      assert.ok(html.includes('badge-meta-batida'), 'Deve ter classe de meta batida');
+      assert.ok(html.includes('Economia de R$ 600'), 'Deve exibir cálculo da economia em R$');
     });
 
-    it('calcularMilhasEstimadas deve usar cotação padrão Smiles quando paridade for nula ou inválida', () => {
-      // Sem paridade: fallback para 17.50 (Smiles)
-      const resNull = calcularMilhasEstimadas(2450, null, 'smiles');
-      assert.ok(resNull !== null);
-      const cotacaoPadrao = COTACOES_MILHA_MILHEIRO.smiles;
-      const milhasEsperadas = Math.ceil((2450 / cotacaoPadrao) * 1000);
-      assert.equal(resNull.milhas, milhasEsperadas);
-      assert.equal(resNull.cotacaoMilheiro, cotacaoPadrao);
-
-      // Programa inválido: fallback para cotação Smiles
-      const resProgInvalido = calcularMilhasEstimadas(2450, null, 'inexistente');
-      assert.ok(resProgInvalido !== null);
-      assert.equal(resProgInvalido.cotacaoMilheiro, cotacaoPadrao);
+    it('deve renderizar badge de meta comum quando preco_atual > preco_alvo', () => {
+      const rota = {
+        preco_alvo: 3000,
+        preco_atual: 3400
+      };
+      const html = renderizarBadgeMeta(rota);
+      assert.ok(!html.includes('badge-meta-batida'));
+      assert.ok(html.includes('🎯 Meta: R$ 3.000'));
     });
 
-    it('calcularMilhasEstimadas deve retornar null para preço zero, negativo ou inválido', () => {
-      assert.equal(calcularMilhasEstimadas(0, 17.50), null);
-      assert.equal(calcularMilhasEstimadas(-500, 17.50), null);
-      assert.equal(calcularMilhasEstimadas(null, 17.50), null);
-      assert.equal(calcularMilhasEstimadas(undefined, 17.50), null);
-      assert.equal(calcularMilhasEstimadas('abc', 17.50), null);
+    it('deve retornar string vazia quando rota não possui preco_alvo', () => {
+      const rota = { preco_alvo: null, preco_atual: 2500 };
+      assert.equal(renderizarBadgeMeta(rota), '');
+    });
+  });
+
+  describe('Badges de Filtros fast-flights (Blindagem de Falsy)', () => {
+    it('max_stops === 0 DEVE renderizar badge de voo direto (não pode cair em falsy null)', () => {
+      const rota = { max_stops: 0 };
+      const html = renderizarBadgesFiltros(rota);
+      assert.ok(html.includes('✈️ Voo Direto'), 'max_stops: 0 deve ser interpretado como Voo Direto');
     });
 
-    it('renderizarBadgeMilhas deve retornar HTML com badge e editor inline quando rota tem id', () => {
+    it('max_stops === 1 deve renderizar badge de 1 parada máxima', () => {
+      const rota = { max_stops: 1 };
+      const html = renderizarBadgesFiltros(rota);
+      assert.ok(html.includes('1 Parada máx.'));
+    });
+
+    it('carry_on_bags === 1 deve renderizar badge de mala de mão inclusa', () => {
+      const rota = { carry_on_bags: 1 };
+      const html = renderizarBadgesFiltros(rota);
+      assert.ok(html.includes('🧳 Mala de mão inclusa'));
+    });
+
+    it('deve combinar múltiplos filtros simultâneos', () => {
+      const rota = { max_stops: 0, carry_on_bags: 1 };
+      const html = renderizarBadgesFiltros(rota);
+      assert.ok(html.includes('✈️ Voo Direto'));
+      assert.ok(html.includes('🧳 Mala de mão inclusa'));
+    });
+
+    it('max_stops null ou undefined não deve exibir badge de paradas', () => {
+      const rota = { max_stops: null, carry_on_bags: 0 };
+      const html = renderizarBadgesFiltros(rota);
+      assert.equal(html, '');
+    });
+  });
+
+  describe('Horários, Conexão e Trade-off Direto/Rápido', () => {
+    it('deve renderizar linha de horários com número do voo e tempo de conexão', () => {
+      const rota = {
+        horario_partida: '07:15',
+        horario_chegada: '18:30',
+        numero_voo: 'G3 1542',
+        tempo_conexao: '1h 45min'
+      };
+      const html = renderizarLinhaHorarios(rota);
+      assert.ok(html.includes('07:15 ➔ 18:30'));
+      assert.ok(html.includes('G3 1542'));
+      assert.ok(html.includes('⏱️ Espera: 1h 45min'));
+    });
+
+    it('deve retornar vazio quando horários não estão disponíveis', () => {
+      const rota = { horario_partida: null, horario_chegada: null };
+      assert.equal(renderizarLinhaHorarios(rota), '');
+    });
+
+    it('deve renderizar card-tradeoff quando melhor_opcao_direta_rapida está presente', () => {
+      const rota = {
+        melhor_opcao_direta_rapida: {
+          preco: 1490,
+          diferencaPreco: 290,
+          economiaHoras: 3.5,
+          cia: 'GOL'
+        }
+      };
+      const html = renderizarTradeOff(rota);
+      assert.ok(html.includes('⚡ Opção Direta/Rápida'));
+      assert.ok(html.includes('R$ 1.490'));
+      assert.ok(html.includes('+R$ 290 para economizar <strong>3.5h</strong> de viagem'));
+    });
+  });
+
+  describe('Renderização Completa do Card de Rota (Zero Milhas)', () => {
+    it('deve gerar HTML completo com dados do voo, sem menção a milhas', () => {
       const rota = {
         id: 42,
-        preco_atual: 2450,
-        paridade_milhas: 24.00,
-        programa_milhas: 'latam'
+        origem: 'São Paulo (GRU)',
+        destino: 'Lisboa (LIS)',
+        data_ida: '2026-11-15',
+        data_volta: '2026-11-29',
+        preco_atual: 3200,
+        preco_alvo: 3800,
+        menor_preco_historico: 3100,
+        termometro: '🟢 Menor preço dos últimos 30 dias',
+        max_stops: 0,
+        carry_on_bags: 1,
+        horario_partida: '20:30',
+        horario_chegada: '10:00',
+        numero_voo: 'TP 88',
+        link_google_flights: 'https://flights.google.com/test'
       };
-      const html = renderizarBadgeMilhas(rota);
-      assert.ok(html.includes('badge-milhas-estimadas'), 'deve conter classe da badge');
-      assert.ok(html.includes('id="badge-milhas-42"'), 'deve conter ID do card na badge');
-      assert.ok(html.includes('btn-milhas-editar'), 'deve conter botão de edição inline');
-      assert.ok(html.includes('toggleMilhasEditor(42)'), 'deve vincular toggle ao ID correto');
-      assert.ok(html.includes('milhas-form-42'), 'deve conter ID do formulário inline');
-      assert.ok(html.includes('milhas-prog-42'), 'deve conter ID do select de programa');
-      assert.ok(html.includes('milhas-cot-42'), 'deve conter ID do input de cotação');
-      assert.ok(html.includes('salvarMilhasInline(42)'), 'deve vincular salvar ao ID correto');
-      // Com preco_atual deve exibir estimativa
-      assert.ok(html.includes('milhas-estimativa-row'), 'deve exibir badge de estimativa');
-      assert.ok(html.includes('milhas'), 'deve mencionar milhas na estimativa');
-      assert.ok(html.includes('Latam'), 'deve exibir nome do programa capitalizado');
-      // 2450 / 24.00 * 1000 = ceil(102083.33) = 102084
-      const milhasEsperadas = Math.ceil((2450 / 24.00) * 1000).toLocaleString('pt-BR');
-      assert.ok(html.includes(milhasEsperadas), `deve exibir ${milhasEsperadas} milhas na estimativa`);
+
+      const html = renderizarCardRota(rota);
+
+      // Verificações essenciais
+      assert.ok(html.includes('data-id="42"'));
+      assert.ok(html.includes('São Paulo (GRU)'));
+      assert.ok(html.includes('Lisboa (LIS)'));
+      assert.ok(html.includes('R$ 3.200'));
+      assert.ok(html.includes('🎯 Meta Batida'));
+      assert.ok(html.includes('✈️ Voo Direto'));
+      assert.ok(html.includes('🧳 Mala de mão inclusa'));
+      assert.ok(html.includes('20:30 ➔ 10:00'));
+      assert.ok(html.includes('TP 88'));
+
+      // Proibição de milhas no card do Cockpit
+      assert.ok(!html.toLowerCase().includes('milhas'), 'Card não deve conter referências a milhas');
+      assert.ok(!html.toLowerCase().includes('smiles'), 'Card não deve conter programa de milhas');
+      assert.ok(!html.toLowerCase().includes('paridade'), 'Card não deve conter paridade de milhas');
     });
 
-    it('renderizarBadgeMilhas deve exibir botão "Configurar milhas" quando paridade não definida', () => {
-      const rota = { id: 99, preco_atual: 1800, programa_milhas: 'smiles' };
-      const html = renderizarBadgeMilhas(rota);
-      assert.ok(html.includes('Configurar milhas'), 'deve sugerir configuração quando sem paridade');
-    });
-
-    it('renderizarBadgeMilhas deve exibir botão com cotação quando paridade está definida', () => {
-      const rota = { id: 55, preco_atual: 1800, paridade_milhas: 17.50, programa_milhas: 'smiles' };
-      const html = renderizarBadgeMilhas(rota);
-      assert.ok(html.includes('17,50') || html.includes('17.50'), 'deve exibir cotação atual no botão');
-    });
-
-    it('renderizarBadgeMilhas deve conter todas as opções de programa no select', () => {
-      const rota = { id: 10, preco_atual: 2000, programa_milhas: 'azul' };
-      const html = renderizarBadgeMilhas(rota);
-      assert.ok(html.includes('<option value="smiles"'), 'deve ter Smiles no select');
-      assert.ok(html.includes('<option value="latam"'), 'deve ter Latam no select');
-      assert.ok(html.includes('<option value="azul" selected'), 'deve pré-selecionar Azul');
-    });
-
-    it('renderizarBadgeMilhas deve retornar string vazia quando rota não tem id', () => {
-      assert.equal(renderizarBadgeMilhas(null), '');
-      assert.equal(renderizarBadgeMilhas({}), '');
-      assert.equal(renderizarBadgeMilhas(undefined), '');
-    });
-
-    it('renderizarBadgeMilhas deve ocultar estimativa quando não há preco_atual mas exibir editor', () => {
-      const rota = { id: 77 };
-      const html = renderizarBadgeMilhas(rota);
-      // Deve ainda ter o widget, mas sem a linha de estimativa
-      assert.ok(html.includes('badge-milhas-estimadas'), 'deve ter a badge');
-      assert.ok(!html.includes('milhas-estimativa-row'), 'não deve ter estimativa sem preço');
-    });
-
-    it('criarCardRota deve incluir badge-milhas-estimadas quando rota tem id', () => {
-      const rotaComParidade = {
-        id: 200,
-        origem: 'Brasília',
-        destino: 'Paris',
-        codigo_origem: 'BSB',
-        codigo_destino: 'CDG',
-        preco_atual: 3500,
-        paridade_milhas: 17.50,
-        programa_milhas: 'smiles',
-        link_google_flights: 'https://flights.google.com'
+    it('deve proteger contra XSS em campos de texto da rota', () => {
+      const rotaMaliciosa = {
+        id: 99,
+        origem: '<img src=x onerror=alert(1)>Rio',
+        destino: '<b>Paris</b>',
+        termometro: '"><script>bad()</script>'
       };
-      const html = criarCardRota(rotaComParidade);
-      assert.ok(html.includes('badge-milhas-estimadas'), 'card deve conter badge de milhas');
-      assert.ok(html.includes('milhas-form-200'), 'card deve conter formulário inline');
-      // 3500 / 17.50 * 1000 = ceil(200000) = 200.000
-      assert.ok(html.includes('200.000') || html.includes('200000'), 'deve exibir 200.000 milhas');
-      assert.ok(html.includes('Smiles'), 'deve identificar programa Smiles');
+
+      const html = renderizarCardRota(rotaMaliciosa);
+      assert.ok(!html.includes('<img src=x'), 'Deve escapar tags HTML injetadas na origem');
+      assert.ok(!html.includes('<script>'), 'Deve escapar tags de script no termômetro');
+      assert.ok(html.includes('&lt;b&gt;Paris&lt;/b&gt;'), 'Deve escapar tags no destino');
+    });
+
+    it('deve renderizar card completo com badge de termômetro, badge flexível, callout e gráfico SVG', () => {
+      const rotaCompleta = {
+        id: 101,
+        origem: 'São Paulo (GRU)',
+        destino: 'Nova York (JFK)',
+        data_ida: '2026-11-10',
+        data_volta: '2026-11-20',
+        preco_atual: 2900,
+        preco_alvo: 3500,
+        menor_preco_historico: 2800,
+        dias_flexiveis: 2,
+        price_insights: {
+          nivel: 'baixo',
+          faixaMinima: 3200,
+          faixaMaxima: 4500
+        },
+        melhor_data_alternativa: {
+          offset: 1,
+          dataIda: '2026-11-11',
+          dataVolta: '2026-11-21',
+          preco: 2500,
+          economiaReais: 400,
+          economiaPercentual: 14,
+          linkGoogleFlights: 'https://flights.google.com/test-alt'
+        },
+        calendario_precos: [
+          { offset: -2, dataIda: '2026-11-08', preco: 3100 },
+          { offset: -1, dataIda: '2026-11-09', preco: 2950 },
+          { offset: 0, dataIda: '2026-11-10', preco: 2900 },
+          { offset: 1, dataIda: '2026-11-11', preco: 2500 },
+          { offset: 2, dataIda: '2026-11-12', preco: 3200 }
+        ]
+      };
+
+      const html = renderizarCardRota(rotaCompleta);
+
+      // Badges
+      assert.ok(html.includes('badge-termometro-baixo'), 'Deve conter classe do termômetro baixo');
+      assert.ok(html.includes('🟢 Preço Baixo'), 'Deve conter texto do termômetro');
+      assert.ok(html.includes('R$ 3.200 – R$ 4.500'), 'Deve exibir faixa típica');
+      assert.ok(html.includes('📅 ±2d'), 'Deve conter badge de janela flexível ativa');
+
+      // Callout data alternativa
+      assert.ok(html.includes('card-data-alternativa'), 'Deve conter container do callout');
+      assert.ok(html.includes('Dia Vizinho Mais Barato (+1d)'), 'Deve conter tag da melhor data vizinha');
+      assert.ok(html.includes('11/11 ➔ 21/11'), 'Deve formatar datas com imunidade a fuso horário');
+      assert.ok(html.includes('R$ 2.500'), 'Deve conter preço da melhor data');
+      assert.ok(html.includes('-R$ 400 (-14%)'), 'Deve exibir economia');
+      assert.ok(html.includes('href="https://flights.google.com/test-alt"'), 'Deve conter link seguro');
+
+      // Gráfico SVG
+      assert.ok(html.includes('role="img"'), 'SVG deve conter atributo role="img"');
+      assert.ok(html.includes('aria-label="Gráfico de preços da janela flexível"'), 'SVG deve conter aria-label');
+      assert.ok(html.includes('fill="#10b981"'), 'Menor preço deve estar destacado em verde esmeralda');
+      assert.ok(html.includes('fill="#38bdf8"'), 'Data base (offset 0) deve estar destacada');
+    });
+
+    it('compatibilidade dual: deve aceitar chaves camelCase nos objetos da rota', () => {
+      const rotaCamel = {
+        id: 102,
+        origem: 'Brasília (BSB)',
+        destino: 'Lisboa (LIS)',
+        data_ida: '2026-12-01',
+        preco_atual: 3600,
+        diasFlexiveis: 1,
+        priceInsights: {
+          nivel: 'tipico',
+          faixa_minima: 3400,
+          faixa_maxima: 4200
+        },
+        melhorDataAlternativa: {
+          offset: -1,
+          data_ida: '2026-11-30',
+          preco: 3200,
+          economia_reais: 400,
+          economia_percentual: 11
+        },
+        calendarioPrecos: [
+          { offset: -1, data_ida: '2026-11-30', preco: 3200 },
+          { offset: 0, data_ida: '2026-12-01', preco: 3600 }
+        ]
+      };
+
+      const html = renderizarCardRota(rotaCamel);
+      assert.ok(html.includes('badge-termometro-tipico'), 'Deve processar priceInsights camelCase');
+      assert.ok(html.includes('📅 ±1d'), 'Deve processar diasFlexiveis camelCase');
+      assert.ok(html.includes('card-data-alternativa'), 'Deve processar melhorDataAlternativa camelCase');
+      assert.ok(html.includes('grafico-calendario'), 'Deve processar calendarioPrecos camelCase');
     });
   });
 
-  describe('salvarMilhasInline: Persistência via PATCH /api/rotas/:id/milhas', () => {
-    // Cria um mock de document com getElementById funcional
-    function criarDocMock(progVal, cotVal) {
-      const elements = {
-        [`milhas-prog-42`]: { value: progVal, classList: { add: () => {}, remove: () => {} } },
-        [`milhas-cot-42`]: { value: cotVal, classList: { add() { this._erro = true; }, remove() { this._erro = false; }, _erro: false } }
-      };
-      const formEl = { style: { display: 'block' }, _hidden: false };
-      elements[`milhas-form-42`] = formEl;
-      return { getElementById: (id) => elements[id] || null };
-    }
-
-    it('deve salvar com sucesso via PATCH e exibir toast de confirmação', async () => {
-      let fetchBody = null;
-      let toastMsg = null;
-      let toastErro = null;
-      let recarregouDados = false;
-      const formEl = { style: { display: 'block' } };
-
-      const mockDoc = {
-        getElementById: (id) => {
-          if (id === 'milhas-prog-42') return { value: 'latam', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-cot-42') return { value: '24.00', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-form-42') return formEl;
-          return null;
-        }
-      };
-
-      const mockFetch = async (url, opts) => {
-        fetchBody = JSON.parse(opts.body);
-        return { ok: true, json: async () => ({}) };
-      };
-
-      const res = await salvarMilhasInline(42, {
-        document: mockDoc,
-        fetch: mockFetch,
-        mostrarToast: (msg, erro) => { toastMsg = msg; toastErro = erro; },
-        recarregarDados: () => { recarregouDados = true; }
-      });
-
-      assert.equal(res, true, 'deve retornar true em caso de sucesso');
-      assert.equal(fetchBody.paridade_milhas, 24.00, 'deve enviar paridade correta');
-      assert.equal(fetchBody.programa_milhas, 'latam', 'deve enviar programa correto');
-      assert.ok(toastMsg.includes('salva'), 'toast deve confirmar salvamento');
-      assert.equal(toastErro, false, 'toast não deve ser erro');
-      assert.equal(recarregouDados, true, 'deve recarregar dados após salvar');
-      assert.equal(formEl.style.display, 'none', 'deve fechar o formulário após salvar');
+  describe('Badge do Termômetro Google (renderizarBadgeTermometro)', () => {
+    it('deve renderizar badge verde para nível baixo', () => {
+      const html = renderizarBadgeTermometro({ nivel: 'baixo', faixaMinima: 2000, faixaMaxima: 3000 });
+      assert.ok(html.includes('badge-termometro-baixo'));
+      assert.ok(html.includes('🟢 Preço Baixo'));
+      assert.ok(html.includes('R$ 2.000 – R$ 3.000'));
     });
 
-    it('deve rejeitar paridade inválida (zero ou negativa) com feedback visual', async () => {
-      let toastMsg = null;
-      let classeErroAdicionada = false;
-
-      const inputMock = {
-        value: '0',
-        classList: { add(cls) { if (cls === 'milhas-input-erro') classeErroAdicionada = true; }, remove() {} }
-      };
-
-      const mockDoc = {
-        getElementById: (id) => {
-          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-cot-42') return inputMock;
-          return null;
-        }
-      };
-
-      const res = await salvarMilhasInline(42, {
-        document: mockDoc,
-        fetch: async () => ({ ok: true }),
-        mostrarToast: (msg, _) => { toastMsg = msg; }
-      });
-
-      assert.equal(res, false, 'deve retornar false para cotação zero');
-      assert.ok(toastMsg.includes('inválida') || toastMsg.includes('positivo'), 'toast deve descrever o erro');
-      assert.equal(classeErroAdicionada, true, 'deve adicionar classe de erro ao input');
+    it('deve renderizar badge amarela para nível típico', () => {
+      const html = renderizarBadgeTermometro({ nivel: 'tipico' });
+      assert.ok(html.includes('badge-termometro-tipico'));
+      assert.ok(html.includes('🟡 Preço Típico'));
     });
 
-    it('deve rejeitar paridade NaN com feedback visual', async () => {
-      let toastMsg = null;
-      const inputMock = {
-        value: 'abc',
-        classList: { add() {}, remove() {} }
-      };
-      const mockDoc = {
-        getElementById: (id) => {
-          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-cot-42') return inputMock;
-          return null;
-        }
-      };
-
-      const res = await salvarMilhasInline(42, {
-        document: mockDoc,
-        fetch: async () => ({ ok: true }),
-        mostrarToast: (msg) => { toastMsg = msg; }
-      });
-
-      assert.equal(res, false, 'deve retornar false para NaN');
-      assert.ok(toastMsg.length > 0, 'deve exibir toast de erro');
+    it('deve renderizar badge vermelha para nível alto', () => {
+      const html = renderizarBadgeTermometro({ nivel: 'alto' });
+      assert.ok(html.includes('badge-termometro-alto'));
+      assert.ok(html.includes('🔴 Preço Alto'));
     });
 
-    it('deve retornar false quando elementos do formulário não são encontrados no DOM', async () => {
-      const mockDoc = { getElementById: () => null };
-      const res = await salvarMilhasInline(42, {
-        document: mockDoc,
-        fetch: async () => ({ ok: true }),
-        mostrarToast: () => {}
-      });
-      assert.equal(res, false, 'deve retornar false quando DOM incompleto');
+    it('deve retornar string vazia para nível nulo, indefinido ou inválido', () => {
+      assert.equal(renderizarBadgeTermometro(null), '');
+      assert.equal(renderizarBadgeTermometro({}), '');
+      assert.equal(renderizarBadgeTermometro({ nivel: 'desconhecido' }), '');
+    });
+  });
+
+  describe('Badge de Janela Flexível (renderizarBadgeJanelaFlex)', () => {
+    it('deve renderizar badge quando diasFlex > 0', () => {
+      assert.ok(renderizarBadgeJanelaFlex(1).includes('📅 ±1d'));
+      assert.ok(renderizarBadgeJanelaFlex(3).includes('📅 ±3d'));
     });
 
-    it('deve retornar false quando fetch lança exceção (erro de rede)', async () => {
-      let toastMsg = null;
-      const mockDoc = {
-        getElementById: (id) => {
-          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-cot-42') return { value: '17.50', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-form-42') return { style: { display: 'block' } };
-          return null;
-        }
+    it('deve retornar vazio quando diasFlex === 0 ou nulo', () => {
+      assert.equal(renderizarBadgeJanelaFlex(0), '');
+      assert.equal(renderizarBadgeJanelaFlex(null), '');
+      assert.equal(renderizarBadgeJanelaFlex(undefined), '');
+    });
+  });
+
+  describe('Callout de Melhor Data Alternativa (renderizarCalloutDataAlternativa)', () => {
+    it('deve renderizar callout quando há economia positiva', () => {
+      const alt = {
+        offset: 2,
+        dataIda: '2026-11-15',
+        dataVolta: '2026-11-25',
+        preco: 1800,
+        economiaReais: 500,
+        economiaPercentual: 22,
+        linkGoogleFlights: 'https://flights.google.com/test'
       };
-
-      const res = await salvarMilhasInline(42, {
-        document: mockDoc,
-        fetch: async () => { throw new Error('Network error'); },
-        mostrarToast: (msg) => { toastMsg = msg; }
-      });
-
-      assert.equal(res, false, 'deve retornar false em erro de rede');
-      assert.ok(toastMsg.includes('Falha') || toastMsg.includes('comunicação'), 'deve exibir mensagem de falha');
+      const html = renderizarCalloutDataAlternativa(alt);
+      assert.ok(html.includes('Dia Vizinho Mais Barato (+2d)'));
+      assert.ok(html.includes('15/11 ➔ 25/11'));
+      assert.ok(html.includes('R$ 1.800'));
+      assert.ok(html.includes('-R$ 500 (-22%)'));
+      assert.ok(html.includes('href="https://flights.google.com/test"'));
     });
 
-    it('deve retornar false quando servidor retorna erro HTTP', async () => {
-      let toastMsg = null;
-      const mockDoc = {
-        getElementById: (id) => {
-          if (id === 'milhas-prog-42') return { value: 'smiles', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-cot-42') return { value: '17.50', classList: { add() {}, remove() {} } };
-          if (id === 'milhas-form-42') return { style: { display: 'block' } };
-          return null;
-        }
+    it('deve bloquear injeção XSS de links javascript: ou protocolos inseguros no callout', () => {
+      const altInseguro = {
+        offset: -1,
+        dataIda: '2026-11-10',
+        preco: 1500,
+        economiaReais: 200,
+        linkGoogleFlights: 'javascript:alert(document.cookie)'
       };
-
-      const res = await salvarMilhasInline(42, {
-        document: mockDoc,
-        fetch: async () => ({ ok: false, json: async () => ({ erro: 'paridade_milhas inválida' }) }),
-        mostrarToast: (msg) => { toastMsg = msg; }
-      });
-
-      assert.equal(res, false, 'deve retornar false em erro do servidor');
-      assert.ok(toastMsg.includes('inválida') || toastMsg.includes('Erro'), 'deve exibir erro do servidor');
+      const html = renderizarCalloutDataAlternativa(altInseguro);
+      assert.ok(!html.includes('javascript:'), 'Não pode conter href javascript');
+      assert.ok(!html.includes('Ver voo alternativo'), 'Não deve exibir o link para protocolo inválido');
     });
 
-    it('deve retornar false quando document ou fetch não disponíveis', async () => {
-      const res = await salvarMilhasInline(42, {});
-      assert.equal(res, false, 'deve retornar false sem document/fetch');
+    it('deve retornar vazio se economiaReais for zero ou nulo', () => {
+      assert.equal(renderizarCalloutDataAlternativa({ economiaReais: 0 }), '');
+      assert.equal(renderizarCalloutDataAlternativa(null), '');
+    });
+  });
+
+  describe('Mini-Gráfico SVG da Janela Flexível (renderizarGraficoCalendarioSvg)', () => {
+    it('deve renderizar gráfico SVG acessível com destaques visualmente corretos', () => {
+      const calendario = [
+        { offset: -1, dataIda: '2026-11-09', preco: 2200 },
+        { offset: 0, dataIda: '2026-11-10', preco: 2500 },
+        { offset: 1, dataIda: '2026-11-11', preco: 1900 }
+      ];
+
+      const html = renderizarGraficoCalendarioSvg(calendario, 2500);
+
+      assert.ok(html.includes('<svg role="img" aria-label="Gráfico de preços da janela flexível"'),
+        'SVG deve possuir papel e rótulo semântico acessível');
+      assert.ok(html.includes('fill="#10b981"'), 'Menor preço (1900) deve estar destacado em verde esmeralda');
+      assert.ok(html.includes('fill="#38bdf8"'), 'Data base (offset 0) deve estar destacada');
+      assert.ok(html.includes('09/11'), 'Data deve estar formatada como DD/MM');
+      assert.ok(html.includes('10/11'), 'Data deve estar formatada como DD/MM');
+      assert.ok(html.includes('11/11'), 'Data deve estar formatada como DD/MM');
+    });
+
+    it('imunidade a divisão por zero: quando todos os preços forem exatamente iguais, não deve conter NaN', () => {
+      const calendarioIguais = [
+        { offset: -1, dataIda: '2026-11-09', preco: 2000 },
+        { offset: 0, dataIda: '2026-11-10', preco: 2000 },
+        { offset: 1, dataIda: '2026-11-11', preco: 2000 }
+      ];
+
+      const html = renderizarGraficoCalendarioSvg(calendarioIguais, 2000);
+
+      assert.ok(!html.includes('NaN'), 'Coordenadas do SVG não podem conter NaN');
+      assert.ok(!html.includes('Infinity'), 'Coordenadas do SVG não podem conter Infinity');
+      assert.ok(html.includes('<rect'), 'Deve renderizar barras retangulares normalmente');
+    });
+
+    it('deve retornar string vazia quando houver menos de 2 itens válidos', () => {
+      assert.equal(renderizarGraficoCalendarioSvg([]), '');
+      assert.equal(renderizarGraficoCalendarioSvg([{ offset: 0, dataIda: '2026-11-10', preco: 2000 }]), '');
+      assert.equal(renderizarGraficoCalendarioSvg(null), '');
+      assert.equal(renderizarGraficoCalendarioSvg([
+        { offset: 0, dataIda: '2026-11-10', preco: 0 },
+        { offset: 1, dataIda: '2026-11-11', preco: -50 }
+      ]), '');
     });
   });
 });
-

@@ -467,5 +467,64 @@ describe('Domínio: Rotas e Resolução Aeronáutica', () => {
     assert.deepStrictEqual(encodeLengthDelimited(NaN, payloadSimples), Buffer.from([0x0a, 0x03, 0x01, 0x02, 0x03]));
     assert.deepStrictEqual(encodeLengthDelimited(null, payloadSimples), Buffer.from([0x0a, 0x03, 0x01, 0x02, 0x03]));
   });
+
+  describe('gerarJanelaDatasFlexiveis: Motor de Datas Vizinhas (±1 a ±3 dias)', () => {
+    it('deve retornar apenas o par base com offset 0 quando diasFlexiveis for 0 ou omitido', async () => {
+      const { gerarJanelaDatasFlexiveis } = await import('../src/domain/rotas.js');
+      const resultado = gerarJanelaDatasFlexiveis('2026-11-10', '2026-11-20', 0);
+      assert.deepStrictEqual(resultado, [
+        { offset: 0, dataIda: '2026-11-10', dataVolta: '2026-11-20' }
+      ]);
+    });
+
+    it('deve gerar janela simétrica preservando exatamente a duração da estadia em Round-Trip', async () => {
+      const { gerarJanelaDatasFlexiveis } = await import('../src/domain/rotas.js');
+      // Estadia base: 10 dias (10/11 a 20/11). Com ±2 dias: offsets -2, -1, 0, 1, 2
+      const resultado = gerarJanelaDatasFlexiveis('2026-11-10', '2026-11-20', 2, '2026-10-01');
+
+      assert.strictEqual(resultado.length, 5);
+      assert.deepStrictEqual(resultado[0], { offset: -2, dataIda: '2026-11-08', dataVolta: '2026-11-18' });
+      assert.deepStrictEqual(resultado[1], { offset: -1, dataIda: '2026-11-09', dataVolta: '2026-11-19' });
+      assert.deepStrictEqual(resultado[2], { offset: 0, dataIda: '2026-11-10', dataVolta: '2026-11-20' });
+      assert.deepStrictEqual(resultado[3], { offset: 1, dataIda: '2026-11-11', dataVolta: '2026-11-21' });
+      assert.deepStrictEqual(resultado[4], { offset: 2, dataIda: '2026-11-12', dataVolta: '2026-11-22' });
+
+      // Validação da duração exata em dias para todos os pares
+      for (const par of resultado) {
+        const dIda = new Date(`${par.dataIda}T00:00:00Z`);
+        const dVolta = new Date(`${par.dataVolta}T00:00:00Z`);
+        const diffDias = Math.round((dVolta - dIda) / (1000 * 3600 * 24));
+        assert.strictEqual(diffDias, 10, `Offset ${par.offset} deve ter 10 dias de estadia`);
+      }
+    });
+
+    it('deve suportar voos de Só Ida mantendo dataVolta como null em todos os pares', async () => {
+      const { gerarJanelaDatasFlexiveis } = await import('../src/domain/rotas.js');
+      const resultado = gerarJanelaDatasFlexiveis('2026-11-10', null, 1, '2026-10-01');
+
+      assert.strictEqual(resultado.length, 3);
+      assert.deepStrictEqual(resultado[0], { offset: -1, dataIda: '2026-11-09', dataVolta: null });
+      assert.deepStrictEqual(resultado[1], { offset: 0, dataIda: '2026-11-10', dataVolta: null });
+      assert.deepStrictEqual(resultado[2], { offset: 1, dataIda: '2026-11-11', dataVolta: null });
+    });
+
+    it('deve aplicar clamping no máximo de 3 dias flexíveis (máximo 7 pares)', async () => {
+      const { gerarJanelaDatasFlexiveis } = await import('../src/domain/rotas.js');
+      const resultado = gerarJanelaDatasFlexiveis('2026-11-10', '2026-11-20', 10, '2026-10-01');
+      assert.strictEqual(resultado.length, 7); // offsets -3 a +3
+      assert.strictEqual(resultado[0].offset, -3);
+      assert.strictEqual(resultado[6].offset, 3);
+    });
+
+    it('deve ignorar datas no passado com base em hojeReferencia', async () => {
+      const { gerarJanelaDatasFlexiveis } = await import('../src/domain/rotas.js');
+      // Viagem em 2026-11-02, hoje é 2026-11-01, flexibilidade ±3 dias:
+      // Offsets possíveis: -3 (30/10 - passado), -2 (31/10 - passado), -1 (01/11 - hoje), 0 (02/11), +1, +2, +3
+      const resultado = gerarJanelaDatasFlexiveis('2026-11-02', '2026-11-12', 3, '2026-11-01');
+      assert.ok(resultado.every(p => p.dataIda >= '2026-11-01'), 'Nenhuma data deve ser anterior a hojeReferencia');
+      assert.strictEqual(resultado[0].offset, -1);
+      assert.strictEqual(resultado[0].dataIda, '2026-11-01');
+    });
+  });
 });
 

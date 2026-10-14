@@ -4,6 +4,92 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.4.0] - 2026-10-14 — Cockpit PWA & Telegram: Termômetro Google, Dica de Data Alternativa e Gráfico SVG da Janela Flexível
+
+### 🚀 Novas Funcionalidades de Frontend & Notificações:
+- **`src/services/flight_scanner.js` & `src/services/notifier_telegram.js`**:
+  - Repasse automático de `priceInsights` e `melhorDataAlternativa` no payload de `enviarAlertaOportunidade`.
+  - Renderização do Termômetro Google no Telegram com emojis semânticos (`🟢 Preço Baixo`, `🟡 Preço Típico`, `🔴 Preço Alto`) e faixa típica em reais `(Faixa típica: R$ min – R$ max)`.
+  - Renderização da dica de dia vizinho mais barato com cálculo de economia em reais e percentual, data de ida e volta, link seguro para o Google Flights e botão inline interativo.
+- **Cockpit PWA (`src/public/*`)**:
+  - `src/public/index.html` & `src/public/app.js`: Inclusão do seletor `dias_flexiveis` (Data exata, ±1d, ±2d, ±3d) no formulário da rota com blindagem de falsy (`0` preservado) e estilização no design system Aero Dark Mode.
+  - `src/public/js/card_rota.js`:
+    - Compatibilidade dual `snake_case` e `camelCase` para todos os novos campos.
+    - Badges semânticas para o Termômetro Google e para a janela flexível ativa (`📅 ±{dias}d`).
+    - Callout elegante de Melhor Data Alternativa (`card-data-alternativa`) com destaque de economia e link seguro.
+    - Helper puro e exportado `renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase)` gerando gráfico de barras inline em `<svg>` acessível (`role="img"`, `aria-label`), destacando a menor tarifa em verde esmeralda (`#10b981`) e a data base (`offset === 0`) em azul celeste (`#38bdf8`).
+- **Blindagens Cirúrgicas & Robustez**:
+  - **Imunidade a Fuso Horário (`formatarDiaMes`)**: Parse direto por manipulação de strings sem uso de `new Date()`, eliminando regressões de recuo de dia em fusos negativos (ex: Brasília `-03:00`).
+  - **Prevenção de `NaN` no SVG**: Proteção matemática estrita com denominador seguro contra divisão por zero (`maxPreco === minPreco`) e supressão quando houver menos de 2 itens válidos.
+  - **Sanitização de Protocolo (`ehUrlSegura`)**: Validação restrita de URLs (`https://` ou `http://`), bloqueando injeção de esquemas maliciosos como `javascript:`.
+- **Suíte de Testes Automatizados**:
+  - Testes unitários expandidos em `tests/alertas_criterios.test.js` (testes 12 e 13) e `tests/card_rota.test.js` (411/411 testes aprovados, 100% de sucesso no `./validate.sh fast`).
+
+## [v3.3.0] - 2026-10-14 — Termômetro de Preços Nativo (priceInsights), Janela de Datas Flexíveis (±1 a ±3 dias) & Calendário de Tarifas
+
+### 🚀 Novas Funcionalidades de Domínio, Scraping & Varredura:
+- **`src/domain/rotas.js`** (`gerarJanelaDatasFlexiveis`):
+  - Função pura determinística para geração de pares de datas em janela flexível com deslocamento (`offset`: `-diasFlexiveis` até `+diasFlexiveis`) limitado entre `0` e `3` dias.
+  - Preservação matemática estrita da duração da viagem/estadia em voos Ida e Volta (Round-Trip) com deslocamento simétrico de `dataVolta`.
+  - Filtro defensivo contra datas no passado em UTC, com suporte ao parâmetro opcional `hojeReferencia` para testes 100% determinísticos.
+- **`src/services/providers/scrapling_client.js`** (`extrairPriceInsightsDoPayloadJs`):
+  - Extração nativa do termômetro de preços do Google Flights (`script.ds:1` / `AF_initDataCallback`), identificando o nível de tarifa (`baixo`, `tipico`, `alto`) e faixas típicas de preço (`faixaMinima`, `faixaMaxima`).
+  - Remoção defensiva de comentários de linha e tratamento de erros de parsing, integrando `priceInsights` ao objeto `oferta`.
+- **`src/db.js` & `src/server/routes/rotas_routes.js`**:
+  - Migrações dinâmicas idempotentes no SQLite para `dias_flexiveis`, `calendario_precos`, `melhor_data_alternativa` e `price_insights`.
+  - Persistência e deserialização segura via `safeJsonParse` em `GET /api/rotas` e `GET /api/rotas/:id`.
+  - Suporte a `dias_flexiveis` (0 a 3) nos métodos `criar`, `atualizar` e nas rotas `POST /api/rotas` e `PUT /api/rotas/:id`.
+- **`src/services/flight_scanner.js`** (`FlightScanner.escanearRota`):
+  - Orquestração da varredura de datas flexíveis (`dias_flexiveis > 0`) reutilizando a consulta base da rota (`offset === 0`) sem duplicar chamadas.
+  - Varredura defensiva dos offsets vizinhos com consolidação do `calendarioPrecos` ordenado por offset.
+  - Identificação de `melhorDataAlternativa` quando um dia vizinho for estritamente mais barato que a data original, calculando economia em R$, economia percentual e gerando o link canônico do Google Flights na aba Cheapest.
+- **Suíte de Testes Automatizados**:
+  - Testes em `tests/domain.test.js`, `tests/payload_js_parser.test.js`, `tests/flight_scanner.test.js` e `tests/routes.test.js` (393/393 testes aprovados, 100% de sucesso no `./validate.sh fast`).
+
+## [v3.2.0] - 2026-10-13 — Conexão Completa ao Telegram, API Fastify e Cockpit PWA Mobile-First (Economia Real em R$)
+
+### 🚀 Novas Funcionalidades & Integrações de Ponta a Ponta:
+- **`src/services/flight_scanner.js` & `src/services/notifier_telegram.js`**:
+  - Repasse automático dos novos dados extraídos do voo (`numeroVoo`, `horarioPartida`, `horarioChegada`, `tempoConexao`, `escalas`, `topOfertas` e `melhorOpcaoDiretaOuRapida`) para o disparo de alertas.
+  - Alerta rico no Telegram com formatação HTML escapada (`escapeHtml`):
+    - Horários e voo: `🕒 <b>Horário:</b> {horarioPartida} ➔ {horarioChegada} ({numeroVoo})`.
+    - Tempo real de conexão para voos com escala: `⏱️ <b>Tempo de espera em conexão:</b> {tempoConexao}`.
+    - Trade-off direto/rápido inteligente: `⚡ <b>Opção Direta/Rápida:</b> R$ {preco} (+R$ {diferencaPreco} para economizar {economiaHoras}h)`.
+- **`src/db.js` & `src/server/routes/rotas_routes.js`**:
+  - Migrações dinâmicas idempotentes no SQLite para `max_stops`, `carry_on_bags`, `checked_bags`, `top_ofertas`, `melhor_opcao_direta_rapida`, `horario_partida`, `horario_chegada`, `numero_voo`, `tempo_conexao`.
+  - Tratamento estrito contra a armadilha de falsy no JavaScript (`max_stops === 0` preservado como 0 para voos diretos).
+  - Serialização e deserialização seguras com helper `safeJsonParse` para evitar exceções em consultas de rotas.
+  - Endpoints `GET /api/rotas`, `GET /api/rotas/:id`, `POST /api/rotas` e `PUT /api/rotas/:id` totalmente adaptados.
+- **Cockpit PWA Mobile-First (`src/public/*`)**:
+  - `src/public/js/card_rota.js`: Módulo Vanilla JS puro compatível com navegador e `node:test`, renderizando cards elegantes em Aero Dark Mode.
+  - Substituição definitiva de milhas por economia em dinheiro:
+    - Badge de Meta / Teto em R$ destacando visualmente economia real em verde quando o menor preço atual estiver abaixo do teto.
+    - Badges de filtros ativos `fast-flights` (`✈️ Voo Direto`, `1 Parada máx.`, `🧳 Mala de mão inclusa`).
+    - Linha de horários de voo e bloco de trade-off direto/rápido.
+  - `src/public/index.html` & `src/public/app.js`: Interface moderna mobile-first com estados explícitos de `loading`, `error`, `success` e `empty`, e Service Worker com estratégia `Stale-While-Revalidate`.
+- **Suíte de Testes Automatizados**:
+  - Novos testes em `tests/alertas_criterios.test.js` cobrindo saída HTML do Telegram.
+  - Nova suíte `tests/card_rota.test.js` com 16 testes unitários validando cards, badges, trade-offs e proteção contra XSS e milhas.
+  - Testes expandidos em `tests/routes.test.js` cobrindo filtros `fast-flights` e entrega de assets estáticos (383/383 testes verdes).
+
+## [v3.1.0] - 2026-10-13 — Extração Completa de Voos (ds:1), Ranking "Mais Barato vs. Direto/Rápido" e Propagação de Filtros Protobuf
+
+### 🚀 Novas Funcionalidades & Inteligência Tarifária:
+- **`src/services/providers/scrapling_client.js`** (`extrairVoosDoPayloadJs`):
+  - Distinção dos grupos de voos: `payload[2][0]` catalogados com `isBest: true` (melhores voos selecionados pelo Google Flights) e `payload[3][0]` com `isBest: false`.
+  - Extração precisa de horários formatados `"HH:MM"` (`horarioPartida` a partir de `legs[0][8]` e `horarioChegada` a partir do último trecho `legs[legs.length - 1][10]`).
+  - Extração de número de voo (`numeroVoo`) a partir de `legs[0][22]` (ex: `"LA 8004"`).
+  - Cálculo da conexão real (`tempoConexao` e `tempoConexaoMinutos`) entre trechos (`legs[i][10]` + data e `legs[i+1][8]` + data), formatando `"Xh Ymin"` (ex: `"1h 35min"` para 95 minutos de parada).
+  - Fallback seguro e degradação defensiva para campos ausentes (`null`).
+- **`src/services/providers/scrapling_client.js`** (`ScraplingProvider.buscarOfertas`):
+  - Inclusão de `topOfertas` no retorno da oferta com os até 3 voos mais baratos estruturados.
+  - Implementação de comparativo inteligente `melhorOpcaoDiretaOuRapida`: quando a melhor tarifa possuir escalas (`escalas > 0`), calcula e recomenda o voo direto mais barato (ou significativamente mais rápido), detalhando `diferencaPreco` (em R$) e `economiaHoras` (tempo de viagem economizado).
+  - Propagação de filtros avançados Protobuf (`checkedBags`, `maxPrice`, `hideSeparateAndSelfTransfer`, `excludeBasicEconomy`, layovers, etc.) em `construirUrlCheapest` e no link canônico.
+- **`src/services/flight_scanner.js`** (`FlightScanner.buscarOfertas` & `FlightScanner.escanearRota`):
+  - Repasse automático dos filtros da rota cadastrada no banco (`max_stops`, `carry_on_bags`, `checked_bags`, `preco_alvo`, `hide_separate_and_self_transfer`, `exclude_basic_economy`) para `buscarOfertas` e para a URL canônica `gerarLinkGoogleFlightsCheapest`.
+- **Suíte de Testes**:
+  - Testes unitários expandidos em `tests/payload_js_parser.test.js`, `tests/scrapling_client.test.js` e `tests/flight_scanner.test.js` (362/362 testes verdes).
+
 ## [v2.21.0] - 2026-10-13 — TLS Impersonation Engine (Padrão primp / Chrome 145) & Serializador Protobuf Canônico Puro (flights.proto)
 
 ### 🥷 Nova Funcionalidade de Evasão TLS & Refatoração Canônica:

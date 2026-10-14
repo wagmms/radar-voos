@@ -201,78 +201,24 @@ describe('Serviço FlightScanner & Ciclo de Varredura (executarCicloVarredura)',
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Testes unitários: calcularMilhasRota (backend mirror de calcularMilhasEstimadas)
+// Testes unitários: calcularMilhasRota (descontinuado — radar focado exclusivamente em dinheiro)
 // ─────────────────────────────────────────────────────────────────────────────
-describe('calcularMilhasRota — função pura de estimativa de milhas', () => {
-  it('1. deve calcular milhas corretamente com paridade customizada', () => {
-    // R$ 1.000 / R$ 20/milheiro × 1.000 = 50.000 milhas
-    const resultado = calcularMilhasRota(1000, 20, 'azul');
-    assert.ok(resultado !== null);
-    assert.strictEqual(resultado.milhas, 50000);
-    assert.strictEqual(resultado.programa, 'azul');
-    assert.strictEqual(resultado.cotacaoMilheiro, 20);
-  });
-
-  it('2. deve usar cotação padrão do programa quando paridade não fornecida (smiles 17.50)', () => {
-    // R$ 1.750 / R$ 17.50/milheiro × 1.000 = 100.000 milhas
-    const resultado = calcularMilhasRota(1750, null, 'smiles');
-    assert.ok(resultado !== null);
-    assert.strictEqual(resultado.milhas, 100000);
-    assert.strictEqual(resultado.programa, 'smiles');
-    assert.strictEqual(resultado.cotacaoMilheiro, 17.50);
-  });
-
-  it('3. deve arredondar para cima (Math.ceil) para não subestimar milhas necessárias', () => {
-    // R$ 100 / R$ 17.50 × 1.000 = 5714.28... → ceil = 5715
-    const resultado = calcularMilhasRota(100, null, 'smiles');
-    assert.ok(resultado !== null);
-    assert.strictEqual(resultado.milhas, 5715);
-  });
-
-  it('4. deve retornar null quando preço é zero', () => {
+describe('calcularMilhasRota — função descontinuada (retorna null)', () => {
+  it('1. deve retornar null para qualquer entrada (descontinuado em prol de economia real em dinheiro)', () => {
+    assert.strictEqual(calcularMilhasRota(1000, 20, 'azul'), null);
+    assert.strictEqual(calcularMilhasRota(1750, null, 'smiles'), null);
+    assert.strictEqual(calcularMilhasRota(100, null, 'smiles'), null);
     assert.strictEqual(calcularMilhasRota(0, 20, 'azul'), null);
-  });
-
-  it('5. deve retornar null quando preço é negativo', () => {
     assert.strictEqual(calcularMilhasRota(-500, 20, 'azul'), null);
-  });
-
-  it('6. deve retornar null quando preço é null', () => {
     assert.strictEqual(calcularMilhasRota(null, 20, 'azul'), null);
-  });
-
-  it('7. deve ignorar programa desconhecido e usar fallback smiles', () => {
-    const resultado = calcularMilhasRota(1750, null, 'programa_inexistente');
-    assert.ok(resultado !== null);
-    // fallback para smiles: 17.50
-    assert.strictEqual(resultado.cotacaoMilheiro, 17.50);
-    assert.strictEqual(resultado.programa, 'programa_inexistente');
-  });
-
-  it('8. deve aceitar programa latampass como alias de latam (24.00)', () => {
-    const resultado = calcularMilhasRota(2400, null, 'latampass');
-    assert.ok(resultado !== null);
-    assert.strictEqual(resultado.cotacaoMilheiro, 24.00);
-    assert.strictEqual(resultado.milhas, 100000);
-  });
-
-  it('9. deve ignorar paridade inválida (negativa) e usar cotação padrão do programa', () => {
-    const resultado = calcularMilhasRota(1750, -5, 'smiles');
-    assert.ok(resultado !== null);
-    assert.strictEqual(resultado.cotacaoMilheiro, 17.50);
-  });
-
-  it('10. deve aceitar preço como string numérica (parsing defensivo)', () => {
-    const resultado = calcularMilhasRota('2000', 20, 'azul');
-    assert.ok(resultado !== null);
-    assert.strictEqual(resultado.milhas, 100000);
+    assert.strictEqual(calcularMilhasRota('2000', 20, 'azul'), null);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Testes de integração: milhas_estimadas presente no retorno de escanearRota
+// Testes de integração: milhas_estimadas descontinuadas no payload de escanearRota
 // ─────────────────────────────────────────────────────────────────────────────
-describe('escanearRota — milhas_estimadas no payload de retorno', () => {
+describe('escanearRota — milhas_estimadas como null no payload de retorno', () => {
   const originalBuscarOfertas = FlightScanner.buscarOfertas;
 
   const ofertaSimulada = {
@@ -280,13 +226,13 @@ describe('escanearRota — milhas_estimadas no payload de retorno', () => {
     nivelPreco: 'NORMAL',
     duracaoHoras: 8.0,
     duracaoMinutos: 480,
-    detalhes: 'Voo Simulado Milhas',
+    detalhes: 'Voo Simulado Dinheiro',
     dicaStopover: '-',
     termometro: '⚪ Preço Normal',
     origemReal: 'GRU',
     destinoReal: 'LIS',
     codigoDestinoReal: 'LIS',
-    link: 'https://flights.google.com/milhas-teste'
+    link: 'https://flights.google.com/teste'
   };
 
   beforeEach(() => {
@@ -297,35 +243,192 @@ describe('escanearRota — milhas_estimadas no payload de retorno', () => {
     FlightScanner.buscarOfertas = originalBuscarOfertas;
   });
 
-  it('11. escanearRota: deve incluir milhas_estimadas no retorno com paridade padrão quando rota não tem paridade', async () => {
+  it('2. escanearRota: deve retornar milhas_estimadas como null no retorno', async () => {
     const rota = rotasRepo.listarTodas(true)[0];
     assert.ok(rota, 'Requer ao menos uma rota ativa no banco');
 
-    // Garante rota sem paridade customizada
-    const rotaSemParidade = { ...rota, paridade_milhas: null, programa_milhas: 'smiles' };
-    const res = await FlightScanner.escanearRota(rotaSemParidade);
+    const res = await FlightScanner.escanearRota(rota);
 
     assert.strictEqual(res.sucesso, true);
-    assert.ok(res.milhas_estimadas !== undefined, 'milhas_estimadas deve estar presente');
-    // Com preco 1750 e smiles padrão 17.50 → 100.000 milhas
-    assert.strictEqual(res.milhas_estimadas.milhas, 100000);
-    assert.strictEqual(res.milhas_estimadas.programa, 'smiles');
-    assert.strictEqual(res.milhas_estimadas.cotacaoMilheiro, 17.50);
-  });
-
-  it('12. escanearRota: deve usar paridade_milhas customizada da rota quando disponível', async () => {
-    const rota = rotasRepo.listarTodas(true)[0];
-    assert.ok(rota, 'Requer ao menos uma rota ativa no banco');
-
-    // Rota com paridade_milhas = 25 e programa azul
-    const rotaComParidade = { ...rota, paridade_milhas: 25, programa_milhas: 'azul' };
-    const res = await FlightScanner.escanearRota(rotaComParidade);
-
-    assert.strictEqual(res.sucesso, true);
-    assert.ok(res.milhas_estimadas !== undefined);
-    // R$ 1.750 / 25/milheiro × 1.000 = 70.000 milhas
-    assert.strictEqual(res.milhas_estimadas.milhas, 70000);
-    assert.strictEqual(res.milhas_estimadas.programa, 'azul');
-    assert.strictEqual(res.milhas_estimadas.cotacaoMilheiro, 25);
+    assert.strictEqual(res.milhas_estimadas, null, 'milhas_estimadas deve ser null');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Testes de integração: propagação de filtros avançados Protobuf
+// ─────────────────────────────────────────────────────────────────────────────
+describe('FlightScanner — propagação de filtros avançados Protobuf', () => {
+  const originalBuscarOfertas = FlightScanner.buscarOfertas;
+
+  afterEach(() => {
+    FlightScanner.buscarOfertas = originalBuscarOfertas;
+  });
+
+  it('deve repassar filtros opcionais da rota (max_stops, carry_on_bags, checked_bags, preco_alvo, etc.) em escanearRota', async () => {
+    let opcoesCapturadas = null;
+    FlightScanner.buscarOfertas = async (...args) => {
+      opcoesCapturadas = typeof args[0] === 'object' ? args[0] : args[8];
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco: 2200,
+          nivelPreco: 'NORMAL',
+          duracaoHoras: 9.0,
+          duracaoMinutos: 540,
+          detalhes: 'Voo com filtros',
+          dicaStopover: '-',
+          termometro: '⚪ Normal',
+          origemReal: 'GRU',
+          destinoReal: 'JFK',
+          codigoDestinoReal: 'JFK',
+          link: 'https://flights.google.com/test'
+        }
+      };
+    };
+
+    const rotaComFiltros = {
+      id: 9999,
+      origem: 'São Paulo',
+      codigo_origem: 'GRU',
+      destino: 'Nova York',
+      codigo_destino: 'JFK',
+      data_ida: '2027-04-10',
+      data_volta: '2027-04-20',
+      duracao_max_horas: 15,
+      cabine: 'economy',
+      max_stops: 0,
+      carry_on_bags: 1,
+      checked_bags: 2,
+      preco_alvo: 3000,
+      hide_separate_and_self_transfer: 1,
+      exclude_basic_economy: 1,
+      ativa: 1,
+      preco_atual: 2500,
+      flexibilidade_dias: 0,
+      sem_data: 0
+    };
+
+    const res = await FlightScanner.escanearRota(rotaComFiltros);
+    assert.strictEqual(res.sucesso, true);
+    assert.ok(opcoesCapturadas, 'Filtros avançados devem ser repassados para buscarOfertas');
+    assert.strictEqual(opcoesCapturadas.maxStops, 0);
+    assert.strictEqual(opcoesCapturadas.carryOnBags, 1);
+    assert.strictEqual(opcoesCapturadas.checkedBags, 2);
+    assert.strictEqual(opcoesCapturadas.maxPrice, 3000);
+    assert.strictEqual(opcoesCapturadas.hideSeparateAndSelfTransfer, 1);
+    assert.strictEqual(opcoesCapturadas.excludeBasicEconomy, 1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Testes de integração: Janela de Datas Flexíveis (calendarioPrecos & melhorDataAlternativa)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('FlightScanner — Janela de Datas Flexíveis & Termômetro priceInsights', () => {
+  const originalBuscarOfertas = FlightScanner.buscarOfertas;
+
+  afterEach(() => {
+    FlightScanner.buscarOfertas = originalBuscarOfertas;
+  });
+
+  it('deve varrer janela flexível (dias_flexiveis: 1), montar calendarioPrecos e calcular melhorDataAlternativa', async () => {
+    // Rota cadastrada no banco para validar persistência
+    const rotaCriada = rotasRepo.criar({
+      origem: 'São Paulo',
+      destino: 'Lisboa',
+      data_ida: '2027-06-10',
+      data_volta: '2027-06-20',
+      duracao_max_horas: 16,
+      cabine: 'economy',
+      dias_flexiveis: 1,
+      preco_alvo: 4000
+    });
+
+    FlightScanner.buscarOfertas = async (origem, destino, dataIda, dataVolta) => {
+      // Data base (2027-06-10): R$ 3500
+      // Offset -1 (2027-06-09): R$ 2800 (R$ 700 mais barato!)
+      // Offset +1 (2027-06-11): R$ 3900
+      let preco = 3500;
+      let cia = 'TAP Air Portugal';
+      if (dataIda === '2027-06-09') {
+        preco = 2800;
+        cia = 'LATAM';
+      } else if (dataIda === '2027-06-11') {
+        preco = 3900;
+        cia = 'Air France';
+      }
+
+      return {
+        ok: true,
+        encontrouVoos: true,
+        oferta: {
+          preco,
+          cia,
+          nivelPreco: 'low',
+          duracaoHoras: 10.5,
+          duracaoMinutos: 630,
+          detalhes: `${cia} direto`,
+          dicaStopover: '-',
+          termometro: '🟢 Preço Baixo',
+          origemReal: 'GRU',
+          destinoReal: 'LIS',
+          codigoDestinoReal: 'LIS',
+          link: `https://flights.google.com/?ida=${dataIda}`,
+          horarioPartida: '18:30',
+          horarioChegada: '07:15',
+          numeroVoo: 'TP 88',
+          escalas: 0,
+          priceInsights: {
+            nivel: 'baixo',
+            faixaMinima: 3000,
+            faixaMaxima: 4200
+          }
+        }
+      };
+    };
+
+    const res = await FlightScanner.escanearRota(rotaCriada);
+
+    assert.strictEqual(res.sucesso, true);
+    assert.strictEqual(res.oferta.preco, 3500, 'Preço base deve ser 3500');
+
+    // Calendário de Preços ordenado
+    assert.ok(Array.isArray(res.calendarioPrecos), 'Deve conter array calendarioPrecos');
+    assert.strictEqual(res.calendarioPrecos.length, 3, 'Deve conter 3 offsets (-1, 0, 1)');
+    assert.strictEqual(res.calendarioPrecos[0].offset, -1);
+    assert.strictEqual(res.calendarioPrecos[0].preco, 2800);
+    assert.strictEqual(res.calendarioPrecos[1].offset, 0);
+    assert.strictEqual(res.calendarioPrecos[1].preco, 3500);
+    assert.strictEqual(res.calendarioPrecos[2].offset, 1);
+    assert.strictEqual(res.calendarioPrecos[2].preco, 3900);
+
+    // Melhor Data Alternativa
+    assert.ok(res.melhorDataAlternativa, 'Deve identificar melhorDataAlternativa mais barata');
+    assert.strictEqual(res.melhorDataAlternativa.offset, -1);
+    assert.strictEqual(res.melhorDataAlternativa.dataIda, '2027-06-09');
+    assert.strictEqual(res.melhorDataAlternativa.dataVolta, '2027-06-19');
+    assert.strictEqual(res.melhorDataAlternativa.preco, 2800);
+    assert.strictEqual(res.melhorDataAlternativa.economiaReais, 700);
+    assert.strictEqual(res.melhorDataAlternativa.economiaPercentual, 20);
+    assert.strictEqual(res.melhorDataAlternativa.cia, 'LATAM');
+    assert.ok(res.melhorDataAlternativa.linkGoogleFlights.startsWith('https://www.google.com/travel/flights'), 'Link deve ser URL do Google Flights');
+    assert.ok(res.melhorDataAlternativa.linkGoogleFlights.includes('tfs='), 'Link deve conter payload tfs');
+
+    // Validação da persistência no SQLite
+    const rotaNoBanco = rotasRepo.buscarPorId(rotaCriada.id);
+    assert.ok(rotaNoBanco.calendario_precos, 'calendario_precos deve ser persistido como JSON');
+    assert.ok(rotaNoBanco.melhor_data_alternativa, 'melhor_data_alternativa deve ser persistida');
+    assert.ok(rotaNoBanco.price_insights, 'price_insights deve ser persistido');
+
+    const calSalvo = JSON.parse(rotaNoBanco.calendario_precos);
+    assert.strictEqual(calSalvo.length, 3);
+    const altSalva = JSON.parse(rotaNoBanco.melhor_data_alternativa);
+    assert.strictEqual(altSalva.economiaReais, 700);
+    const insightsSalvos = JSON.parse(rotaNoBanco.price_insights);
+    assert.strictEqual(insightsSalvos.nivel, 'baixo');
+
+    // Limpeza
+    rotasRepo.excluir(rotaCriada.id);
+  });
+});
+

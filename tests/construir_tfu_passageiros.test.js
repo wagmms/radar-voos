@@ -256,4 +256,244 @@ describe('gerarLinkGoogleFlightsCheapest: retrocompatibilidade e novos parâmetr
   });
 });
 
+describe('gerarTfs: filtros avançados fast-flights (passageiros, cabine, maxStops, layover, bagagem)', () => {
+  it('deve manter 100% de compatibilidade nos bytes de passageiros e cabine para 1 adulto economy padrão', () => {
+    const tfs = gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10'
+    });
+    const buf = Buffer.from(tfs, 'base64url');
+    // Deve conter tag 0x42 (field 8), tamanho 0x01, valor 0x01 (Adult)
+    const idxPass = buf.indexOf(Buffer.from([0x42, 0x01, 0x01]));
+    assert.ok(idxPass >= 0, 'Deve conter exatamente 0x42, 0x01, 0x01 para 1 adulto');
+    // Deve conter tag 0x48 (field 9), valor 0x01 (Economy)
+    const idxSeat = buf.indexOf(Buffer.from([0x48, 0x01]));
+    assert.ok(idxSeat >= 0, 'Deve conter exatamente 0x48, 0x01 para Economy');
+  });
+
+  it('deve codificar passageiros dinâmicos no Field 8 (2 adultos, 1 criança, 1 bebê no assento = [1, 1, 2, 3])', () => {
+    const tfs = gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      adultos: 2,
+      criancas: 1,
+      infantsInSeat: 1
+    });
+    const buf = Buffer.from(tfs, 'base64url');
+    // Tag 0x42, tamanho 0x04, sequência [0x01, 0x01, 0x02, 0x03]
+    const seqEsperada = Buffer.from([0x42, 0x04, 0x01, 0x01, 0x02, 0x03]);
+    const idx = buf.indexOf(seqEsperada);
+    assert.ok(idx >= 0, 'Deve conter sequência binária exata para 2 adultos, 1 criança e 1 bebê no assento');
+  });
+
+  it('deve codificar classe de cabine dinâmica no Field 9 (premium_economy=2, business=3, first=4)', () => {
+    const tfsPrem = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['LIS'], dataIda: '2026-11-10', classeViagem: 'premium_economy' }), 'base64url');
+    assert.ok(tfsPrem.indexOf(Buffer.from([0x48, 0x02])) >= 0, 'Premium economy deve ser 0x48, 0x02');
+
+    const tfsBiz = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['LIS'], dataIda: '2026-11-10', classeViagem: 'business' }), 'base64url');
+    assert.ok(tfsBiz.indexOf(Buffer.from([0x48, 0x03])) >= 0, 'Business deve ser 0x48, 0x03');
+
+    const tfsFirst = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['LIS'], dataIda: '2026-11-10', classeViagem: 'first' }), 'base64url');
+    assert.ok(tfsFirst.indexOf(Buffer.from([0x48, 0x04])) >= 0, 'First deve ser 0x48, 0x04');
+  });
+
+  it('deve codificar maxStops no Field 5 (0x28) de cada perna (0=direto, 1=até 1 parada, 2=até 2 paradas)', () => {
+    // Voo direto: maxStops = 0
+    const tfsDireto = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['MIA'], dataIda: '2026-11-10', maxStops: 0 }), 'base64url');
+    assert.ok(tfsDireto.indexOf(Buffer.from([0x28, 0x00])) >= 0, 'maxStops=0 deve conter tag 0x28 com valor 0x00');
+
+    // Até 1 parada: maxStops = 1
+    const tfs1Parada = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['MIA'], dataIda: '2026-11-10', maxStops: 1 }), 'base64url');
+    assert.ok(tfs1Parada.indexOf(Buffer.from([0x28, 0x01])) >= 0, 'maxStops=1 deve conter tag 0x28 com valor 0x01');
+
+    // Até 2 paradas: maxStops = 2
+    const tfs2Paradas = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['MIA'], dataIda: '2026-11-10', maxStops: 2 }), 'base64url');
+    assert.ok(tfs2Paradas.indexOf(Buffer.from([0x28, 0x02])) >= 0, 'maxStops=2 deve conter tag 0x28 com valor 0x02');
+
+    // Sem maxStops (null): não deve injetar tag 0x28
+    const tfsSemFiltro = Buffer.from(gerarTfs({ origens: ['GRU'], destinos: ['MIA'], dataIda: '2026-11-10' }), 'base64url');
+    assert.strictEqual(tfsSemFiltro.indexOf(Buffer.from([0x28])), -1, 'Sem maxStops não deve ter tag 0x28');
+  });
+
+  it('deve codificar maxLayoverMinutes no Field 18 (0x90, 0x01) em cada perna', () => {
+    // Escala máxima de 180 minutos (3h)
+    const tfsLayover = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      maxLayoverMinutes: 180
+    }), 'base64url');
+    // 180 em varint: (180 & 0x7f)|0x80 = 0xb4, 180 >> 7 = 1 -> [0xb4, 0x01]
+    const seqLayover = Buffer.from([0x90, 0x01, 0xb4, 0x01]);
+    assert.ok(tfsLayover.indexOf(seqLayover) >= 0, 'Deve conter Field 18 com valor 180min codificado');
+  });
+
+  it('deve codificar bagagem de mão (carryOnBags = 1) no Field 13 (0x6a)', () => {
+    const tfsBag = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      carryOnBags: 1
+    }), 'base64url');
+    // Baggage submessage: carry_on_bags = 1 (tag 0x10, val 0x01) -> [0x10, 0x01], empacotado no Field 13: [0x6a, 0x02, 0x10, 0x01]
+    const seqBag = Buffer.from([0x6a, 0x02, 0x10, 0x01]);
+    assert.ok(tfsBag.indexOf(seqBag) >= 0, 'Deve conter submensagem Baggage com carry_on_bags=1');
+  });
+
+  it('gerarLinkGoogleFlightsCheapest: deve repassar novos filtros para tfs e tfu', () => {
+    const link = gerarLinkGoogleFlightsCheapest(
+      'GRU',
+      'MIA',
+      '2026-11-10',
+      '2026-11-20',
+      null,
+      2,
+      1,
+      'business',
+      'BRL',
+      { maxStops: 0, carryOnBags: 1, maxLayoverMinutes: 120 }
+    );
+    assert.ok(link, 'Link deve ser gerado');
+    const urlObj = new URL(link);
+    const tfsDecoded = Buffer.from(urlObj.searchParams.get('tfs'), 'base64url');
+
+    // Deve conter maxStops=0 ([0x28, 0x00])
+    assert.ok(tfsDecoded.indexOf(Buffer.from([0x28, 0x00])) >= 0, 'Deve conter maxStops=0 no tfs');
+    // Deve conter carryOnBags=1
+    assert.ok(tfsDecoded.indexOf(Buffer.from([0x6a, 0x02, 0x10, 0x01])) >= 0, 'Deve conter carryOnBags=1 no tfs');
+    // Deve conter business no Field 9 do tfs ([0x48, 0x03])
+    assert.ok(tfsDecoded.indexOf(Buffer.from([0x48, 0x03])) >= 0, 'Deve conter business no tfs');
+    // tfu deve estar presente e conter os passageiros e cabine
+    assert.ok(urlObj.searchParams.get('tfu'), 'Deve conter parâmetro tfu');
+  });
+
+  it('deve codificar airlines (Field 6) por trecho no tfs', () => {
+    const tfsAirlines = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['MIA'],
+      dataIda: '2026-11-10',
+      airlines: ['G3', 'ONEWORLD']
+    }), 'base64url');
+    // Field 6: tag 0x32, len 0x02, "G3" -> [0x32, 0x02, 0x47, 0x33]
+    const seqG3 = Buffer.from([0x32, 0x02, 0x47, 0x33]);
+    assert.ok(tfsAirlines.indexOf(seqG3) >= 0, 'Deve conter companhia G3 no Field 6');
+    // Field 6: tag 0x32, len 0x08, "ONEWORLD"
+    const seqOneworld = Buffer.concat([Buffer.from([0x32, 0x08]), Buffer.from('ONEWORLD')]);
+    assert.ok(tfsAirlines.indexOf(seqOneworld) >= 0, 'Deve conter aliança ONEWORLD no Field 6');
+  });
+
+  it('deve codificar janelas de horário no tfs sem cair na armadilha do falsy para hora 0 (meia-noite)', () => {
+    const tfsHoras = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      earliestDepartureHour: 0, // 0h deve ser serializado como [0x40, 0x00]
+      latestDepartureHour: 18,  // 18h -> Field 9 [0x48, 0x12]
+      earliestArrivalHour: 6,   // 6h -> Field 10 [0x50, 0x06]
+      latestArrivalHour: 23     // 23h -> Field 11 [0x58, 0x17]
+    }), 'base64url');
+
+    // earliestDepartureHour = 0: tag 0x40, val 0x00
+    assert.ok(tfsHoras.indexOf(Buffer.from([0x40, 0x00])) >= 0, 'earliestDepartureHour=0 deve conter [0x40, 0x00]');
+    // latestDepartureHour = 18: tag 0x48, val 0x12 (18)
+    assert.ok(tfsHoras.indexOf(Buffer.from([0x48, 0x12])) >= 0, 'latestDepartureHour=18 deve conter [0x48, 0x12]');
+    // earliestArrivalHour = 6: tag 0x50, val 0x06
+    assert.ok(tfsHoras.indexOf(Buffer.from([0x50, 0x06])) >= 0, 'earliestArrivalHour=6 deve conter [0x50, 0x06]');
+    // latestArrivalHour = 23: tag 0x58, val 0x17 (23)
+    assert.ok(tfsHoras.indexOf(Buffer.from([0x58, 0x17])) >= 0, 'latestArrivalHour=23 deve conter [0x58, 0x17]');
+  });
+
+  it('deve codificar minLayoverMinutes (Field 17) e connectingAirports (Field 15) no tfs', () => {
+    const tfsConn = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['CDG'],
+      dataIda: '2026-11-10',
+      minLayoverMinutes: 60,
+      connectingAirports: ['MAD']
+    }), 'base64url');
+
+    // minLayoverMinutes = 60: tag 17 varint -> [0x88, 0x01], val 60 (0x3c)
+    assert.ok(tfsConn.indexOf(Buffer.from([0x88, 0x01, 0x3c])) >= 0, 'Deve conter minLayoverMinutes=60');
+    // connectingAirports = ['MAD']: Field 15 length-delimited -> tag 0x7a, len 0x03, "MAD"
+    const seqMad = Buffer.from([0x7a, 0x03, 0x4d, 0x41, 0x44]);
+    assert.ok(tfsConn.indexOf(seqMad) >= 0, 'Deve conter MAD em connectingAirports (Field 15)');
+  });
+
+  it('deve codificar maxPrice (Field 12) com Varint multibyte para valores > 127', () => {
+    // maxPrice = 1500 (1500 em varint: 0xdc, 0x0b)
+    const tfsPrice = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['MIA'],
+      dataIda: '2026-11-10',
+      maxPrice: 1500
+    }), 'base64url');
+
+    // Field 12: tag 0x60, valor 1500 em varint -> [0x60, 0xdc, 0x0b]
+    assert.ok(tfsPrice.indexOf(Buffer.from([0x60, 0xdc, 0x0b])) >= 0, 'Deve conter maxPrice=1500 em varint [0x60, 0xdc, 0x0b]');
+  });
+
+  it('deve codificar checkedBags (Field 3 do Baggage), hideSeparateAndSelfTransfer e excludeBasicEconomy', () => {
+    const tfsOpts = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      carryOnBags: 1,
+      checkedBags: 2,
+      hideSeparateAndSelfTransfer: true,
+      excludeBasicEconomy: true
+    }), 'base64url');
+
+    // Baggage: carry_on_bags=1 ([0x10, 0x01]), checked_bags=2 ([0x18, 0x02]) -> Submessage [0x10, 0x01, 0x18, 0x02], Field 13 [0x6a, 0x04, 0x10, 0x01, 0x18, 0x02]
+    const seqBaggage = Buffer.from([0x6a, 0x04, 0x10, 0x01, 0x18, 0x02]);
+    assert.ok(tfsOpts.indexOf(seqBaggage) >= 0, 'Deve conter carryOnBags=1 e checkedBags=2 na submensagem Baggage');
+
+    // hideSeparateAndSelfTransfer: Field 17 varint -> [0x88, 0x01, 0x01]
+    assert.ok(tfsOpts.indexOf(Buffer.from([0x88, 0x01, 0x01])) >= 0, 'Deve conter hideSeparateAndSelfTransfer=true');
+
+    // excludeBasicEconomy: Field 25 varint -> [0xc8, 0x01, 0x01]
+    assert.ok(tfsOpts.indexOf(Buffer.from([0xc8, 0x01, 0x01])) >= 0, 'Deve conter excludeBasicEconomy=true');
+  });
+
+  it('deve resolver precedência de bebês (infantsInSeat=3, infantsOnLap=4) sem duplicação', () => {
+    // 1. Específicos: 1 adulto + 1 bebê no assento (3) + 1 bebê no colo (4)
+    const tfsEsp = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      adultos: 1,
+      infantsInSeat: 1,
+      infantsOnLap: 1
+    }), 'base64url');
+    // Field 8: tag 0x42, len 0x03, [1, 3, 4]
+    const seqEsp = Buffer.from([0x42, 0x03, 0x01, 0x03, 0x04]);
+    assert.ok(tfsEsp.indexOf(seqEsp) >= 0, 'Deve codificar Adult=1, InfantInSeat=3, InfantOnLap=4');
+
+    // 2. Fallback legado: bebes=1 sem específicos -> mapeia para InfantOnLap = 4
+    const tfsLeg = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      adultos: 1,
+      bebes: 1
+    }), 'base64url');
+    // Field 8: tag 0x42, len 0x02, [1, 4]
+    const seqLeg = Buffer.from([0x42, 0x02, 0x01, 0x04]);
+    assert.ok(tfsLeg.indexOf(seqLeg) >= 0, 'bebes=1 deve mapear para InfantOnLap=4 por padrão');
+
+    // 3. Precedência: quando infantsOnLap é declarado, bebes é ignorado sem duplicação
+    const tfsPrec = Buffer.from(gerarTfs({
+      origens: ['GRU'],
+      destinos: ['LIS'],
+      dataIda: '2026-11-10',
+      adultos: 1,
+      bebes: 5, // deve ser ignorado pela presença de infantsOnLap
+      infantsOnLap: 1
+    }), 'base64url');
+    assert.ok(tfsPrec.indexOf(seqLeg) >= 0, 'Deve priorizar infantsOnLap e não duplicar contagem de bebês');
+  });
+});
+
+
 

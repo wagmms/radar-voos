@@ -450,7 +450,63 @@ export function encodeLengthDelimited(tag, buf) {
 /**
  * Gera o payload binário protobuf (tfs) compatível com o Google Flights
  */
-export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDurationMinutes = null } = {}) {
+export const MAPA_CLASSES_CABINE = Object.freeze({
+  economy: 1,
+  premium_economy: 2,
+  'premium-economy': 2,
+  business: 3,
+  first: 4
+});
+
+/**
+ * Gera o payload binário protobuf (tfs) compatível com o Google Flights,
+ * suportando filtros avançados (passageiros, classe de cabine, maxStops, layover e bagagem).
+ *
+ * @param {object} params
+ * @param {string[]|string} params.origens - Lista de aeroportos IATA de origem
+ * @param {string[]|string} params.destinos - Lista de aeroportos IATA de destino
+ * @param {string} params.dataIda - Data de ida YYYY-MM-DD
+ * @param {string|null} [params.dataVolta=null] - Data de volta YYYY-MM-DD ou null para só-ida
+ * @param {number|null} [params.maxDurationMinutes=null] - Duração máxima de voo em minutos
+ * @param {number} [params.adultos=1] - Quantidade de passageiros adultos
+ * @param {number} [params.criancas=0] - Quantidade de crianças (2-11 anos)
+ * @param {number} [params.bebes=0] - Quantidade de bebês no colo (< 2 anos)
+ * @param {string} [params.classeViagem='economy'] - Classe da cabine ('economy', 'premium_economy', 'business', 'first')
+ * @param {number|null} [params.maxStops=null] - Limite de paradas (0 = direto, 1 = até 1 parada, 2 = até 2 paradas)
+ * @param {number|null} [params.carryOnBags=null] - Bagagem de mão inclusa (>= 1)
+ * @param {number|null} [params.maxLayoverMinutes=null] - Tempo máximo de conexão/escala em minutos
+ * @returns {string} Payload em base64 compatível com parâmetro tfs
+ */
+export function gerarTfs({
+  origens,
+  destinos,
+  dataIda,
+  dataVolta = null,
+  maxDurationMinutes = null,
+  adultos = 1,
+  adults = null,
+  criancas = 0,
+  children = null,
+  bebes = 0,
+  infantsInSeat = null,
+  infantsOnLap = null,
+  classeViagem = 'economy',
+  seat = null,
+  maxStops = null,
+  airlines = null,
+  earliestDepartureHour = null,
+  latestDepartureHour = null,
+  earliestArrivalHour = null,
+  latestArrivalHour = null,
+  connectingAirports = null,
+  minLayoverMinutes = null,
+  maxLayoverMinutes = null,
+  carryOnBags = null,
+  checkedBags = null,
+  maxPrice = null,
+  hideSeparateAndSelfTransfer = null,
+  excludeBasicEconomy = null
+} = {}) {
   // Normalização defensiva de origens e destinos (suporta arrays, strings únicas e filtra entradas inválidas)
   const listaOrigens = (Array.isArray(origens) ? origens : (origens ? [origens] : ['SAO']))
     .map(o => (o !== null && o !== undefined) ? String(o).trim() : '')
@@ -471,23 +527,100 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     const parts = [];
     // Data: Field 2 (string)
     parts.push(Buffer.concat([Buffer.from([0x12, 0x0a]), Buffer.from(dataStr)]));
+
+    // Max stops: Field 5 (varint: 0=direto, 1=até 1 parada, 2=até 2 paradas)
+    // Armadilha de falsy evitada: checagem explícita contra null e undefined
+    if (maxStops !== null && maxStops !== undefined) {
+      const stopsNum = Number(maxStops);
+      if (Number.isFinite(stopsNum) && stopsNum >= 0 && stopsNum <= 3) {
+        parts.push(Buffer.concat([Buffer.from([0x28]), encodeVarint(Math.floor(stopsNum))]));
+      }
+    }
+
+    // Airlines: Field 6 (repeated string: cias aéreas e alianças ONEWORLD, STAR_ALLIANCE, SKYTEAM)
+    const listaAirlines = (Array.isArray(airlines) ? airlines : (airlines ? [airlines] : []))
+      .map(a => (a !== null && a !== undefined) ? String(a).trim().toUpperCase() : '')
+      .filter(Boolean);
+    for (const cia of listaAirlines) {
+      parts.push(encodeLengthDelimited(6, Buffer.from(cia, 'utf8')));
+    }
+
+    // Earliest departure hour: Field 8 (varint: 0 a 23, checagem explícita para não ignorar 0h)
+    if (earliestDepartureHour !== null && earliestDepartureHour !== undefined) {
+      const hDepMin = Number(earliestDepartureHour);
+      if (Number.isFinite(hDepMin) && hDepMin >= 0 && hDepMin <= 23) {
+        parts.push(Buffer.concat([Buffer.from([0x40]), encodeVarint(Math.floor(hDepMin))]));
+      }
+    }
+
+    // Latest departure hour: Field 9 (varint: 0 a 23)
+    if (latestDepartureHour !== null && latestDepartureHour !== undefined) {
+      const hDepMax = Number(latestDepartureHour);
+      if (Number.isFinite(hDepMax) && hDepMax >= 0 && hDepMax <= 23) {
+        parts.push(Buffer.concat([Buffer.from([0x48]), encodeVarint(Math.floor(hDepMax))]));
+      }
+    }
+
+    // Earliest arrival hour: Field 10 (varint: 0 a 23)
+    if (earliestArrivalHour !== null && earliestArrivalHour !== undefined) {
+      const hArrMin = Number(earliestArrivalHour);
+      if (Number.isFinite(hArrMin) && hArrMin >= 0 && hArrMin <= 23) {
+        parts.push(Buffer.concat([Buffer.from([0x50]), encodeVarint(Math.floor(hArrMin))]));
+      }
+    }
+
+    // Latest arrival hour: Field 11 (varint: 0 a 23)
+    if (latestArrivalHour !== null && latestArrivalHour !== undefined) {
+      const hArrMax = Number(latestArrivalHour);
+      if (Number.isFinite(hArrMax) && hArrMax >= 0 && hArrMax <= 23) {
+        parts.push(Buffer.concat([Buffer.from([0x58]), encodeVarint(Math.floor(hArrMax))]));
+      }
+    }
+
     // Max duration: Field 12 (varint)
     const maxMinNum = Number(maxDurationMinutes);
     if (Number.isFinite(maxMinNum) && maxMinNum > 0 && maxMinNum < 900 * 60) {
       parts.push(Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(maxMinNum))]));
     }
+
     // from_airport: Field 13 (Airport: string airport = 2)
     for (const o of origList) {
       const oBytes = Buffer.from(o);
       const aeroBuf = Buffer.concat([Buffer.from([0x12, oBytes.length]), oBytes]);
       parts.push(encodeLengthDelimited(13, aeroBuf));
     }
+
     // to_airport: Field 14 (Airport: string airport = 2)
     for (const d of destList) {
       const dBytes = Buffer.from(d);
       const aeroBuf = Buffer.concat([Buffer.from([0x12, dBytes.length]), dBytes]);
       parts.push(encodeLengthDelimited(14, aeroBuf));
     }
+
+    // Connecting airports: Field 15 (repeated string)
+    const listaConn = (Array.isArray(connectingAirports) ? connectingAirports : (connectingAirports ? [connectingAirports] : []))
+      .map(c => (c !== null && c !== undefined) ? String(c).trim().toUpperCase() : '')
+      .filter(Boolean);
+    for (const conn of listaConn) {
+      parts.push(encodeLengthDelimited(15, Buffer.from(conn, 'utf8')));
+    }
+
+    // Min layover minutes: Field 17 (varint)
+    if (minLayoverMinutes !== null && minLayoverMinutes !== undefined) {
+      const minLayNum = Number(minLayoverMinutes);
+      if (Number.isFinite(minLayNum) && minLayNum > 0 && minLayNum < 900 * 60) {
+        parts.push(Buffer.concat([Buffer.from([0x88, 0x01]), encodeVarint(Math.round(minLayNum))]));
+      }
+    }
+
+    // Max layover minutes: Field 18 (varint)
+    if (maxLayoverMinutes !== null && maxLayoverMinutes !== undefined) {
+      const layoverNum = Number(maxLayoverMinutes);
+      if (Number.isFinite(layoverNum) && layoverNum > 0 && layoverNum < 900 * 60) {
+        parts.push(Buffer.concat([Buffer.from([0x90, 0x01]), encodeVarint(Math.round(layoverNum))]));
+      }
+    }
+
     return Buffer.concat(parts);
   };
 
@@ -498,14 +631,85 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
     legs.push(encodeLengthDelimited(3, criarLeg(voltaEfetiva, destinosEfetivos, origensEfetivas)));
   }
 
+  // Passengers: Field 8 (repeated enum packed: Adult=1, Child=2, InfantInSeat=3, InfantOnLap=4)
+  const numAdultos = (adults !== null && adults !== undefined && Number.isFinite(+adults))
+    ? Math.max(1, Math.min(9, Math.floor(+adults)))
+    : Math.max(1, Math.min(9, Number.isFinite(+adultos) ? Math.floor(+adultos) : 1));
+
+  const numCriancas = (children !== null && children !== undefined && Number.isFinite(+children))
+    ? Math.max(0, Math.min(8, Math.floor(+children)))
+    : Math.max(0, Math.min(8, Number.isFinite(+criancas) ? Math.floor(+criancas) : 0));
+
+  let numInfantsInSeat = 0;
+  let numInfantsOnLap = 0;
+
+  const temEspecificosBebes = (infantsInSeat !== null && infantsInSeat !== undefined) ||
+                              (infantsOnLap !== null && infantsOnLap !== undefined);
+
+  if (temEspecificosBebes) {
+    numInfantsInSeat = Math.max(0, Math.min(numAdultos, Number.isFinite(+infantsInSeat) ? Math.floor(+infantsInSeat) : 0));
+    numInfantsOnLap = Math.max(0, Math.min(numAdultos, Number.isFinite(+infantsOnLap) ? Math.floor(+infantsOnLap) : 0));
+  } else if (bebes !== null && bebes !== undefined && Number.isFinite(+bebes) && +bebes > 0) {
+    // Fallback do campo legado `bebes`: mapeia para InfantOnLap = 4 apenas quando específicos não declarados
+    numInfantsOnLap = Math.max(0, Math.min(numAdultos, Math.floor(+bebes)));
+  }
+
+  const passengerBytes = [];
+  for (let i = 0; i < numAdultos; i++) passengerBytes.push(1); // ADULT = 1
+  for (let i = 0; i < numCriancas; i++) passengerBytes.push(2); // CHILD = 2
+  for (let i = 0; i < numInfantsInSeat; i++) passengerBytes.push(3); // INFANT_IN_SEAT = 3
+  for (let i = 0; i < numInfantsOnLap; i++) passengerBytes.push(4); // INFANT_ON_LAP = 4
+
+  const passBuf = encodeLengthDelimited(8, Buffer.from(passengerBytes));
+
+  // Seat / Cabin: Field 9 (varint: Economy=1, PremiumEconomy=2, Business=3, First=4)
+  const cabineRaw = seat || classeViagem || 'economy';
+  const classeStr = typeof cabineRaw === 'string' ? cabineRaw.trim().toLowerCase() : '';
+  const classeNum = MAPA_CLASSES_CABINE[classeStr] || (Number.isFinite(+cabineRaw) && +cabineRaw >= 1 && +cabineRaw <= 4 ? Math.floor(+cabineRaw) : 1);
+  const seatBuf = Buffer.concat([Buffer.from([0x48]), encodeVarint(classeNum)]);
+
+  // Max price: Field 12 (varint, codificação com Varint multibyte real para valores > 127)
+  let maxPricePart = null;
+  if (maxPrice !== null && maxPrice !== undefined) {
+    const p = Number(maxPrice);
+    if (Number.isFinite(p) && p > 0) {
+      maxPricePart = Buffer.concat([Buffer.from([0x60]), encodeVarint(Math.round(p))]);
+    }
+  }
+
+  // Baggage: Field 13 (submensagem Baggage com carry_on_bags no Field 2 varint e checked_bags no Field 3 varint)
+  let baggagePart = null;
+  const nCarry = (carryOnBags !== null && carryOnBags !== undefined && Number.isFinite(+carryOnBags) && +carryOnBags > 0) ? Math.floor(+carryOnBags) : 0;
+  const nChecked = (checkedBags !== null && checkedBags !== undefined && Number.isFinite(+checkedBags) && +checkedBags > 0) ? Math.floor(+checkedBags) : 0;
+  if (nCarry > 0 || nChecked > 0) {
+    const bagParts = [];
+    if (nCarry > 0) bagParts.push(Buffer.concat([Buffer.from([0x10]), encodeVarint(nCarry)]));
+    if (nChecked > 0) bagParts.push(Buffer.concat([Buffer.from([0x18]), encodeVarint(nChecked)]));
+    baggagePart = encodeLengthDelimited(13, Buffer.concat(bagParts));
+  }
+
+  // Hide separate and self-transfer: Field 17 (varint bool: [0x88, 0x01, 0x01])
+  let hideTransferPart = null;
+  if (hideSeparateAndSelfTransfer === true) {
+    hideTransferPart = Buffer.from([0x88, 0x01, 0x01]);
+  }
+
+  // Exclude basic economy: Field 25 (varint bool: [0xc8, 0x01, 0x01])
+  let excludeBasicPart = null;
+  if (excludeBasicEconomy === true) {
+    excludeBasicPart = Buffer.from([0xc8, 0x01, 0x01]);
+  }
+
   const rootParts = [
     ...legs,
-    // Passengers: Field 8 (Passenger.ADULT = 1) -> tag 0x42 (packed)
-    Buffer.from([0x42, 0x01, 0x01]),
-    // Seat: Field 9 (ECONOMY = 1) -> tag 0x48
-    Buffer.from([0x48, 0x01]),
+    passBuf,
+    seatBuf,
+    ...(maxPricePart ? [maxPricePart] : []),
+    ...(baggagePart ? [baggagePart] : []),
+    ...(hideTransferPart ? [hideTransferPart] : []),
     // Trip: Field 19 (ROUND_TRIP = 1, ONE_WAY = 2) -> tag 0x98, 0x01
-    Buffer.from([0x98, 0x01, tripType])
+    Buffer.from([0x98, 0x01, tripType]),
+    ...(excludeBasicPart ? [excludeBasicPart] : [])
   ];
 
   return Buffer.concat(rootParts).toString('base64');
@@ -522,20 +726,12 @@ export function gerarTfs({ origens, destinos, dataIda, dataVolta = null, maxDura
  * @returns {string} Payload base64url compatível com o parâmetro tfu do Google Flights
  */
 export function construirTfu(adultos = 1, criancas = 0, bebes = 0, classeViagem = 'economy') {
-  // Mapa canônico de cabines para o encoding Protobuf do Google Flights
-  const CABIN_MAP = {
-    economy: 1,
-    premium_economy: 2,
-    business: 3,
-    first: 4
-  };
-
   // Sanitização defensiva dos parâmetros numéricos
   const nAdultos = Math.max(1, Math.min(9, Number.isFinite(+adultos) ? Math.floor(+adultos) : 1));
   const nCriancas = Math.max(0, Math.min(8, Number.isFinite(+criancas) ? Math.floor(+criancas) : 0));
   const nBebes = Math.max(0, Math.min(nAdultos, Number.isFinite(+bebes) ? Math.floor(+bebes) : 0));
   const classeStr = typeof classeViagem === 'string' ? classeViagem.toLowerCase().trim() : 'economy';
-  const classeNum = CABIN_MAP[classeStr] || 1;
+  const classeNum = MAPA_CLASSES_CABINE[classeStr] || 1;
 
   // Google Flights codifica adultos adicionais acima do padrão de 1 (adultos - 1 = extras)
   const adultosExtras = nAdultos - 1;
@@ -562,7 +758,7 @@ export function construirTfu(adultos = 1, criancas = 0, bebes = 0, classeViagem 
 
 /**
  * Gera link direto e estruturado para o Google Flights que abre FORÇADAMENTE na aba Cheapest (Menor Preço).
- * Suporta múltiplos passageiros (adultos, crianças) e seleção de classe de cabine.
+ * Suporta múltiplos passageiros (adultos, crianças, bebês), classe de cabine e filtros avançados (maxStops, layover, bagagem).
  *
  * @param {string} origemCod - Código IATA ou KGMID da origem
  * @param {string} destinoCod - Código IATA, KGMID ou macrorregião do destino
@@ -572,6 +768,8 @@ export function construirTfu(adultos = 1, criancas = 0, bebes = 0, classeViagem 
  * @param {number} adultos - Número de adultos (padrão 1)
  * @param {number} criancas - Número de crianças 2-11 anos (padrão 0)
  * @param {string} classeViagem - 'economy' | 'premium_economy' | 'business' | 'first' (padrão 'economy')
+ * @param {string} moeda - Moeda ISO (padrão 'BRL')
+ * @param {object} [opcoesAvancadas={}] - Filtros avançados: { bebes, infantsInSeat, infantsOnLap, maxStops, airlines, earliestDepartureHour, latestDepartureHour, earliestArrivalHour, latestArrivalHour, connectingAirports, minLayoverMinutes, maxLayoverMinutes, carryOnBags, checkedBags, maxPrice, hideSeparateAndSelfTransfer, excludeBasicEconomy }
  * @returns {string|null} URL canônica do Google Flights aba Cheapest ou null se sem dataIda
  */
 export function gerarLinkGoogleFlightsCheapest(
@@ -583,19 +781,13 @@ export function gerarLinkGoogleFlightsCheapest(
   adultos = 1,
   criancas = 0,
   classeViagem = 'economy',
-  moeda = 'BRL'
+  moeda = 'BRL',
+  opcoesAvancadas = {}
 ) {
   if (!dataIda) return null;
   const dataIdaNorm = formatarDataParaBusca(dataIda);
   if (!dataIdaNorm) return null;
 
-  const strDest = String(destinoCod || '').trim();
-  const limpoLower = normalizarTexto(strDest);
-  const ehMacrorregiao = strDest.startsWith('/m/') || strDest.startsWith('/g/') ||
-    ['america do sul', 'south america', 'europa', 'europe', 'asia', 'estados unidos', 'eua', 'usa'].includes(limpoLower);
-
-  // Para macrorregiões/continentes, normalizarParaSerpApi resolve a lista completa de aeroportos
-  // representativos do continente inteiro (ex: EZE,AEP,SCL,MVD,LIM... ou LIS,OPO,MAD,BCN,CDG...)
   const origCod = resolverCodigoParaLink(origemCod);
   const destCod = resolverCodigoParaLink(destinoCod);
   const origens = normalizarParaSerpApi(origCod).split(',').map(s => s.trim()).filter(Boolean);
@@ -615,8 +807,59 @@ export function gerarLinkGoogleFlightsCheapest(
     }
   }
 
-  const tfs = gerarTfs({ origens, destinos, dataIda: dataIdaNorm, dataVolta: voltaEfetiva, maxDurationMinutes: maxMin });
-  const tfu = construirTfu(adultos, criancas, 0, classeViagem);
+  const {
+    bebes = 0,
+    infantsInSeat = null,
+    infantsOnLap = null,
+    maxStops = null,
+    airlines = null,
+    earliestDepartureHour = null,
+    latestDepartureHour = null,
+    earliestArrivalHour = null,
+    latestArrivalHour = null,
+    connectingAirports = null,
+    minLayoverMinutes = null,
+    maxLayoverMinutes = null,
+    carryOnBags = null,
+    checkedBags = null,
+    maxPrice = null,
+    hideSeparateAndSelfTransfer = null,
+    excludeBasicEconomy = null
+  } = opcoesAvancadas || {};
+
+  const tfs = gerarTfs({
+    origens,
+    destinos,
+    dataIda: dataIdaNorm,
+    dataVolta: voltaEfetiva,
+    maxDurationMinutes: maxMin,
+    adultos,
+    criancas,
+    bebes,
+    infantsInSeat,
+    infantsOnLap,
+    classeViagem,
+    maxStops,
+    airlines,
+    earliestDepartureHour,
+    latestDepartureHour,
+    earliestArrivalHour,
+    latestArrivalHour,
+    connectingAirports,
+    minLayoverMinutes,
+    maxLayoverMinutes,
+    carryOnBags,
+    checkedBags,
+    maxPrice,
+    hideSeparateAndSelfTransfer,
+    excludeBasicEconomy
+  });
+
+  const nBebesTfu = (infantsOnLap !== null && infantsOnLap !== undefined)
+    ? Number(infantsOnLap)
+    : ((infantsInSeat !== null && infantsInSeat !== undefined) ? Number(infantsInSeat) : Number(bebes || 0));
+
+  const tfu = construirTfu(adultos, criancas, nBebesTfu, classeViagem);
   const moedaCode = (typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL';
   return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaCode}&tfs=${tfs}&tfu=${tfu}`;
 }
@@ -753,5 +996,57 @@ export function gerarCombinacoesFlexibilidade(dataIda, dataVolta, flexibilidadeD
   }
 
   return combinacoes;
+}
+
+/**
+ * Gera a janela de datas flexíveis vizinhas (offset de -diasFlexiveis até +diasFlexiveis)
+ * Preserva estritamente a quantidade de dias de viagem para Round-Trip em UTC e suprime datas no passado.
+ *
+ * @param {string} dataIda Data de ida em qualquer formato aceito
+ * @param {string|null} dataVolta Data de volta ou null para Só Ida
+ * @param {number} [diasFlexiveis=0] Quantidade de dias para frente e para trás (limitado entre 0 e 3)
+ * @param {string|null} [hojeReferencia=null] Data de corte para passado (padrão: hoje em UTC)
+ * @returns {Array<{ offset: number, dataIda: string, dataVolta: string|null }>}
+ */
+export function gerarJanelaDatasFlexiveis(dataIda, dataVolta, diasFlexiveis = 0, hojeReferencia = null) {
+  const idaNorm = formatarDataParaBusca(dataIda);
+  if (!idaNorm) return [];
+
+  let voltaEfetiva = null;
+  if (!ehSoIda(dataVolta) && dataVolta !== null && dataVolta !== undefined) {
+    const voltaCalculada = calcularDataVolta(idaNorm, dataVolta) || formatarDataParaBusca(dataVolta);
+    if (voltaCalculada && (!idaNorm || voltaCalculada >= idaNorm)) {
+      voltaEfetiva = voltaCalculada;
+    }
+  }
+
+  const flexNum = typeof diasFlexiveis === 'number' ? diasFlexiveis : parseInt(diasFlexiveis, 10);
+  const flex = Number.isFinite(flexNum) ? Math.min(3, Math.max(0, Math.floor(flexNum))) : 0;
+
+  if (flex === 0) {
+    return [{ offset: 0, dataIda: idaNorm, dataVolta: voltaEfetiva }];
+  }
+
+  const hojeCorte = hojeReferencia ? formatarDataParaBusca(hojeReferencia) : new Date().toISOString().slice(0, 10);
+  const resultado = [];
+
+  for (let offset = -flex; offset <= flex; offset++) {
+    const novaIda = somarDiasData(idaNorm, offset);
+    if (!novaIda) continue;
+
+    // Ignora datas no passado
+    if (hojeCorte && novaIda < hojeCorte) {
+      continue;
+    }
+
+    const novaVolta = voltaEfetiva ? somarDiasData(voltaEfetiva, offset) : null;
+    resultado.push({
+      offset,
+      dataIda: novaIda,
+      dataVolta: novaVolta
+    });
+  }
+
+  return resultado;
 }
 

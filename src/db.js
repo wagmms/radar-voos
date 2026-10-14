@@ -33,6 +33,7 @@ export function getDb(customPath = null) {
   dbInstance.exec('PRAGMA cache_size = -64000;');
 
   initSchema(dbInstance);
+  popularDadosIniciaisSeVazio(dbInstance);
   return dbInstance;
 }
 
@@ -69,6 +70,19 @@ function initSchema(db) {
       silenciada_ate TEXT,
       cabine TEXT DEFAULT 'economy',
       moeda TEXT DEFAULT 'BRL',
+      max_stops INTEGER,
+      carry_on_bags INTEGER,
+      checked_bags INTEGER,
+      top_ofertas TEXT,
+      melhor_opcao_direta_rapida TEXT,
+      horario_partida TEXT,
+      horario_chegada TEXT,
+      numero_voo TEXT,
+      tempo_conexao TEXT,
+      dias_flexiveis INTEGER DEFAULT 0,
+      calendario_precos TEXT,
+      melhor_data_alternativa TEXT,
+      price_insights TEXT,
       ativa INTEGER DEFAULT 1,
       criada_em TEXT DEFAULT (datetime('now', 'localtime'))
     );
@@ -126,6 +140,19 @@ function initSchema(db) {
   try { db.exec("ALTER TABLE rotas ADD COLUMN moeda TEXT DEFAULT 'BRL';"); } catch (_) {}
   try { db.exec('ALTER TABLE rotas ADD COLUMN paridade_milhas REAL;'); } catch (_) {}
   try { db.exec("ALTER TABLE rotas ADD COLUMN programa_milhas TEXT DEFAULT 'smiles';"); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN max_stops INTEGER;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN carry_on_bags INTEGER;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN checked_bags INTEGER;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN top_ofertas TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN melhor_opcao_direta_rapida TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN horario_partida TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN horario_chegada TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN numero_voo TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN tempo_conexao TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN dias_flexiveis INTEGER DEFAULT 0;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN calendario_precos TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN melhor_data_alternativa TEXT;'); } catch (_) {}
+  try { db.exec('ALTER TABLE rotas ADD COLUMN price_insights TEXT;'); } catch (_) {}
 
   // Migrações dinâmicas para tabela bug_fares
   try { db.exec('ALTER TABLE bug_fares ADD COLUMN aeroporto_chegada TEXT;'); } catch (_) {}
@@ -185,15 +212,22 @@ export const rotasRepo = {
     const link = dados.link_google_flights || gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta);
 
     const flexibilidadeDias = parseInt(dados.flexibilidade_dias, 10) || 0;
+    const diasFlexiveis = Math.min(3, Math.max(0, parseInt(dados.dias_flexiveis !== undefined ? dados.dias_flexiveis : flexibilidadeDias, 10) || 0));
     const moeda = (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
+
+    const parseNumOpt = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null);
+    const maxStops = parseNumOpt(dados.max_stops !== undefined ? dados.max_stops : dados.maxStops);
+    const carryOnBags = parseNumOpt(dados.carry_on_bags !== undefined ? dados.carry_on_bags : dados.carryOnBags);
+    const checkedBags = parseNumOpt(dados.checked_bags !== undefined ? dados.checked_bags : dados.checkedBags);
 
     const stmt = db.prepare(`
       INSERT INTO rotas (
         origem, destino, codigo_origem, codigo_destino,
         data_ida, data_volta, duracao_max_horas, preco_alvo,
-        link_google_flights, cabine, flexibilidade_dias,
-        sem_data, dias_estadia, moeda, ativa
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        link_google_flights, cabine, flexibilidade_dias, dias_flexiveis,
+        sem_data, dias_estadia, moeda, ativa,
+        max_stops, carry_on_bags, checked_bags
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
     `);
 
     const res = stmt.run(
@@ -208,9 +242,13 @@ export const rotasRepo = {
       link,
       dados.cabine || 'economy',
       flexibilidadeDias,
+      diasFlexiveis,
       semData,
       soIda ? null : diasEstadia,
-      moeda
+      moeda,
+      maxStops,
+      carryOnBags,
+      checkedBags
     );
 
     return rotasRepo.buscarPorId(res.lastInsertRowid);
@@ -261,6 +299,11 @@ export const rotasRepo = {
     const duracaoMaxHoras = dados.duracao_max_horas !== undefined ? (parseFloat(dados.duracao_max_horas) || 999) : rota.duracao_max_horas;
     const cabine = dados.cabine || rota.cabine || 'economy';
     const flexibilidadeDias = dados.flexibilidade_dias !== undefined ? (parseInt(dados.flexibilidade_dias, 10) || 0) : (rota.flexibilidade_dias || 0);
+    const diasFlexiveis = dados.dias_flexiveis !== undefined
+      ? Math.min(3, Math.max(0, parseInt(dados.dias_flexiveis, 10) || 0))
+      : (dados.flexibilidade_dias !== undefined
+          ? Math.min(3, Math.max(0, parseInt(dados.flexibilidade_dias, 10) || 0))
+          : (rota.dias_flexiveis !== undefined && rota.dias_flexiveis !== null ? rota.dias_flexiveis : Math.min(3, Math.max(0, flexibilidadeDias))));
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
     const moeda = dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL'));
     const link = gerarLinkGoogleFlights(codigoOrigem, codigoDestino, dataIda, dataVolta, moeda);
@@ -277,6 +320,16 @@ export const rotasRepo = {
     const modalidadeMudou = Boolean(rota.data_volta) !== Boolean(dataVolta);
     const melhorOpcaoFlexivel = modalidadeMudou ? null : rota.melhor_opcao_flexivel;
 
+    const parseUpdateNumOpt = (valNovo, valAtual) => {
+      if (valNovo === null || valNovo === '') return null;
+      if (valNovo !== undefined && !isNaN(Number(valNovo))) return Number(valNovo);
+      return valAtual ?? null;
+    };
+
+    const maxStops = parseUpdateNumOpt(dados.max_stops !== undefined ? dados.max_stops : dados.maxStops, rota.max_stops);
+    const carryOnBags = parseUpdateNumOpt(dados.carry_on_bags !== undefined ? dados.carry_on_bags : dados.carryOnBags, rota.carry_on_bags);
+    const checkedBags = parseUpdateNumOpt(dados.checked_bags !== undefined ? dados.checked_bags : dados.checkedBags, rota.checked_bags);
+
     const stmt = db.prepare(`
       UPDATE rotas SET
         origem = ?,
@@ -289,6 +342,7 @@ export const rotasRepo = {
         duracao_max_horas = ?,
         cabine = ?,
         flexibilidade_dias = ?,
+        dias_flexiveis = ?,
         sem_data = ?,
         dias_estadia = ?,
         link_google_flights = ?,
@@ -296,11 +350,14 @@ export const rotasRepo = {
         melhor_opcao_flexivel = ?,
         moeda = ?,
         paridade_milhas = ?,
-        programa_milhas = ?
+        programa_milhas = ?,
+        max_stops = ?,
+        carry_on_bags = ?,
+        checked_bags = ?
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, id);
+    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, diasFlexiveis, semData, diasEstadiaFinal, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, maxStops, carryOnBags, checkedBags, id);
     return rotasRepo.buscarPorId(id);
   },
 
@@ -327,6 +384,28 @@ export const rotasRepo = {
     const linkNovo = resultado.link_google_flights || rota.link_google_flights;
     const moedaNova = resultado.moeda ? String(resultado.moeda).trim().toUpperCase() : null;
 
+    const serializarJsonSeguro = (val, atual) => {
+      if (val === undefined) return atual;
+      if (val === null) return null;
+      try {
+        return typeof val === 'object' ? JSON.stringify(val) : String(val);
+      } catch (_) {
+        return null;
+      }
+    };
+
+    const topOfertasStr = serializarJsonSeguro(resultado.top_ofertas ?? resultado.topOfertas, rota.top_ofertas);
+    const melhorDiretaStr = serializarJsonSeguro(resultado.melhor_opcao_direta_rapida ?? resultado.melhorOpcaoDiretaOuRapida, rota.melhor_opcao_direta_rapida);
+
+    const horarioPartida = resultado.horario_partida !== undefined ? resultado.horario_partida : (resultado.horarioPartida !== undefined ? resultado.horarioPartida : rota.horario_partida);
+    const horarioChegada = resultado.horario_chegada !== undefined ? resultado.horario_chegada : (resultado.horarioChegada !== undefined ? resultado.horarioChegada : rota.horario_chegada);
+    const numeroVoo = resultado.numero_voo !== undefined ? resultado.numero_voo : (resultado.numeroVoo !== undefined ? resultado.numeroVoo : rota.numero_voo);
+    const tempoConexao = resultado.tempo_conexao !== undefined ? resultado.tempo_conexao : (resultado.tempoConexao !== undefined ? resultado.tempoConexao : rota.tempo_conexao);
+
+    const calendarioPrecosStr = serializarJsonSeguro(resultado.calendario_precos ?? resultado.calendarioPrecos, rota.calendario_precos);
+    const melhorDataAlternativaStr = serializarJsonSeguro(resultado.melhor_data_alternativa ?? resultado.melhorDataAlternativa, rota.melhor_data_alternativa);
+    const priceInsightsStr = serializarJsonSeguro(resultado.price_insights ?? resultado.priceInsights, rota.price_insights);
+
     const stmt = db.prepare(`
       UPDATE rotas SET
         data_ida = ?,
@@ -344,6 +423,15 @@ export const rotasRepo = {
         clima_temp_media = COALESCE(?, clima_temp_media),
         melhor_opcao_flexivel = ?,
         moeda = COALESCE(?, moeda),
+        top_ofertas = ?,
+        melhor_opcao_direta_rapida = ?,
+        horario_partida = ?,
+        horario_chegada = ?,
+        numero_voo = ?,
+        tempo_conexao = ?,
+        calendario_precos = ?,
+        melhor_data_alternativa = ?,
+        price_insights = ?,
         ultima_checagem = ?
       WHERE id = ?
     `);
@@ -364,6 +452,15 @@ export const rotasRepo = {
       resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
       melhorFlexivelStr,
       moedaNova,
+      topOfertasStr ?? null,
+      melhorDiretaStr ?? null,
+      horarioPartida ?? null,
+      horarioChegada ?? null,
+      numeroVoo ?? null,
+      tempoConexao ?? null,
+      calendarioPrecosStr ?? null,
+      melhorDataAlternativaStr ?? null,
+      priceInsightsStr ?? null,
       agora,
       id
     );
@@ -796,8 +893,8 @@ export const chavesRepo = {
 /**
  * Inicialização com Rotas Canônicas a partir de data/rotas.json (Via de Mão Dupla)
  */
-export function popularDadosIniciaisSeVazio() {
-  const db = getDb();
+export function popularDadosIniciaisSeVazio(dbParam = null) {
+  const db = dbParam || dbInstance || getDb();
   const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
   if (contagem > 0) {
     // Banco já inicializado com as rotas do usuário; nunca sobrescrever

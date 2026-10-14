@@ -121,7 +121,16 @@ class NotifierTelegram {
     clima = null,
     semData = false,
     labelJanela = null,
-    precoAlvo = null
+    precoAlvo = null,
+    horarioPartida = null,
+    horarioChegada = null,
+    numeroVoo = null,
+    tempoConexao = null,
+    escalas = null,
+    melhorOpcaoDiretaOuRapida = null,
+    topOfertas = null,
+    priceInsights = null,
+    melhorDataAlternativa = null
   }) {
     const ehSoIdaAlerta = ehSoIda(dataVolta);
     const escopoModalidade = ehSoIdaAlerta ? 'Apenas Ida' : 'Ida e Volta';
@@ -166,6 +175,27 @@ class NotifierTelegram {
       msg += `📊 ${escapeHtml(variacaoTexto)}\n`;
     }
 
+    if (priceInsights && typeof priceInsights === 'object') {
+      const nivel = String(priceInsights.nivel || '').toLowerCase().trim();
+      let linhaTermometro = '';
+      if (nivel === 'baixo' || nivel === 'low') {
+        linhaTermometro = '🟢 <b>Termômetro Google:</b> Preço Baixo para a rota';
+      } else if (nivel === 'tipico' || nivel === 'typical') {
+        linhaTermometro = '🟡 <b>Termômetro Google:</b> Preço Típico para a rota';
+      } else if (nivel === 'alto' || nivel === 'high') {
+        linhaTermometro = '🔴 <b>Termômetro Google:</b> Preço Alto para a rota';
+      }
+
+      if (linhaTermometro) {
+        const min = Number(priceInsights.faixaMinima ?? priceInsights.faixa_minima);
+        const max = Number(priceInsights.faixaMaxima ?? priceInsights.faixa_maxima);
+        if (Number.isFinite(min) && min > 0 && Number.isFinite(max) && max > 0) {
+          linhaTermometro += ` (Faixa típica: R$ ${Math.round(min)} – R$ ${Math.round(max)})`;
+        }
+        msg += `${linhaTermometro}\n`;
+      }
+    }
+
     if (clima && clima.resumo) {
       msg += `🌤️ Destino: <b>${escapeHtml(clima.resumo)}</b>\n`;
     }
@@ -177,7 +207,58 @@ class NotifierTelegram {
       msg += `🏨 Custo no Destino: ${escapeHtml(custoInfo.textoBase)}\n`;
     }
 
+    if (horarioPartida && horarioChegada) {
+      const vooStr = numeroVoo ? ` (${escapeHtml(numeroVoo)})` : '';
+      msg += `🕒 <b>Horário:</b> ${escapeHtml(horarioPartida)} ➔ ${escapeHtml(horarioChegada)}${vooStr}\n`;
+    }
+
     msg += `⏱️ ${duracaoHoras.toFixed(1).replace('.', ',')}h | ${escapeHtml(detalhes)}\n`;
+
+    const temEscala = escalas !== null ? Number(escalas) > 0 : (detalhes && !detalhes.toLowerCase().includes('direto'));
+    if (temEscala && tempoConexao) {
+      msg += `⏱️ <b>Tempo de espera em conexão:</b> ${escapeHtml(tempoConexao)}\n`;
+    }
+
+    if (melhorOpcaoDiretaOuRapida && typeof melhorOpcaoDiretaOuRapida === 'object') {
+      const precoOpt = Number(melhorOpcaoDiretaOuRapida.preco) || 0;
+      const difPreco = melhorOpcaoDiretaOuRapida.diferencaPreco !== undefined
+        ? Number(melhorOpcaoDiretaOuRapida.diferencaPreco)
+        : (precoOpt - preco);
+      const econHoras = melhorOpcaoDiretaOuRapida.economiaHoras !== undefined
+        ? Number(melhorOpcaoDiretaOuRapida.economiaHoras)
+        : (duracaoHoras - (Number(melhorOpcaoDiretaOuRapida.duracaoHoras) || 0));
+
+      const difSinal = difPreco >= 0 ? `+R$ ${difPreco.toFixed(2).replace('.', ',')}` : `-R$ ${Math.abs(difPreco).toFixed(2).replace('.', ',')}`;
+      msg += `⚡ <b>Opção Direta/Rápida:</b> R$ ${precoOpt.toFixed(2).replace('.', ',')} (${difSinal} para economizar ${econHoras.toFixed(1).replace('.', ',')}h)\n`;
+    }
+
+    if (melhorDataAlternativa && typeof melhorDataAlternativa === 'object') {
+      const econReais = Number(melhorDataAlternativa.economiaReais ?? melhorDataAlternativa.economia_reais);
+      if (Number.isFinite(econReais) && econReais > 0) {
+        const offset = Number(melhorDataAlternativa.offset) || 0;
+        const sinalOffset = offset > 0 ? `+${offset}` : `${offset}`;
+        const dataIdaAlt = escapeHtml(melhorDataAlternativa.dataIda ?? melhorDataAlternativa.data_ida);
+        const dataVoltaRaw = melhorDataAlternativa.dataVolta ?? melhorDataAlternativa.data_volta;
+        const voltaAltTexto = dataVoltaRaw ? ` ➔ ${escapeHtml(dataVoltaRaw)}` : '';
+        const precoAlt = melhorDataAlternativa.preco;
+        const precoAltStr = typeof precoAlt === 'number'
+          ? (precoAlt % 1 === 0 ? String(precoAlt) : precoAlt.toFixed(2).replace('.', ','))
+          : escapeHtml(precoAlt);
+        const econAltStr = econReais % 1 === 0 ? String(econReais) : econReais.toFixed(2).replace('.', ',');
+        const pctRaw = melhorDataAlternativa.economiaPercentual ?? melhorDataAlternativa.economia_percentual;
+        const econPct = Number.isFinite(Number(pctRaw))
+          ? Number(pctRaw)
+          : Math.round((econReais / (Number(precoAlt) + econReais)) * 100);
+
+        const linkRaw = melhorDataAlternativa.linkGoogleFlights ?? melhorDataAlternativa.link_google_flights;
+        const ehUrlSegura = typeof linkRaw === 'string' && /^https?:\/\//i.test(linkRaw.trim());
+        const linkAltHtml = ehUrlSegura
+          ? ` • <a href="${escapeHtml(linkRaw.trim())}">Ver no Google Flights</a>`
+          : '';
+
+        msg += `\n📅 <b>Dia Vizinho Mais Barato (${sinalOffset}d):</b> ${dataIdaAlt}${voltaAltTexto} por <b>R$ ${precoAltStr}</b> (Economia de R$ ${econAltStr} / -${econPct}%)${linkAltHtml}\n`;
+      }
+    }
 
     if (dicaStopover && dicaStopover !== '-') {
       msg += `\n💡 <i>${escapeHtml(dicaStopover)}</i>\n`;
@@ -212,6 +293,17 @@ class NotifierTelegram {
     const inlineKeyboard = [
       [{ text: '✈️ Comprar no Google Flights', url: link }]
     ];
+
+    if (melhorDataAlternativa && typeof melhorDataAlternativa === 'object') {
+      const linkAlt = melhorDataAlternativa.linkGoogleFlights ?? melhorDataAlternativa.link_google_flights;
+      if (typeof linkAlt === 'string' && /^https?:\/\//i.test(linkAlt.trim())) {
+        const offset = Number(melhorDataAlternativa.offset) || 0;
+        const sinalOffset = offset > 0 ? `+${offset}` : `${offset}`;
+        inlineKeyboard.push([
+          { text: `📅 Ver Oferta ${sinalOffset}d`, url: linkAlt.trim() }
+        ]);
+      }
+    }
 
     if (rotaId) {
       inlineKeyboard.push([

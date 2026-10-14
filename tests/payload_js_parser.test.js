@@ -88,8 +88,14 @@ describe('Fast-Flights Engine: extrairVoosDoPayloadJs (script.ds:1)', () => {
     const latam = voos[0];
     assert.equal(latam.preco, 3714);
     assert.equal(latam.cia, 'LATAM');
+    assert.equal(latam.numeroVoo, 'LA 8004');
+    assert.equal(latam.horarioPartida, '03:35');
+    assert.equal(latam.horarioChegada, '14:15');
     assert.equal(latam.escalas, 1);
     assert.equal(latam.aeroportoConexao, 'LIM');
+    assert.equal(latam.tempoConexao, '1h 35min');
+    assert.equal(latam.tempoConexaoMinutos, 95);
+    assert.equal(latam.isBest, true);
     assert.ok(latam.detalhesEscalas.includes('1 parada em LIM'));
     assert.equal(latam.duracaoHoras, 12.7);
     assert.equal(latam.duracaoTexto, '12 h 40 min');
@@ -98,19 +104,57 @@ describe('Fast-Flights Engine: extrairVoosDoPayloadJs (script.ds:1)', () => {
     const gol = voos[1];
     assert.equal(gol.preco, 4120);
     assert.equal(gol.cia, 'GOL');
+    assert.equal(gol.numeroVoo, 'G3 7710');
+    assert.equal(gol.horarioPartida, '09:00');
+    assert.equal(gol.horarioChegada, '17:30');
     assert.equal(gol.escalas, 0);
     assert.equal(gol.detalhesEscalas, 'Direto');
     assert.equal(gol.aeroportoConexao, null);
+    assert.equal(gol.tempoConexao, null);
+    assert.equal(gol.tempoConexaoMinutos, null);
+    assert.equal(gol.isBest, true);
     assert.equal(gol.duracaoHoras, 8.5);
     assert.equal(gol.duracaoTexto, '8 h 30 min');
 
-    // 3. Voo American Airlines direto do grupo restante
+    // 3. Voo American Airlines direto do grupo restante (isBest: false)
     const aa = voos[2];
     assert.equal(aa.preco, 4550);
     assert.equal(aa.cia, 'American Airlines');
+    assert.equal(aa.numeroVoo, 'AA 906');
+    assert.equal(aa.horarioPartida, '22:10');
+    assert.equal(aa.horarioChegada, '06:35');
     assert.equal(aa.escalas, 0);
+    assert.equal(aa.tempoConexao, null);
+    assert.equal(aa.tempoConexaoMinutos, null);
+    assert.equal(aa.isBest, false);
     assert.equal(aa.duracaoHoras, 8.4);
     assert.equal(aa.duracaoTexto, '8 h 25 min');
+  });
+
+  it('deve lidar com fallback seguro (null) quando legs estão incompletos ou simplificados', () => {
+    const htmlSimplificado = `
+      <script class="ds:1">
+        AF_initDataCallback({
+          key: 'ds:1',
+          data: [null, null, [
+            [
+              [["LA", ["LATAM"], [[null, null, null, "GRU", "", "", "MIA"]], "GRU", null, null, "MIA", null, null, 500], [[null, 1500]]]
+            ]
+          ]],
+          sideChannel: {}
+        });
+      </script>
+    `;
+    const voos = extrairVoosDoPayloadJs(htmlSimplificado);
+    assert.equal(voos.length, 1);
+    const v = voos[0];
+    assert.equal(v.preco, 1500);
+    assert.equal(v.horarioPartida, null);
+    assert.equal(v.horarioChegada, null);
+    assert.equal(v.numeroVoo, null);
+    assert.equal(v.tempoConexao, null);
+    assert.equal(v.tempoConexaoMinutos, null);
+    assert.equal(v.isBest, true);
   });
 
   it('deve retornar array vazio para HTML sem tag script ds:1 ou nulo', () => {
@@ -162,5 +206,67 @@ describe('Fast-Flights Engine: extrairVoosDoPayloadJs (script.ds:1)', () => {
     // Deve retornar o preço exato do script ds:1 (3714), provando a precedência da Camada 0
     assert.equal(voos[0].preco, 3714);
     assert.equal(voos[0].cia, 'LATAM');
+  });
+
+  describe('extrairPriceInsightsDoPayloadJs: Termômetro Nativo de Preços', () => {
+    it('deve extrair nivel "baixo" e faixa típica a partir do script ds:1 com payload[5]', async () => {
+      const { extrairPriceInsightsDoPayloadJs } = await import('../src/services/providers/scrapling_client.js');
+      const htmlComInsights = `
+        <script class="ds:1">
+          AF_initDataCallback({
+            key: 'ds:1',
+            data: [
+              null,
+              null,
+              [],
+              [],
+              null,
+              [
+                [3100, 4250],
+                1
+              ]
+            ],
+            sideChannel: {}
+          });
+        </script>
+      `;
+
+      const insights = extrairPriceInsightsDoPayloadJs(htmlComInsights);
+      assert.ok(insights, 'Deve retornar objeto de insights');
+      assert.strictEqual(insights.nivel, 'baixo');
+      assert.strictEqual(insights.faixaMinima, 3100);
+      assert.strictEqual(insights.faixaMaxima, 4250);
+    });
+
+    it('deve interpretar níveis textuais "TYPICAL" / "tipico" e "HIGH" / "alto"', async () => {
+      const { extrairPriceInsightsDoPayloadJs } = await import('../src/services/providers/scrapling_client.js');
+
+      // Teste com array direto do payload
+      const payloadTipico = [
+        null, null, [], [], null,
+        [ [2500, 3800], 'TYPICAL' ]
+      ];
+      const resTipico = extrairPriceInsightsDoPayloadJs(payloadTipico);
+      assert.strictEqual(resTipico?.nivel, 'tipico');
+      assert.strictEqual(resTipico?.faixaMinima, 2500);
+      assert.strictEqual(resTipico?.faixaMaxima, 3800);
+
+      const payloadAlto = [
+        null, null, [], [], null,
+        [ [2000, 2900], 3 ]
+      ];
+      const resAlto = extrairPriceInsightsDoPayloadJs(payloadAlto);
+      assert.strictEqual(resAlto?.nivel, 'alto');
+      assert.strictEqual(resAlto?.faixaMinima, 2000);
+      assert.strictEqual(resAlto?.faixaMaxima, 2900);
+    });
+
+    it('deve retornar null de forma 100% segura quando não há insights de preço no payload', async () => {
+      const { extrairPriceInsightsDoPayloadJs } = await import('../src/services/providers/scrapling_client.js');
+      assert.strictEqual(extrairPriceInsightsDoPayloadJs(null), null);
+      assert.strictEqual(extrairPriceInsightsDoPayloadJs(''), null);
+      assert.strictEqual(extrairPriceInsightsDoPayloadJs(MOCK_HTML_DS1_VALIDO), null);
+      assert.strictEqual(extrairPriceInsightsDoPayloadJs(MOCK_HTML_DS1_CORROMPIDO), null);
+    });
   });
 });

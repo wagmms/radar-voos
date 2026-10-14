@@ -164,4 +164,252 @@ describe('Inteligência de Alertas e Critérios Estritos (alertasRepo.deveDispar
     assert.strictEqual(resOportunidade.deve, true);
     assert.strictEqual(resOportunidade.tipo, 'OPORTUNIDADE_ESTATISTICA');
   });
+
+  it('9. enviarAlertaOportunidade: DEVE formatar horarioPartida, horarioChegada e numeroVoo com escapeHtml', async () => {
+    const { notifierTelegram } = await import('../src/services/notifier_telegram.js');
+    let msgCapturada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      msgCapturada = texto;
+      return true;
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 1,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Lisboa (LIS)',
+        dataIda: '2026-11-15',
+        dataVolta: '2026-11-29',
+        preco: 3200,
+        variacaoTexto: 'Caiu 10%',
+        ehRecorde: false,
+        duracaoHoras: 10.5,
+        detalhes: 'Direto | TAP Air Portugal',
+        link: 'https://flights.google.com',
+        horarioPartida: '20:45',
+        horarioChegada: '10:15',
+        numeroVoo: 'TP 088'
+      });
+
+      assert.ok(msgCapturada, 'Mensagem deve ter sido montada');
+      assert.ok(msgCapturada.includes('🕒 <b>Horário:</b> 20:45 ➔ 10:15 (TP 088)'),
+        'Deve conter linha de horário com número de voo formatado');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('10. enviarAlertaOportunidade: DEVE formatar tempoConexao quando escalas > 0', async () => {
+    const { notifierTelegram } = await import('../src/services/notifier_telegram.js');
+    let msgCapturada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      msgCapturada = texto;
+      return true;
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 2,
+        origem: 'Rio de Janeiro (GIG)',
+        destinoReal: 'Paris (CDG)',
+        dataIda: '2026-12-01',
+        dataVolta: '2026-12-15',
+        preco: 2850,
+        variacaoTexto: 'Caiu 15%',
+        ehRecorde: true,
+        duracaoHoras: 14.2,
+        detalhes: '1 escala em MAD | Iberia',
+        link: 'https://flights.google.com',
+        escalas: 1,
+        tempoConexao: '2h 15min'
+      });
+
+      assert.ok(msgCapturada, 'Mensagem deve ter sido montada');
+      assert.ok(msgCapturada.includes('⏱️ <b>Tempo de espera em conexão:</b> 2h 15min'),
+        'Deve conter tempo de conexão formatado para voo com escalas');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('11. enviarAlertaOportunidade: DEVE exibir bloco de trade-off quando melhorOpcaoDiretaOuRapida estiver presente', async () => {
+    const { notifierTelegram } = await import('../src/services/notifier_telegram.js');
+    let msgCapturada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      msgCapturada = texto;
+      return true;
+    };
+
+    try {
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 3,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Santiago (SCL)',
+        dataIda: '2026-11-10',
+        dataVolta: '2026-11-20',
+        preco: 1200,
+        variacaoTexto: 'Estável',
+        ehRecorde: false,
+        duracaoHoras: 8.5,
+        detalhes: '1 escala em EZE',
+        link: 'https://flights.google.com',
+        melhorOpcaoDiretaOuRapida: {
+          preco: 1450,
+          diferencaPreco: 250,
+          economiaHoras: 4.5,
+          cia: 'LATAM'
+        }
+      });
+
+      assert.ok(msgCapturada, 'Mensagem deve ter sido montada');
+      assert.ok(msgCapturada.includes('⚡ <b>Opção Direta/Rápida:</b> R$ 1450,00 (+R$ 250,00 para economizar 4,5h)'),
+        'Deve conter bloco de trade-off direto/rápido com acréscimo de preço e horas economizadas');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('12. enviarAlertaOportunidade: DEVE exibir Termômetro Google para niveis baixo, tipico e alto com faixa típica', async () => {
+    const { notifierTelegram } = await import('../src/services/notifier_telegram.js');
+    let msgCapturada = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto) => {
+      msgCapturada = texto;
+      return true;
+    };
+
+    try {
+      // 12a. Nível Baixo com faixa típica
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 4,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Miami (MIA)',
+        dataIda: '2026-11-10',
+        preco: 2200,
+        duracaoHoras: 9.0,
+        detalhes: 'Voo direto | American',
+        link: 'https://flights.google.com',
+        priceInsights: {
+          nivel: 'baixo',
+          faixaMinima: 2600,
+          faixaMaxima: 3800
+        }
+      });
+
+      assert.ok(msgCapturada.includes('🟢 <b>Termômetro Google:</b> Preço Baixo para a rota (Faixa típica: R$ 2600 – R$ 3800)'),
+        'Deve formatar linha do termômetro para nível baixo com faixa típica');
+
+      // 12b. Nível Típico
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 4,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Miami (MIA)',
+        dataIda: '2026-11-10',
+        preco: 2900,
+        duracaoHoras: 9.0,
+        detalhes: 'Voo direto',
+        link: 'https://flights.google.com',
+        priceInsights: {
+          nivel: 'tipico'
+        }
+      });
+      assert.ok(msgCapturada.includes('🟡 <b>Termômetro Google:</b> Preço Típico para a rota'),
+        'Deve formatar linha do termômetro para nível típico');
+
+      // 12c. Nível Alto
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 4,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Miami (MIA)',
+        dataIda: '2026-11-10',
+        preco: 4200,
+        duracaoHoras: 9.0,
+        detalhes: 'Voo direto',
+        link: 'https://flights.google.com',
+        priceInsights: {
+          nivel: 'alto'
+        }
+      });
+      assert.ok(msgCapturada.includes('🔴 <b>Termômetro Google:</b> Preço Alto para a rota'),
+        'Deve formatar linha do termômetro para nível alto');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
+
+  it('13. enviarAlertaOportunidade: DEVE exibir dia vizinho mais barato (melhorDataAlternativa) com link seguro e bloquear links maliciosos', async () => {
+    const { notifierTelegram } = await import('../src/services/notifier_telegram.js');
+    let msgCapturada = null;
+    let botoesCapturados = null;
+    const backupEnviar = notifierTelegram.enviarMensagem;
+    notifierTelegram.enviarMensagem = async (texto, url, btnTxt, silencioso, keyboard) => {
+      msgCapturada = texto;
+      botoesCapturados = keyboard;
+      return true;
+    };
+
+    try {
+      // 13a. Melhor data com link seguro https://
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 5,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Lisboa (LIS)',
+        dataIda: '2026-11-10',
+        dataVolta: '2026-11-20',
+        preco: 3200,
+        duracaoHoras: 10.0,
+        detalhes: 'Voo direto | TAP',
+        link: 'https://flights.google.com/base',
+        melhorDataAlternativa: {
+          offset: 1,
+          dataIda: '2026-11-11',
+          dataVolta: '2026-11-21',
+          preco: 2600,
+          economiaReais: 600,
+          economiaPercentual: 19,
+          linkGoogleFlights: 'https://flights.google.com/alt'
+        }
+      });
+
+      assert.ok(msgCapturada.includes('📅 <b>Dia Vizinho Mais Barato (+1d):</b> 2026-11-11 ➔ 2026-11-21 por <b>R$ 2600</b> (Economia de R$ 600 / -19%)'),
+        'Deve formatar bloco de destaque da melhor data alternativa');
+      assert.ok(msgCapturada.includes('<a href="https://flights.google.com/alt">Ver no Google Flights</a>'),
+        'Deve incluir link seguro no texto HTML');
+
+      // Botão inline deve ter sido adicionado
+      const botaoAlt = botoesCapturados.flat().find(b => b.text && b.text.includes('+1d'));
+      assert.ok(botaoAlt, 'Deve incluir botão inline para data vizinha');
+      assert.equal(botaoAlt.url, 'https://flights.google.com/alt');
+
+      // 13b. Link malicioso com protocolo javascript: NÃO deve renderizar <a href>
+      await notifierTelegram.enviarAlertaOportunidade({
+        rotaId: 5,
+        origem: 'São Paulo (GRU)',
+        destinoReal: 'Lisboa (LIS)',
+        dataIda: '2026-11-10',
+        preco: 3200,
+        duracaoHoras: 10.0,
+        detalhes: 'Voo direto',
+        link: 'https://flights.google.com/base',
+        melhorDataAlternativa: {
+          offset: -1,
+          dataIda: '2026-11-09',
+          preco: 2800,
+          economiaReais: 400,
+          economiaPercentual: 13,
+          linkGoogleFlights: 'javascript:alert("xss")'
+        }
+      });
+
+      assert.ok(!msgCapturada.includes('javascript:'), 'NÃO deve renderizar payload javascript:');
+      assert.ok(!msgCapturada.includes('Ver no Google Flights'), 'NÃO deve renderizar link para protocolo inseguro');
+      const botaoInseguro = botoesCapturados.flat().find(b => b.url && b.url.includes('javascript:'));
+      assert.equal(botaoInseguro, undefined, 'Não deve criar botão inline para link inseguro');
+    } finally {
+      notifierTelegram.enviarMensagem = backupEnviar;
+    }
+  });
 });

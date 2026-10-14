@@ -9,56 +9,33 @@ import {
 import { rotasRepo, alertasRepo, bugFaresRepo } from '../db.js';
 import { notifierTelegram } from './notifier_telegram.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
-import { gerarCombinacoesFlexibilidade, gerarJanelasExploracaoSemData, ehSoIda, gerarLinkGoogleFlightsCheapest, gerarLinkGoogleFlights } from '../domain/rotas.js';
+import {
+  gerarCombinacoesFlexibilidade,
+  gerarJanelaDatasFlexiveis,
+  gerarJanelasExploracaoSemData,
+  ehSoIda,
+  gerarLinkGoogleFlightsCheapest,
+  gerarLinkGoogleFlights
+} from '../domain/rotas.js';
 import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
 
 /**
- * Cotações de referência R$/milheiro por programa de fidelidade (espelho do frontend card_rota.js).
- * Fonte: valores médios de mercado brasileiro (atualizar conforme variação de mercado).
- */
-const COTACOES_MILHA_MILHEIRO_BACKEND = {
-  smiles:    17.50,
-  latam:     24.00,
-  latampass: 24.00,
-  livelo:    35.00,
-  azul:      20.00,
-  tudoazul:  20.00,
-  iberia:    65.00,
-  tap:       32.00
-};
-
-/**
- * Calcula a estimativa de milhas necessárias para emitir o voo pelo preço atual.
- * Espelha `calcularMilhasEstimadas` de `src/public/js/card_rota.js` para uso no backend
- * (Telegram, API, escanearRota), eliminando recalculo no cliente.
+ * @deprecated Descontinuado: O Radar de Voos opera exclusivamente com tarifas reais em dinheiro.
+ * Retorna null sem poluir os payloads de rota.
  *
- * @param {number|null} precoAtual   Preço atual em BRL (ou na moeda da rota)
- * @param {number|null} paridadeMilheiro  Cotação R$ por milheiro customizada (ex: 17.50)
- * @param {string}      [programa='smiles'] Chave do programa de fidelidade
- * @returns {{ milhas: number, programa: string, cotacaoMilheiro: number } | null}
- *   Retorna null quando preço ou paridade são inválidos.
+ * @returns {null}
  */
-export function calcularMilhasRota(precoAtual, paridadeMilheiro, programa = 'smiles') {
-  const preco = typeof precoAtual === 'number' ? precoAtual : parseFloat(precoAtual);
-  if (!Number.isFinite(preco) || preco <= 0) return null;
-
-  const progKey = String(programa || 'smiles').toLowerCase().trim();
-  const cotacaoPadrao = COTACOES_MILHA_MILHEIRO_BACKEND[progKey] || COTACOES_MILHA_MILHEIRO_BACKEND.smiles;
-  const cotacao = typeof paridadeMilheiro === 'number' && Number.isFinite(paridadeMilheiro) && paridadeMilheiro > 0
-    ? paridadeMilheiro
-    : cotacaoPadrao;
-
-  // milhas = (preço / R$-por-milheiro) × 1.000
-  const milhas = Math.ceil((preco / cotacao) * 1000);
-  return { milhas, programa: progKey, cotacaoMilheiro: cotacao };
+export function calcularMilhasRota() {
+  return null;
 }
+
 
 export class FlightScanner {
   /**
    * Consulta os provedores de voo através do gerenciador de estratégias
    */
-  static async buscarOfertas(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL') {
+  static async buscarOfertas(origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', opcoesExtras = {}) {
     if (typeof origemCod === 'object' && origemCod !== null) {
       return flightProviderManager.buscarOfertas(origemCod);
     }
@@ -70,7 +47,8 @@ export class FlightScanner {
       duracaoMaxHoras,
       cabine,
       adultos,
-      moeda: (moeda || 'BRL').trim().toUpperCase()
+      moeda: (moeda || 'BRL').trim().toUpperCase(),
+      ...(opcoesExtras || {})
     });
   }
 
@@ -85,12 +63,23 @@ export class FlightScanner {
     try {
       const moedaEfetiva = (opcoes?.moeda || opcoes?.curr || rota?.moeda || rota?.curr || 'BRL').trim().toUpperCase();
 
+      const filtrosAvancados = {
+        maxStops: rota.max_stops ?? rota.maxStops ?? null,
+        carryOnBags: rota.carry_on_bags ?? rota.carryOnBags ?? null,
+        checkedBags: rota.checked_bags ?? rota.checkedBags ?? null,
+        maxPrice: rota.preco_alvo ?? rota.maxPrice ?? null,
+        hideSeparateAndSelfTransfer: rota.hide_separate_and_self_transfer ?? rota.hideSeparateAndSelfTransfer ?? null,
+        excludeBasicEconomy: rota.exclude_basic_economy ?? rota.excludeBasicEconomy ?? null
+      };
+
       // 1. Consulta meteorológica do destino em paralelo
       const climaPromise = weatherService.obterClimaDestino(rota.codigo_destino || rota.destino, rota.data_ida);
 
       let resultadoFinal = null;
       let oferta = null;
       let melhorOpcaoFlexivel = null;
+      let calendarioPrecos = [];
+      let melhorDataAlternativa = null;
       let dataIdaEfetiva = rota.data_ida;
       let dataVoltaEfetiva = rota.data_volta;
 
@@ -115,7 +104,8 @@ export class FlightScanner {
               rota.duracao_max_horas,
               rota.cabine || 'economy',
               1,
-              moedaEfetiva
+              moedaEfetiva,
+              filtrosAvancados
             );
             if (res.ok && res.encontrouVoos && res.oferta && res.oferta.preco > 0) {
               resultadosAmostras.push({
@@ -171,7 +161,8 @@ export class FlightScanner {
           rota.duracao_max_horas,
           rota.cabine || 'economy',
           1,
-          moedaEfetiva
+          moedaEfetiva,
+          filtrosAvancados
         );
 
         if (!resultadoBase.ok) {
@@ -198,39 +189,85 @@ export class FlightScanner {
 
         oferta = resultadoBase.oferta;
 
-        // 3. Matriz de Flexibilidade Adjacente (±0 a ±7 dias)
-        const flexDias = rota.flexibilidade_dias || 0;
-        if (flexDias > 0) {
-          const voltaEfetiva = ehSoIda(rota.data_volta) ? null : rota.data_volta;
-          const combinacoes = gerarCombinacoesFlexibilidade(rota.data_ida, voltaEfetiva, flexDias);
-          for (const comb of combinacoes.slice(1, 3)) {
+        // 3. Janela de Datas Flexíveis (±1 a ±3 dias) & Calendário de Preços
+        const diasFlex = Math.min(3, Math.max(0, parseInt(rota.dias_flexiveis !== undefined ? rota.dias_flexiveis : rota.flexibilidade_dias, 10) || 0));
+        if (diasFlex > 0) {
+          const paresJanela = gerarJanelaDatasFlexiveis(rota.data_ida, rota.data_volta, diasFlex);
+
+          // Inclui a oferta da data principal (offset === 0) reutilizando a consulta já realizada
+          calendarioPrecos.push({
+            offset: 0,
+            dataIda: rota.data_ida,
+            dataVolta: rota.data_volta || null,
+            preco: oferta.preco,
+            cia: oferta.cia || null,
+            escalas: oferta.escalas ?? 0,
+            horarioPartida: oferta.horarioPartida || null
+          });
+
+          // Varre os offsets vizinhos
+          for (const par of paresJanela) {
+            if (par.offset === 0) continue;
             try {
               const resAdj = await FlightScanner.buscarOfertas(
                 rota.codigo_origem,
                 rota.codigo_destino,
-                comb.dataIda,
-                comb.dataVolta,
+                par.dataIda,
+                par.dataVolta,
                 rota.duracao_max_horas,
                 rota.cabine || 'economy',
                 1,
-                moedaEfetiva
+                moedaEfetiva,
+                filtrosAvancados
               );
 
-              if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta.preco < oferta.preco) {
-                const economia = oferta.preco - resAdj.oferta.preco;
-                const economiaPct = Math.round((economia / oferta.preco) * 100);
-                melhorOpcaoFlexivel = {
-                  data_ida: comb.dataIda,
-                  data_volta: comb.dataVolta,
+              if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta && resAdj.oferta.preco > 0) {
+                calendarioPrecos.push({
+                  offset: par.offset,
+                  dataIda: par.dataIda,
+                  dataVolta: par.dataVolta || null,
                   preco: resAdj.oferta.preco,
-                  economia,
-                  economiaPct,
-                  deltaDias: comb.deltaDias,
-                  link: resAdj.oferta.link
-                };
-                break;
+                  cia: resAdj.oferta.cia || null,
+                  escalas: resAdj.oferta.escalas ?? 0,
+                  horarioPartida: resAdj.oferta.horarioPartida || null
+                });
               }
             } catch (_) {}
+          }
+
+          // Ordena por offset crescente
+          calendarioPrecos.sort((a, b) => a.offset - b.offset);
+
+          // Identifica data vizinha mais barata que a base (offset === 0)
+          const vizinhos = calendarioPrecos.filter(item => item.offset !== 0);
+          const vizinhosMaisBaratos = vizinhos.filter(item => item.preco < oferta.preco);
+          if (vizinhosMaisBaratos.length > 0) {
+            vizinhosMaisBaratos.sort((a, b) => a.preco - b.preco);
+            const melhorVizinho = vizinhosMaisBaratos[0];
+            const economiaReais = oferta.preco - melhorVizinho.preco;
+            const economiaPercentual = Math.round((economiaReais / oferta.preco) * 100);
+
+            melhorDataAlternativa = {
+              offset: melhorVizinho.offset,
+              dataIda: melhorVizinho.dataIda,
+              dataVolta: melhorVizinho.dataVolta,
+              preco: melhorVizinho.preco,
+              economiaReais,
+              economiaPercentual,
+              cia: melhorVizinho.cia,
+              escalas: melhorVizinho.escalas,
+              linkGoogleFlights: null
+            };
+
+            melhorOpcaoFlexivel = {
+              data_ida: melhorVizinho.dataIda,
+              data_volta: melhorVizinho.dataVolta,
+              preco: melhorVizinho.preco,
+              economia: economiaReais,
+              economiaPct: economiaPercentual,
+              deltaDias: melhorVizinho.offset,
+              link: null
+            };
           }
         }
       }
@@ -307,8 +344,18 @@ export class FlightScanner {
     });
 
     const destinoParaLink = oferta.codigoDestinoReal || destinoInfoRota.iata;
+    if (melhorDataAlternativa) {
+      melhorDataAlternativa.linkGoogleFlights = (melhorDataAlternativa.dataIda && destinoParaLink)
+        ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoParaLink, melhorDataAlternativa.dataIda, melhorDataAlternativa.dataVolta, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
+           || gerarLinkGoogleFlights(rota.codigo_origem, rota.codigo_destino || destinoParaLink, melhorDataAlternativa.dataIda, melhorDataAlternativa.dataVolta, moedaEfetiva))
+        : null;
+      if (melhorOpcaoFlexivel) {
+        melhorOpcaoFlexivel.link = melhorDataAlternativa.linkGoogleFlights;
+      }
+    }
+
     const linkCanonicoRota = (dataIdaEfetiva && destinoParaLink)
-      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva)
+      ? (gerarLinkGoogleFlightsCheapest(rota.codigo_origem, destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
          || gerarLinkGoogleFlights(rota.codigo_origem, rota.codigo_destino || destinoParaLink, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
       : oferta.link;
 
@@ -326,7 +373,16 @@ export class FlightScanner {
       destino_real: `${destinoInfoRota.cidade}, ${destinoInfoRota.pais} (${destinoInfoRota.iata})`,
       clima_destino_resumo: clima.ok ? clima.resumo : null,
       clima_temp_media: clima.ok ? clima.tempMedia : null,
-      melhor_opcao_flexivel: melhorOpcaoFlexivel
+      melhor_opcao_flexivel: melhorOpcaoFlexivel,
+      horario_partida: oferta.horarioPartida || null,
+      horario_chegada: oferta.horarioChegada || null,
+      numero_voo: oferta.numeroVoo || null,
+      tempo_conexao: oferta.tempoConexao || null,
+      top_ofertas: oferta.topOfertas || null,
+      melhor_opcao_direta_rapida: oferta.melhorOpcaoDiretaOuRapida || null,
+      calendario_precos: calendarioPrecos.length > 0 ? calendarioPrecos : null,
+      melhor_data_alternativa: melhorDataAlternativa,
+      price_insights: oferta.priceInsights || null
     });
 
     // 4b. Análise de Delta e Z-Score da Rota Monitorada (padrão proactive-agent)
@@ -382,17 +438,20 @@ export class FlightScanner {
         clima: clima.ok ? clima : null,
         semData: rota.sem_data === 1,
         labelJanela: melhorOpcaoFlexivel?.label,
-        precoAlvo: rota.preco_alvo
+        precoAlvo: rota.preco_alvo,
+        horarioPartida: oferta.horarioPartida || null,
+        horarioChegada: oferta.horarioChegada || null,
+        numeroVoo: oferta.numeroVoo || null,
+        tempoConexao: oferta.tempoConexao || null,
+        escalas: oferta.escalas ?? null,
+        topOfertas: oferta.topOfertas || null,
+        melhorOpcaoDiretaOuRapida: oferta.melhorOpcaoDiretaOuRapida || null,
+        priceInsights: oferta.priceInsights || null,
+        melhorDataAlternativa: melhorDataAlternativa || null
       });
     }
 
-    // 6. Cálculo automático de milhas estimadas usando paridade e programa da rota
-    const milhasEstimadas = calcularMilhasRota(
-      oferta.preco,
-      rota.paridade_milhas ?? null,
-      rota.programa_milhas || 'smiles'
-    );
-
+    // 6. Milhas descontinuadas em prol de economia real em dinheiro
     return {
       sucesso: true,
       encontrou: true,
@@ -400,10 +459,13 @@ export class FlightScanner {
       rotaAtualizada,
       clima,
       melhorOpcaoFlexivel,
+      calendarioPrecos,
+      melhorDataAlternativa,
+      priceInsights: oferta.priceInsights || null,
       ehBugFare: analiseBug.ehBugFare,
       deltaEstatistico: analiseDelta,
       moeda: moedaEfetiva,
-      milhas_estimadas: milhasEstimadas
+      milhas_estimadas: null
     };
   } catch (err) {
     rotasRepo.marcarFalhaChecagem(rota.id, `Erro inesperado: ${err.message}`);
