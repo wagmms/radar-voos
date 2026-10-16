@@ -126,5 +126,21 @@
     "dias_estadia": null,
     "tipo_viagem": "one_way",
     "ativa": 1
+  },
+  {
+    "origem": "São Paulo",
+    "destino": "Madrid",
+    "codigo_origem": "SAO",
+    "codigo_destino": "MAD",
+    "data_ida": "2027-05-15",
+    "data_volta": "2027-05-25",
+    "duracao_max_horas": 16,
+    "preco_alvo": 3800,
+    "cabine": "economy",
+    "flexibilidade_dias": 0,
+    "sem_data": 0,
+    "dias_estadia": 10,
+    "tipo_viagem": "round_trip",
+    "ativa": 1
   }
 ]
