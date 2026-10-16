@@ -1,4 +1,4 @@
-const CACHE_NAME = 'radar-voos-v3.5.2';
+const CACHE_NAME = 'radar-voos-v3.6.0';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -29,14 +29,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Estratégia Stale-While-Revalidate para assets estáticos e Network-First para a API
+// Estratégia Stale-While-Revalidate para assets estáticos e estritamente Network-First para a API
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Requisições para API de voos: sempre Network-First
+  // Requisições para API de voos: estritamente pela rede (zero cache de dados defasados)
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
+      fetch(event.request)
     );
     return;
   }

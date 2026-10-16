@@ -94,7 +94,13 @@ export function exibirToast(mensagem, tipo = 'info', duracao = 4000) {
 export async function carregarRotas() {
   state.carregando = true;
   try {
-    const res = await fetch('/api/rotas');
+    const res = await fetch(`/api/rotas?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache'
+      }
+    });
     const json = await res.json();
     if (json.ok && Array.isArray(json.rotas)) {
       state.rotas = json.rotas;

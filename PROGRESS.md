@@ -5,17 +5,16 @@
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 **Etapas 1, 2 e 3 Concluídas com Sucesso!** Paridade total de engenharia reversa com `fast_flights` e `fli-js`. Parser JSPB robusto contra Sparse Times (`[8]`, `[null, 31]`), encoder Protobuf `tfs` com blindagem contra auto-transferência (`hideSeparateAndSelfTransfer = true`), exclusão de Basic Economy, fingerprint stealth Chrome 145, e alertas ricos no Telegram e PWA com aeronaves, dias extras (`+1d`) e CO₂. 100% de aprovação (467/467 testes passando no `./validate.sh fast`).
+- **Estado Geral**: 🟢 **Auditoria Gemini 4 Argon Concluída com Sucesso!** Identificada e eliminada a causa raiz da divergência de preços exibidos no PWA vs Google Flights: split-brain de dados do Render efêmero resolvido com persistência de snapshot completo em `data/rotas.json`, restauração atômica no boot do SQLite em `src/db.js`, injeção obrigatória de `Cache-Control: no-store` nas rotas da API (`src/server/app.js`), desativação de fallback defasado e elevação do Service Worker para `v3.6.0` (`src/public/sw.js`). Preços aferidos em tempo real: Belém R$ 1.012, Ribeirão Preto R$ 580, Lima R$ 954. 467/467 testes aprovados (100% verde no `./validate.sh fast`).
 - **Camadas Entregues & Verificadas**:
-  - `src/services/providers/scrapling_client.js`: `extrairHoraMinutoTrecho`, `formatarHorarioTrecho`, `formatarDataTrecho`, `calcularDiasExtrasChegada`, `extrairEmissoesCarbono` e `calcularTempoConexaoTrechos`.
-  - `src/domain/rotas.js`: `ehRotaIntercontinental`, padrão defensivo `hideSeparateAndSelfTransfer = true`, `excludeBasicEconomy` e `Baggage`.
-  - `src/services/providers/google_flights_direct_provider.js`: `USER_AGENTS_STEALTH` Chrome 145 e suporte a `opcoesAvancadas`.
-  - `src/services/notifier_telegram.js`: `formatarSufixoDiasExtras` e `formatarMetadadosVooTelegram` integrados aos alertas.
-  - `src/public/js/card_rota.js`: Renderização de `+1d` e modelo de aeronave no card do PWA.
-  - `src/domain/bug_fares.js`: `ehAeronaveWidebody` e bônus de Widebody em rotas sul-americanas/domésticas.
-  - **Suíte de Testes**: 467/467 testes aprovados (100% de sucesso em 64 suítes).
+  - `src/services/rotas_sync.js`: `salvarArquivoRotas` com persistência de snapshot (`preco_atual`, `ranking_destinos_regionais`, `top_ofertas`, `ultima_checagem`).
+  - `src/db.js`: `rotasRepo.criar` com suporte a restauração imediata de campos de preço e metadados no boot inicial do banco.
+  - `src/server/app.js`: Hook `onSend` com headers `no-store, no-cache, must-revalidate` para todas as requisições `/api/`.
+  - `src/public/app.js`: `fetch('/api/rotas')` com cache `no-store` e query param `_t` anti-cache.
+  - `src/public/sw.js`: Versão elevada para `v3.6.0` com Network-First estrito para `/api/` e purga imediata de caches legados.
+  - `data/rotas.json`: Sincronizado com os preços reais consolidados das 4 rotas canônicas.
 - **Diretriz Prioritária**: Implementar a matriz de datas flexíveis (`search_dates`) e expor servidor MCP nativo do RadarVoos.
-- **Última Tarefa Concluída**: Implementação completa das Etapas 1, 2 e 3 de engenharia reversa do Google Flights com 467 testes automatizados aprovados.
+- **Última Tarefa Concluída**: Resolução arquitetural definitiva da persistência de preços pós-reboot e invalidação de cache no Cockpit PWA via Gemini 4 Argon.
 
 ---
 

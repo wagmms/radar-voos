@@ -220,14 +220,32 @@ export const rotasRepo = {
     const carryOnBags = parseNumOpt(dados.carry_on_bags !== undefined ? dados.carry_on_bags : dados.carryOnBags);
     const checkedBags = parseNumOpt(dados.checked_bags !== undefined ? dados.checked_bags : dados.checkedBags);
 
+    const precoAtual = parseNumOpt(dados.preco_atual);
+    const menorHist = parseNumOpt(dados.menor_preco_historico) || precoAtual;
+    const variacaoTexto = dados.variacao_texto || null;
+    const termometro = dados.termometro || null;
+    const detalhesVoo = dados.detalhes_voo || null;
+    const topOfertas = typeof dados.top_ofertas === 'object' && dados.top_ofertas !== null ? JSON.stringify(dados.top_ofertas) : (dados.top_ofertas || null);
+    const melhorOpcaoDireta = typeof dados.melhor_opcao_direta_rapida === 'object' && dados.melhor_opcao_direta_rapida !== null ? JSON.stringify(dados.melhor_opcao_direta_rapida) : (dados.melhor_opcao_direta_rapida || null);
+    const melhorOpcaoFlexivel = typeof dados.melhor_opcao_flexivel === 'object' && dados.melhor_opcao_flexivel !== null ? JSON.stringify(dados.melhor_opcao_flexivel) : (dados.melhor_opcao_flexivel || null);
+    const rankingDestinosRegionais = typeof dados.ranking_destinos_regionais === 'object' && dados.ranking_destinos_regionais !== null ? JSON.stringify(dados.ranking_destinos_regionais) : (dados.ranking_destinos_regionais || null);
+    const calendarioPrecos = typeof dados.calendario_precos === 'object' && dados.calendario_precos !== null ? JSON.stringify(dados.calendario_precos) : (dados.calendario_precos || null);
+    const melhorDataAlternativa = typeof dados.melhor_data_alternativa === 'object' && dados.melhor_data_alternativa !== null ? JSON.stringify(dados.melhor_data_alternativa) : (dados.melhor_data_alternativa || null);
+    const ultimaChecagem = dados.ultima_checagem || null;
+    const destinoReal = dados.destino_real || null;
+
     const stmt = db.prepare(`
       INSERT INTO rotas (
         origem, destino, codigo_origem, codigo_destino,
         data_ida, data_volta, duracao_max_horas, preco_alvo,
+        preco_atual, menor_preco_historico, variacao_texto, termometro,
+        detalhes_voo, top_ofertas, melhor_opcao_direta_rapida, melhor_opcao_flexivel,
+        ranking_destinos_regionais, calendario_precos, melhor_data_alternativa,
+        ultima_checagem, destino_real,
         link_google_flights, cabine, flexibilidade_dias, dias_flexiveis,
         sem_data, dias_estadia, moeda, ativa,
         max_stops, carry_on_bags, checked_bags, tipo_viagem
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
     `);
 
     const res = stmt.run(
@@ -239,6 +257,19 @@ export const rotasRepo = {
       dataVolta,
       dados.duracao_max_horas || 999,
       dados.preco_alvo || null,
+      precoAtual,
+      menorHist,
+      variacaoTexto,
+      termometro,
+      detalhesVoo,
+      topOfertas,
+      melhorOpcaoDireta,
+      melhorOpcaoFlexivel,
+      rankingDestinosRegionais,
+      calendarioPrecos,
+      melhorDataAlternativa,
+      ultimaChecagem,
+      destinoReal,
       link,
       dados.cabine || 'economy',
       flexibilidadeDias,

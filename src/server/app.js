@@ -39,6 +39,17 @@ export async function buildApp(opts = {}) {
     }));
   }
 
+  // Injetar headers anti-cache estritos em todas as rotas da API para evitar congelamento no PWA/browser
+  app.addHook('onSend', async (request, reply, payload) => {
+    if (request.raw.url && request.raw.url.startsWith('/api')) {
+      reply.header('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+      reply.header('Pragma', 'no-cache');
+      reply.header('Expires', '0');
+      reply.header('Surrogate-Control', 'no-store');
+    }
+    return payload;
+  });
+
   // Health check
   app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
