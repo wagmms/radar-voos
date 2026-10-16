@@ -5,15 +5,14 @@
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Suporte pleno a "Apenas Ida" (One-Way) implementado no Cockpit PWA e no banco SQLite. Discrepâncias de preços de RJ ➔ Belém (R$ 1.281 vs R$ 914) e SP ➔ Santiago (R$ 1.029 vs R$ 989) diagnosticadas e resolvidas na raiz. 100% de aprovação (446/446 testes passando no `./validate.sh fast`).
+- **Estado Geral**: 🟢 Hard Guard arquitetural implementado via Gemini 4 Argon, bloqueando definitivamente vazamento de rotas de teste para GitHub/deploy. Rotas genéricas expurgadas do repositório remoto. 100% de aprovação (446/446 testes passando no `./validate.sh fast`).
 - **Camadas Entregues & Verificadas**:
-  - `src/public/index.html` e `src/public/app.js`: seletor de modalidade de viagem (`🔄 Ida e Volta` vs `➡️ Apenas Ida`) com desabilitação de volta e envio de `tipo_viagem`.
-  - `src/db.js`: migração dinâmica da coluna `tipo_viagem`, regeneração bidirecional de links Google Flights e sanitização com blindagem cambial em BRL para América do Sul.
-  - `src/public/js/card_rota.js`: eliminação da volta fantasma de 10 dias em rotas só ida.
-  - `tests/routes.test.js`: testes de regressão de criação e alternância de tipo de viagem.
+  - `src/services/rotas_sync.js`: função `isExecucaoOficialAutorizada()` impedindo escrita em `data/rotas.json` e sync com GitHub fora do banco oficial de produção.
+  - `tests/routes.test.js`: isolamento estrito contra o GitHub token e runner de testes.
+  - `data/rotas.json`: restaurado canonicamente com as 4 rotas reais do usuário em `main` e `autoloop/dev`.
   - **Suíte de Testes**: 446/446 testes aprovados (100% de sucesso).
 - **Diretriz Prioritária**: Implementar sparklines SVG de histórico nos cards e visualização ortodrômica de rotas no Cockpit PWA.
-- **Última Tarefa Concluída**: Suporte a "Apenas Ida" no modal de criação/edição de rotas do Cockpit PWA, resolução das discrepâncias tarifárias de RJ ➔ Belém e SP ➔ Santiago, e regeneração canônica de links Google Flights one-way vs round-trip.
+- **Última Tarefa Concluída**: Expugo de todas as rotas mock/genéricas injetadas via testes no GitHub remoto e implementação do Hard Guard em `rotas_sync.js` bloqueando para sempre qualquer escrita ou sync em testes.
 
 ---
 
