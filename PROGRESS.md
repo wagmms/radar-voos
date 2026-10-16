@@ -1,19 +1,19 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.6.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.7.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Blindagem Doméstica 100% BRL e Eliminação de Distorção Cambial na rota Rio ➔ Belém concluída com sucesso via Gemini 4 Argon. 100% de aprovação (443/443 testes passando no `./validate.sh fast`). O radar capturou com exatidão a tarifa real de R$ 1.727 da Azul (eliminando a inflação indevida de > R$ 2.000 gerada por contaminação de EUR).
+- **Estado Geral**: 🟢 Suporte pleno a "Apenas Ida" (One-Way) implementado no Cockpit PWA e no banco SQLite. Discrepâncias de preços de RJ ➔ Belém (R$ 1.281 vs R$ 914) e SP ➔ Santiago (R$ 1.029 vs R$ 989) diagnosticadas e resolvidas na raiz. 100% de aprovação (446/446 testes passando no `./validate.sh fast`).
 - **Camadas Entregues & Verificadas**:
-  - `src/domain/rotas.js`: catálogo `CODIGOS_AEROPORTOS_BRASIL` (43 aeroportos), função `ehRotaDomesticaBrasil` e forçamento estrito de `curr=BRL` nos geradores de links do Google Flights.
-  - `src/services/flight_scanner.js`: verificação de rotas domésticas em `escanearRota` e `atualizarResultadoChecagem` cravando `moedaEfetiva = 'BRL'`.
-  - `src/services/providers/scrapling_client.js`: `construirUrlCheapest` com blindagem para rotas nacionais.
-  - `src/db.js`: sanitização automática na inicialização para recuperar rotas contaminadas e guardrails em `criar` e `atualizar`.
-  - **Suíte de Testes**: 443/443 testes aprovados (100% de sucesso).
+  - `src/public/index.html` e `src/public/app.js`: seletor de modalidade de viagem (`🔄 Ida e Volta` vs `➡️ Apenas Ida`) com desabilitação de volta e envio de `tipo_viagem`.
+  - `src/db.js`: migração dinâmica da coluna `tipo_viagem`, regeneração bidirecional de links Google Flights e sanitização com blindagem cambial em BRL para América do Sul.
+  - `src/public/js/card_rota.js`: eliminação da volta fantasma de 10 dias em rotas só ida.
+  - `tests/routes.test.js`: testes de regressão de criação e alternância de tipo de viagem.
+  - **Suíte de Testes**: 446/446 testes aprovados (100% de sucesso).
 - **Diretriz Prioritária**: Implementar sparklines SVG de histórico nos cards e visualização ortodrômica de rotas no Cockpit PWA.
-- **Última Tarefa Concluída**: Restauração das 4 rotas canônicas originais do usuário e blindagem completa da inicialização (`popularDadosIniciaisSeVazio` e `sincronizarNoStartup`), impedindo a inserção de voos genéricos mock e a deleção de rotas em futuros deploys.
+- **Última Tarefa Concluída**: Suporte a "Apenas Ida" no modal de criação/edição de rotas do Cockpit PWA, resolução das discrepâncias tarifárias de RJ ➔ Belém e SP ➔ Santiago, e regeneração canônica de links Google Flights one-way vs round-trip.
 
 ---
 

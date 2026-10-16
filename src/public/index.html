@@ -568,6 +568,44 @@
       cursor: pointer;
     }
 
+    .tipo-viagem-toggle {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--card-border);
+    }
+
+    .radio-tab {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .radio-tab input[type="radio"] {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .radio-tab:has(input:checked),
+    .radio-tab.active {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--primary);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -657,6 +695,20 @@
         </div>
 
         <div class="form-group">
+          <label>Tipo de Viagem *</label>
+          <div class="tipo-viagem-toggle" role="radiogroup" aria-label="Tipo de Viagem">
+            <label class="radio-tab active" id="label-tipo-ida-volta">
+              <input type="radio" name="tipo_viagem" id="tipo-ida-volta" value="round_trip" checked>
+              <span>🔄 Ida e Volta</span>
+            </label>
+            <label class="radio-tab" id="label-tipo-so-ida">
+              <input type="radio" name="tipo_viagem" id="tipo-so-ida" value="one_way">
+              <span>➡️ Apenas Ida</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
           <label class="form-check">
             <input type="checkbox" id="campo-sem-data">
             <span>🗓️ Modo Flexível Sem Data (menor preço nos próximos meses)</span>
@@ -664,11 +716,11 @@
         </div>
 
         <div id="datas-container" class="form-row">
-          <div class="form-group">
+          <div class="form-group" id="grupo-data-ida">
             <label for="campo-data-ida">Data de Ida *</label>
             <input type="date" id="campo-data-ida" class="form-control">
           </div>
-          <div class="form-group">
+          <div class="form-group" id="grupo-data-volta">
             <label for="campo-data-volta">Data de Volta (ou dias)</label>
             <input type="text" id="campo-data-volta" class="form-control" placeholder="Ex: 2026-11-20 ou 10">
           </div>

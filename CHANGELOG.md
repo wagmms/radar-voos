@@ -4,6 +4,30 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.7.0] - 2026-10-16 — Suporte Nativo a "Apenas Ida" (One-Way) no Cockpit PWA, Blindagem Cambial na América do Sul e Eliminação de Fantasmas de Ida e Volta via Gemini 4 Argon
+
+### 🚀 Novas Funcionalidades & Correções Cirúrgicas:
+- **Suporte Nativo a "Apenas Ida" no Cockpit PWA (`src/public/index.html` e `src/public/app.js`)**:
+  - Implementado seletor visual em abas (radio tabs) com transição fluida entre `🔄 Ida e Volta` e `➡️ Apenas Ida`.
+  - Desabilitação reativa do campo de data de volta com placeholder adaptativo (`"Não se aplica (Só Ida)"`) quando a opção Só Ida é ativada.
+  - Envio explícito de `tipo_viagem: 'one_way'` ou `'round_trip'` tanto na criação de novas rotas quanto na edição via modal.
+- **Persistência e Schema SQLite com Migração Dinâmica (`src/db.js`)**:
+  - Adicionada coluna `tipo_viagem TEXT DEFAULT 'round_trip'` na tabela `rotas` e em `initSchema` com migração automática via `ALTER TABLE rotas ADD COLUMN tipo_viagem...`.
+  - Atualizados `rotasRepo.criar` e `rotasRepo.atualizar` para persistir e consultar `tipo_viagem`, limpando `data_volta` e `dias_estadia` em rotas `one_way`.
+  - Regeneração bidirecional de links do Google Flights: garante que rotas só ida recebam link `one-way` e rotas ida e volta recebam link `returning`, sem resíduos invertidos.
+- **Eliminação de Fantasmas de Ida e Volta nos Cards (`src/public/js/card_rota.js`)**:
+  - Corrigida a função `ehRotaSoIdaVisual(rota)` para reconhecer imediatamente `tipo_viagem === 'one_way'` e rotas sem data de volta e sem estadia, eliminando a injeção indevida de volta fictícia de 10 dias (`2027-01-17 até 2027-01-27 (10d)`).
+  - Exibição limpa do badge `(Só Ida)` no cabeçalho do card de rota.
+- **Resolução da Discrepância RJ ➔ Belém (R$ 1.281 vs R$ 914)**:
+  - Diagnóstico comprovou que a tarifa real de só ida da Azul (AD 2666) para 17/01/2027 no Google Flights é exatamente **R$ 914**.
+  - O valor R$ 1.281 era resíduo de cotação antiga de ida e volta que continuava sendo exibida porque a rota estava marcada como round_trip no banco. Com o reset para `one_way`, o valor é cotado corretamente.
+- **Resolução da Discrepância SP ➔ Santiago (R$ 1.029 vs R$ 989)**:
+  - A rota estava cadastrada com `moeda: 'EUR'` na busca multi-hub para a América do Sul (`SAM`).
+  - O Google Flights retornava a tarifa da LATAM em euros (€ 173), que convertida para BRL com taxas da SerpAPI/OTA resultava em cerca de **R$ 1.029**, enquanto o Google Flights nativo em BRL cobra **R$ 989** (voo LATAM LA 1302 via ASU).
+  - A blindagem cambial foi estendida para abranger toda a América do Sul (`SAM`, `SCL`, `BUE`, `EZE`, `LIM`, `MVD`, `BOG`), forçando `moeda = 'BRL'` e eliminando a distorção cambial.
+- **Validação Automatizada**:
+  - 446 testes aprovados com 100% de sucesso em 59 suítes (`./validate.sh fast`).
+
 ## [v3.6.2] - 2026-10-15 — Blindagem Doméstica 100% BRL e Eliminação de Distorção Cambial na Rota Rio ➔ Belém via Gemini 4 Argon
 
 ### 🚀 Correção Cirúrgica & Blindagem Anti-Inflação Cambial:

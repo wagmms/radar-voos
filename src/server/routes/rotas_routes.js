@@ -32,6 +32,7 @@ export async function rotasRoutes(fastify) {
         carry_on_bags: (r.carry_on_bags !== undefined && r.carry_on_bags !== null) ? Number(r.carry_on_bags) : null,
         checked_bags: (r.checked_bags !== undefined && r.checked_bags !== null) ? Number(r.checked_bags) : null,
         dias_flexiveis: (r.dias_flexiveis !== undefined && r.dias_flexiveis !== null) ? Number(r.dias_flexiveis) : 0,
+        tipo_viagem: r.tipo_viagem || (rotaEhSoIda(r) ? 'one_way' : 'round_trip'),
         top_ofertas: safeJsonParse(r.top_ofertas, null),
         melhor_opcao_direta_rapida: safeJsonParse(r.melhor_opcao_direta_rapida, null),
         melhor_opcao_flexivel: safeJsonParse(r.melhor_opcao_flexivel, null),
@@ -61,6 +62,7 @@ export async function rotasRoutes(fastify) {
       ok: true,
       rota: {
         ...rota,
+        tipo_viagem: rota.tipo_viagem || (rotaEhSoIda(rota) ? 'one_way' : 'round_trip'),
         max_stops: (rota.max_stops !== undefined && rota.max_stops !== null) ? Number(rota.max_stops) : null,
         carry_on_bags: (rota.carry_on_bags !== undefined && rota.carry_on_bags !== null) ? Number(rota.carry_on_bags) : null,
         checked_bags: (rota.checked_bags !== undefined && rota.checked_bags !== null) ? Number(rota.checked_bags) : null,

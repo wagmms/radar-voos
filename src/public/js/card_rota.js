@@ -367,8 +367,10 @@ export function renderizarRankingDestinosRegionais(rankingDestinosRegionais) {
 export function ehRotaSoIdaVisual(rota) {
   if (!rota) return false;
   if (rota.tipo_viagem === 'one_way' || rota.tipo === 'one_way') return true;
+  if (rota.tipo_viagem === 'round_trip' || rota.tipo === 'round_trip') return false;
   const voltaStr = String(rota.data_volta || '').toLowerCase().trim();
   if (voltaStr === 'só ida' || voltaStr === 'so ida' || voltaStr === 'one-way' || voltaStr === 'one_way') return true;
+  if (!rota.data_volta && (!rota.dias_estadia || Number(rota.dias_estadia) === 0)) return true;
   return false;
 }
 

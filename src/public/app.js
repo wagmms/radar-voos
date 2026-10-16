@@ -37,6 +37,39 @@ const campoMaxStops = document.getElementById('campo-max-stops');
 const campoCarryOnBags = document.getElementById('campo-carry-on-bags');
 const campoDiasFlexiveis = document.getElementById('campo-dias-flexiveis');
 const grupoDiasFlexiveis = document.getElementById('grupo-dias-flexiveis');
+const tipoIdaVolta = document.getElementById('tipo-ida-volta');
+const tipoSoIda = document.getElementById('tipo-so-ida');
+const labelTipoIdaVolta = document.getElementById('label-tipo-ida-volta');
+const labelTipoSoIda = document.getElementById('label-tipo-so-ida');
+const grupoDataVolta = document.getElementById('grupo-data-volta');
+
+/**
+ * Atualiza o estado visual e os campos dependentes do Tipo de Viagem (Só Ida vs Ida e Volta)
+ */
+export function atualizarSelecaoTipoViagem(tipo = 'round_trip') {
+  const ehSoIda = tipo === 'one_way';
+  if (tipoSoIda) tipoSoIda.checked = ehSoIda;
+  if (tipoIdaVolta) tipoIdaVolta.checked = !ehSoIda;
+
+  if (labelTipoSoIda) labelTipoSoIda.classList.toggle('active', ehSoIda);
+  if (labelTipoIdaVolta) labelTipoIdaVolta.classList.toggle('active', !ehSoIda);
+
+  if (grupoDataVolta) {
+    if (ehSoIda) {
+      grupoDataVolta.style.opacity = '0.35';
+      if (campoDataVolta) {
+        campoDataVolta.disabled = true;
+        campoDataVolta.placeholder = 'Não se aplica (Só Ida)';
+      }
+    } else {
+      grupoDataVolta.style.opacity = '1';
+      if (campoDataVolta) {
+        campoDataVolta.disabled = false;
+        campoDataVolta.placeholder = 'Ex: 2026-11-20 ou 10';
+      }
+    }
+  }
+}
 
 /**
  * Exibe notificação toast na tela
@@ -135,6 +168,10 @@ export function abrirModal(rota = null) {
     if (campoDiasFlexiveis) {
       campoDiasFlexiveis.value = String(diasFlexVal);
     }
+
+    const ehSoIda = rota.tipo_viagem === 'one_way' ||
+      (!rota.data_volta && (!rota.dias_estadia || Number(rota.dias_estadia) === 0));
+    atualizarSelecaoTipoViagem(ehSoIda ? 'one_way' : 'round_trip');
   } else {
     modalTitulo.textContent = 'Nova Rota Monitorada';
     campoId.value = '';
@@ -144,6 +181,7 @@ export function abrirModal(rota = null) {
     if (campoDiasFlexiveis) {
       campoDiasFlexiveis.value = '0';
     }
+    atualizarSelecaoTipoViagem('round_trip');
   }
 
   alternarCamposData(campoSemData.checked);
@@ -182,6 +220,10 @@ export async function salvarRota(event) {
   const dataIda = campoDataIda.value.trim();
   const dataVolta = campoDataVolta.value.trim();
 
+  const ehSoIda = tipoSoIda ? tipoSoIda.checked : false;
+  const tipoViagem = ehSoIda ? 'one_way' : 'round_trip';
+  const dataVoltaEfetiva = ehSoIda ? null : (dataVolta || null);
+
   // Armadilha de falsy evitada: parse seguro de valores numéricos
   const precoAlvoVal = campoPrecoAlvo.value.trim();
   const precoAlvo = precoAlvoVal !== '' && !isNaN(Number(precoAlvoVal)) ? Number(precoAlvoVal) : null;
@@ -199,9 +241,11 @@ export async function salvarRota(event) {
   const payload = {
     origem,
     destino,
+    tipo_viagem: tipoViagem,
+    tipo: tipoViagem,
     sem_data: semData ? 1 : 0,
     data_ida: dataIda || null,
-    data_volta: dataVolta || null,
+    data_volta: dataVoltaEfetiva,
     preco_alvo: precoAlvo,
     max_stops: maxStops,
     carry_on_bags: carryOnBags,
@@ -369,6 +413,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnNovaRota) btnNovaRota.addEventListener('click', () => abrirModal());
   if (btnFecharModal) btnFecharModal.addEventListener('click', fecharModal);
   if (btnCancelar) btnCancelar.addEventListener('click', fecharModal);
+  if (tipoIdaVolta) tipoIdaVolta.addEventListener('change', () => atualizarSelecaoTipoViagem('round_trip'));
+  if (tipoSoIda) tipoSoIda.addEventListener('change', () => atualizarSelecaoTipoViagem('one_way'));
   if (campoSemData) campoSemData.addEventListener('change', (e) => alternarCamposData(e.target.checked));
   if (formRota) formRota.addEventListener('submit', salvarRota);
   if (rotasContainer) rotasContainer.addEventListener('click', manipularAcaoCard);

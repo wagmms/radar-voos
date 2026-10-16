@@ -9,6 +9,40 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ARQUIVO_ROTAS = path.resolve(__dirname, '../../data/rotas.json');
 
+/**
+ * Hard Guard Arquitetural (Auditoria Gemini 4 Argon):
+ * Impede estritamente qualquer escrita em disco (data/rotas.json) ou commit remoto no GitHub
+ * se o processo estiver sob runner de teste ou se o banco ativo não for o oficial de produção.
+ */
+export function isExecucaoOficialAutorizada() {
+  // 1. Bloqueio absoluto se estiver em ambiente de teste ou runner de testes
+  const isTestEnv =
+    process.env.NODE_ENV === 'test' ||
+    process.env.JEST_WORKER_ID !== undefined ||
+    process.env.VITEST !== undefined ||
+    process.env.TEST === '1' ||
+    process.argv.some(arg => arg.includes('test') || arg.includes('validate'));
+
+  if (isTestEnv) {
+    return false;
+  }
+
+  // 2. Bloqueio se o banco ativo for temporário, em memória ou diferente de data/radar_voos.sqlite
+  const dbPathAtual = config.dbPath;
+  if (!dbPathAtual || dbPathAtual === ':memory:' || process.env.DB_PATH === ':memory:') {
+    return false;
+  }
+
+  const dbOficial = path.resolve(process.cwd(), 'data/radar_voos.sqlite');
+  const dbAtivo = path.resolve(process.cwd(), dbPathAtual);
+
+  if (dbAtivo !== dbOficial) {
+    return false;
+  }
+
+  return true;
+}
+
 export class RotasSyncService {
   constructor() {
     this.arquivoRotas = ARQUIVO_ROTAS;
@@ -59,8 +93,20 @@ export class RotasSyncService {
         };
       });
 
-      // Em ambiente de teste, não grava no disco para proteger arquivo canônico
-      if (process.env.NODE_ENV === 'test') {
+      // Em ambiente de teste ou banco não-oficial, não grava no disco para proteger arquivo canônico
+      if (!isExecucaoOficialAutorizada()) {
+        return sanitizadas;
+      }
+
+      // Validação anti-corrupção: impede salvar payload com mocks conhecidos
+      const contemMock = sanitizadas.some(r =>
+        ['AAA', 'BBB', 'TEST', 'MOCK', 'XXX'].includes(r.origem) ||
+        ['AAA', 'BBB', 'TEST', 'MOCK', 'XXX'].includes(r.destino) ||
+        String(r.origem).toLowerCase().includes('teste') ||
+        String(r.destino).toLowerCase().includes('teste')
+      );
+      if (contemMock) {
+        console.warn('⚠️ [RotasSync] Tentativa bloqueada de salvar rota de teste em data/rotas.json');
         return sanitizadas;
       }
 
@@ -265,8 +311,8 @@ export class RotasSyncService {
    * Sincroniza atômica e bidirecionalmente com o repositório GitHub via Contents API
    */
   async sincronizarComGitHub(mensagemCommit = 'chore(sync): sincroniza rotas do cockpit via web [skip ci]') {
-    if (process.env.NODE_ENV === 'test') {
-      return { ok: true, commitSha: 'test-commit-mock', totalRotas: 0 };
+    if (!isExecucaoOficialAutorizada()) {
+      return { ok: true, commitSha: 'test-commit-mock', totalRotas: 0, skipped: true };
     }
 
     const token = config.github?.token;
@@ -346,6 +392,9 @@ export class RotasSyncService {
    * Salva no arquivo local e dispara sincronização remota retornando a Promise
    */
   async notificarAlteracaoRotasAsync(motivo = 'alteracao') {
+    if (!isExecucaoOficialAutorizada()) {
+      return { ok: true, skipped: true };
+    }
     this.salvarArquivoRotas();
     return this.sincronizarComGitHub(`chore(sync): ${motivo} de rotas via Cockpit Web [skip ci]`);
   }
@@ -355,6 +404,9 @@ export class RotasSyncService {
    * Salva no arquivo local e dispara sincronização remota sem travar a requisição
    */
   notificarAlteracaoRotas(motivo = 'alteracao') {
+    if (!isExecucaoOficialAutorizada()) {
+      return;
+    }
     this.salvarArquivoRotas();
     this.sincronizarComGitHub(`chore(sync): ${motivo} de rotas via Cockpit Web [skip ci]`).catch(() => {});
   }

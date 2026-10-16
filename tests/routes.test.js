@@ -1,15 +1,25 @@
+process.env.NODE_ENV = 'test';
+delete process.env.GITHUB_TOKEN;
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildApp } from '../src/server/app.js';
 import { getDb, closeDb } from '../src/db.js';
+import { rotasSync } from '../src/services/rotas_sync.js';
+import { config } from '../src/config.js';
 
 describe('Servidor Fastify: Endpoints REST', () => {
   const testDbPath = path.resolve('./data/test_routes.sqlite');
   let app;
 
   before(async () => {
+    delete process.env.GITHUB_TOKEN;
+    if (config.github) {
+      config.github.token = null;
+    }
+    rotasSync.sincronizarComGitHub = async () => ({ ok: true, skipped: true, commitSha: 'test-mock' });
+
     closeDb();
     for (const f of [testDbPath, `${testDbPath}-wal`, `${testDbPath}-shm`]) {
       if (fs.existsSync(f)) {
@@ -221,6 +231,55 @@ describe('Servidor Fastify: Endpoints REST', () => {
     const json = resPut.json();
     assert.strictEqual(json.rota.preco_alvo, 3500);
     assert.strictEqual(json.rota.duracao_max_horas, 12);
+  });
+
+  it('POST e PUT /api/rotas devem suportar e persistir tipo_viagem ("one_way" vs "round_trip")', async () => {
+    // 1. Cria rota com tipo_viagem: 'one_way'
+    const resPost = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: {
+        origem: 'Rio de Janeiro',
+        destino: 'Belém',
+        data_ida: '2027-01-17',
+        tipo_viagem: 'one_way',
+        preco_alvo: 600
+      }
+    });
+    assert.strictEqual(resPost.statusCode, 201);
+    const rotaCriada = resPost.json().rota;
+    assert.strictEqual(rotaCriada.tipo_viagem, 'one_way');
+    assert.strictEqual(rotaCriada.data_volta, null);
+    assert.ok(rotaCriada.link_google_flights.includes('one-way'));
+
+    // 2. Altera via PUT para tipo_viagem: 'round_trip' com data_volta
+    const resPutRound = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${rotaCriada.id}`,
+      payload: {
+        tipo_viagem: 'round_trip',
+        data_volta: '2027-01-27'
+      }
+    });
+    assert.strictEqual(resPutRound.statusCode, 200);
+    const rotaRound = resPutRound.json().rota;
+    assert.strictEqual(rotaRound.tipo_viagem, 'round_trip');
+    assert.strictEqual(rotaRound.data_volta, '2027-01-27');
+    assert.ok(!rotaRound.link_google_flights.includes('one-way'));
+
+    // 3. Altera de volta para tipo_viagem: 'one_way'
+    const resPutOneWay = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${rotaCriada.id}`,
+      payload: {
+        tipo_viagem: 'one_way'
+      }
+    });
+    assert.strictEqual(resPutOneWay.statusCode, 200);
+    const rotaFinal = resPutOneWay.json().rota;
+    assert.strictEqual(rotaFinal.tipo_viagem, 'one_way');
+    assert.strictEqual(rotaFinal.data_volta, null);
+    assert.ok(rotaFinal.link_google_flights.includes('one-way'));
   });
 
   it('GET /api/rotas/:id/clima deve retornar previsão climática do destino', async () => {
