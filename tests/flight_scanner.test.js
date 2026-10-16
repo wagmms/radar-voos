@@ -171,6 +171,10 @@ describe('Serviço FlightScanner & Ciclo de Varredura (executarCicloVarredura)',
 
     const rotaComMoeda = {
       ...rotasRepo.listarTodas(true)[0],
+      origem: 'São Paulo',
+      destino: 'Londres',
+      codigo_origem: 'SAO',
+      codigo_destino: 'LON',
       moeda: 'GBP'
     };
 

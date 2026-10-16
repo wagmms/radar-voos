@@ -1026,11 +1026,8 @@ export function popularDadosIniciaisSeVazio(dbParam = null) {
   }
 
   if (rotasParaInserir.length === 0) {
-    rotasParaInserir = [
-      { origem: 'São Paulo', destino: 'Europa', data_ida: '2026-11-10', data_volta: '14', duracao_max_horas: 16, preco_alvo: 4200 },
-      { origem: 'São Paulo', destino: 'Buenos Aires', data_ida: '2026-10-15', data_volta: '7', duracao_max_horas: 8, preco_alvo: 1900 },
-      { origem: 'Rio de Janeiro', destino: 'Belém', data_ida: '2027-01-17', data_volta: 'Só Ida', duracao_max_horas: 8, preco_alvo: 700 }
-    ];
+    // NUNCA inserir rotas fictícias ou genéricas arbitrárias se não houver rotas salvas
+    return;
   }
 
   for (const r of rotasParaInserir) {

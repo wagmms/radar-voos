@@ -13,7 +13,7 @@
   - `src/db.js`: sanitização automática na inicialização para recuperar rotas contaminadas e guardrails em `criar` e `atualizar`.
   - **Suíte de Testes**: 443/443 testes aprovados (100% de sucesso).
 - **Diretriz Prioritária**: Implementar sparklines SVG de histórico nos cards e visualização ortodrômica de rotas no Cockpit PWA.
-- **Última Tarefa Concluída**: Botão `⚡ Varrer Todos os Voos` no cabeçalho do Cockpit PWA conectado a `/api/varredura`, com feedback de loading, toasts informativos e telemetria reativa em tempo real via SSE.
+- **Última Tarefa Concluída**: Restauração das 4 rotas canônicas originais do usuário e blindagem completa da inicialização (`popularDadosIniciaisSeVazio` e `sincronizarNoStartup`), impedindo a inserção de voos genéricos mock e a deleção de rotas em futuros deploys.
 
 ---
 

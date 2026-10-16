@@ -81,7 +81,7 @@ export class RotasSyncService {
    * Sincroniza uma lista canônica de rotas com o banco SQLite local,
    * inserindo novas, atualizando modificadas e excluindo as removidas remotamente.
    */
-  sincronizarRotasComBanco(rotasCanonica) {
+  sincronizarRotasComBanco(rotasCanonica, { excluirAusentes = true } = {}) {
     if (!Array.isArray(rotasCanonica) || rotasCanonica.length === 0) {
       return { inseridas: 0, atualizadas: 0, removidas: 0 };
     }
@@ -127,10 +127,12 @@ export class RotasSyncService {
       }
     }
 
-    for (const l of locais) {
-      if (!processadosIds.has(l.id)) {
-        rotasRepo.excluir(l.id);
-        removidas++;
+    if (excluirAusentes) {
+      for (const l of locais) {
+        if (!processadosIds.has(l.id)) {
+          rotasRepo.excluir(l.id);
+          removidas++;
+        }
       }
     }
 
@@ -225,20 +227,15 @@ export class RotasSyncService {
     const db = getDb();
     const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
 
-    // Tentar puxar do GitHub para garantir paridade com as alterações feitas na Web
-    try {
-      const res = await this.puxarDoGitHub();
-      if (res.ok) {
-        return;
-      }
-    } catch (e) {
-      console.warn('⚠️ [Two-Way Sync] Não foi possível sincronizar com GitHub no startup:', e.message);
+    // Se o banco já possui rotas cadastradas, preserva a integridade e NUNCA sobrescreve ou deleta no startup
+    if (contagem > 0) {
+      console.log(`🔒 [Startup] Banco SQLite já possui ${contagem} rotas ativas. Preservando rotas do usuário sem modificação.`);
+      return;
     }
 
-    // Se o banco estava vazio e o GitHub falhou, restaurar do arquivo local
-    if (contagem === 0) {
-      this.inicializarRotasNoBancoSeVazio();
-    }
+    // Apenas se o banco estiver 100% vazio (ex: novo volume limpo), inicializa a partir do arquivo canônico data/rotas.json
+    console.log('📦 [Startup] Banco SQLite vazio detectado. Restaurando rotas canônicas do usuário...');
+    this.inicializarRotasNoBancoSeVazio();
   }
 
   /**
