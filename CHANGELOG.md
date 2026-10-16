@@ -4,6 +4,28 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.6.2] - 2026-10-15 — Blindagem Doméstica 100% BRL e Eliminação de Distorção Cambial na Rota Rio ➔ Belém via Gemini 4 Argon
+
+### 🚀 Correção Cirúrgica & Blindagem Anti-Inflação Cambial:
+- **Causa-Raiz Diagnosticada**:
+  - A rota Rio de Janeiro ➔ Belém (`RIO` ➔ `BEL`) teve sua coluna `moeda` inadvertidamente alterada para `'EUR'` no SQLite e o parâmetro `&curr=EUR` injetado no link do Google Flights.
+  - O Google Flights retornou o valor em Euros (~€ 340 da Azul), que o conversor cambial do radar multiplicou por 6.30, inflando artificialmente o preço para > R$ 2.100 no radar, enquanto no site nacional o preço real em Reais era **R$ 1.727**.
+- **Blindagem Canônica Doméstica Brasil (`src/domain/rotas.js`)**:
+  - Implementação de `CODIGOS_AEROPORTOS_BRASIL` cobrindo 43 aeroportos e hubs do território nacional.
+  - Criação da função contratual `ehRotaDomesticaBrasil(origem, destino)`.
+  - Forçamento estrito de `curr=BRL` em `gerarLinkGoogleFlights` e `gerarLinkGoogleFlightsCheapest` para qualquer par de aeroportos brasileiros, independente de parâmetros externos.
+- **Blindagem no Scanner de Voos (`src/services/flight_scanner.js`)**:
+  - Em `escanearRota`, verificação obrigatória de `ehRotaDomesticaBrasil`: se for doméstica, crava `moedaEfetiva = 'BRL'`, impedindo contaminação de moedas estrangeiras.
+  - Em `atualizarResultadoChecagem`, persistência forçada de `moeda = 'BRL'` para rotas domésticas brasileiras.
+- **Blindagem no Cliente Scrapling (`src/services/providers/scrapling_client.js`)**:
+  - `construirUrlCheapest` reforçado para cravar `moedaEfetiva = 'BRL'` sempre que a rota for nacional no Brasil.
+- **Sanitização Automática no Banco SQLite (`src/db.js`)**:
+  - Criação de migração defensiva em `rotasRepo.sanitizarRotasIdaEVolta`: detecta rotas domésticas com `moeda !== 'BRL'` ou links contendo `curr=EUR`/`curr=USD`, resetando automaticamente para `BRL`, regerando o link oficial e limpando cotações espúrias antigas.
+  - `rotasRepo.criar` e `rotasRepo.atualizar` com guardrail obrigatório garantindo que rotas nacionais nunca salvem outra moeda além de `BRL`.
+- **Validação Prática & Automatizada**:
+  - Rota 15 (Rio ➔ Belém) re-escaneada com sucesso capturando com precisão cirúrgica a tarifa real de **R$ 1.727** (Azul via VCP).
+  - Suíte completa de 443 testes em 59 suítes 100% aprovada (`./validate.sh fast`).
+
 ## [v3.6.1] - 2026-10-15 — Segunda Rodada de Otimização pelo Gemini 4 Argon: Transações Atômicas SQLite, Ponto Cego Flexível, Blindagem Cambial Multi-Moeda e Resiliência HTTP Telegram
 
 ### 🚀 Melhorias de Alta Precisão & Estabilidade Operacional:

@@ -6,7 +6,8 @@ import {
   construirTfu,
   normalizarParaSerpApi,
   resolverCodigoParaLink,
-  ehSoIda
+  ehSoIda,
+  ehRotaDomesticaBrasil
 } from '../../domain/rotas.js';
 import {
   extrairPrecoNumerico,
@@ -511,9 +512,11 @@ export function construirUrlCheapest(
     opts = moedaArg;
     moedaArg = opts.moeda || 'BRL';
   }
-  const moedaEfetiva = (typeof moedaArg === 'string' && moedaArg.trim()) ? moedaArg.trim().toUpperCase() : 'BRL';
   const origResolvido = resolverCodigoParaLink(origemCod);
   const destResolvido = resolverCodigoParaLink(destinoCod);
+  const domestica = ehRotaDomesticaBrasil(origemCod, destinoCod) || ehRotaDomesticaBrasil(origResolvido, destResolvido);
+  const moedaBruta = (typeof moedaArg === 'string' && moedaArg.trim()) ? moedaArg.trim().toUpperCase() : 'BRL';
+  const moedaEfetiva = domestica ? 'BRL' : moedaBruta;
 
   const origens = normalizarParaSerpApi(origResolvido).split(',').map(s => s.trim()).filter(Boolean);
   const destinos = normalizarParaSerpApi(destResolvido).split(',').map(s => s.trim()).filter(Boolean);

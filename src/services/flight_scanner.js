@@ -20,7 +20,8 @@ import {
   formatarDiaMes,
   gerarLinkGoogleFlightsCheapest,
   gerarLinkGoogleFlights,
-  gerarDataPadraoInicial
+  gerarDataPadraoInicial,
+  ehRotaDomesticaBrasil
 } from '../domain/rotas.js';
 import { montarCardBugFare, resolverDestinoConcreto } from '../domain/aeroportos.js';
 import { telemetryEvents } from './telemetry_events.js';
@@ -71,7 +72,14 @@ export class FlightScanner {
    */
   static async escanearRota(rota, opcoes = {}) {
     try {
-      const moedaEfetiva = (opcoes?.moeda || opcoes?.curr || rota?.moeda || rota?.curr || 'BRL').trim().toUpperCase();
+      const rotaDomestica = ehRotaDomesticaBrasil(
+        rota?.codigo_origem || rota?.origem,
+        rota?.codigo_destino || rota?.destino
+      );
+
+      // Rotas domésticas no Brasil operam estritamente em BRL (previne distorções cambiais)
+      const moedaSolicitada = (opcoes?.moeda || opcoes?.curr || rota?.moeda || rota?.curr || 'BRL').trim().toUpperCase();
+      const moedaEfetiva = rotaDomestica ? 'BRL' : moedaSolicitada;
 
       // Determinação unificada e segura das datas da rota (prevenção de buscas espúrias de só ida)
       const datasEfetivas = obterDatasEfetivasRota(rota);
@@ -531,7 +539,7 @@ export class FlightScanner {
       data_ida: rota.sem_data === 1 ? dataIdaEfetiva : undefined,
       data_volta: rota.sem_data === 1 ? dataVoltaEfetiva : undefined,
       preco: oferta.preco,
-      moeda: moedaEfetiva,
+      moeda: rotaDomestica ? 'BRL' : moedaEfetiva,
       variacao_texto: variacao.texto,
       termometro: analiseBug.ehBugFare ? '🚨 BUG FARE CONFIRMADO' : (rota.sem_data === 1 ? termometroFlex : oferta.termometro),
       custo_destino_texto: custoInfo.textoResumo,

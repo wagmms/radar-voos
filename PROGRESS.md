@@ -1,19 +1,19 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.6.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.6.2)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Segunda Rodada de Otimização via Gemini 4 Argon concluída com 100% de aprovação (443/443 testes passando no `./validate.sh fast`). Transações atômicas `BEGIN IMMEDIATE` no SQLite, eliminação do ponto cego na janela flexível, separação cirúrgica entre avaliação e gravação física de alertas no Telegram, blindagem cambial multi-moeda (EUR, USD, GBP) e resiliência a rate limit com AbortSignal.
+- **Estado Geral**: 🟢 Blindagem Doméstica 100% BRL e Eliminação de Distorção Cambial na rota Rio ➔ Belém concluída com sucesso via Gemini 4 Argon. 100% de aprovação (443/443 testes passando no `./validate.sh fast`). O radar capturou com exatidão a tarifa real de R$ 1.727 da Azul (eliminando a inflação indevida de > R$ 2.000 gerada por contaminação de EUR).
 - **Camadas Entregues & Verificadas**:
-  - `src/db.js`: `alertasRepo.deveDisparar` com suporte a `options.apenasAvaliar` e normalização case-insensitive de `nivelPreco`; transações imediatas e deduplicação de histórico de preços idênticos (< 6h) em `rotasRepo.atualizarResultadoChecagem` para preservar o Z-Score.
-  - `src/services/flight_scanner.js`: varredura de dias flexíveis vizinhos mesmo se a data central falhar nos filtros; persistência do disparo em `alertas_disparados` delegada para após confirmação HTTP do Telegram, prevenindo perda silenciosa de oportunidades.
-  - `src/services/providers/scrapling_client.js`: conversão de moedas estrangeiras (EUR, USD, GBP) para BRL em `extrairVoosDoPayloadJs`, eliminando disparos espúrios de Bug Fare por descompasso cambial.
-  - `src/services/notifier_telegram.js`: inclusão de timeouts com `AbortSignal.timeout(10000)` e limitação estrita de 3 retries em HTTP 429 com teto de 30s.
+  - `src/domain/rotas.js`: catálogo `CODIGOS_AEROPORTOS_BRASIL` (43 aeroportos), função `ehRotaDomesticaBrasil` e forçamento estrito de `curr=BRL` nos geradores de links do Google Flights.
+  - `src/services/flight_scanner.js`: verificação de rotas domésticas em `escanearRota` e `atualizarResultadoChecagem` cravando `moedaEfetiva = 'BRL'`.
+  - `src/services/providers/scrapling_client.js`: `construirUrlCheapest` com blindagem para rotas nacionais.
+  - `src/db.js`: sanitização automática na inicialização para recuperar rotas contaminadas e guardrails em `criar` e `atualizar`.
   - **Suíte de Testes**: 443/443 testes aprovados (100% de sucesso).
 - **Diretriz Prioritária**: Implementar telemetria em tempo real com Server-Sent Events (SSE) e sparkline SVG de histórico no Cockpit PWA.
-- **Última Tarefa Concluída**: Segunda Rodada de Otimização pelo Gemini 4 Argon: Transações Atômicas SQLite, Ponto Cego Flexível, Blindagem Cambial Multi-Moeda e Resiliência HTTP Telegram.
+- **Última Tarefa Concluída**: Blindagem Doméstica 100% BRL e Eliminação de Distorção Cambial na Rota Rio ➔ Belém via Gemini 4 Argon.
 
 ---
 
