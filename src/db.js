@@ -353,6 +353,20 @@ export const rotasRepo = {
     const carryOnBags = parseUpdateNumOpt(dados.carry_on_bags !== undefined ? dados.carry_on_bags : dados.carryOnBags, rota.carry_on_bags);
     const checkedBags = parseUpdateNumOpt(dados.checked_bags !== undefined ? dados.checked_bags : dados.checkedBags, rota.checked_bags);
 
+    const precoAtual = dados.preco_atual !== undefined ? (dados.preco_atual !== null && !isNaN(Number(dados.preco_atual)) ? Number(dados.preco_atual) : null) : rota.preco_atual;
+    const menorHist = dados.menor_preco_historico !== undefined ? (dados.menor_preco_historico !== null && !isNaN(Number(dados.menor_preco_historico)) ? Number(dados.menor_preco_historico) : null) : rota.menor_preco_historico;
+    const variacaoTexto = dados.variacao_texto !== undefined ? dados.variacao_texto : rota.variacao_texto;
+    const termometro = dados.termometro !== undefined ? dados.termometro : rota.termometro;
+    const detalhesVoo = dados.detalhes_voo !== undefined ? dados.detalhes_voo : rota.detalhes_voo;
+    const topOfertas = dados.top_ofertas !== undefined ? (typeof dados.top_ofertas === 'object' && dados.top_ofertas !== null ? JSON.stringify(dados.top_ofertas) : dados.top_ofertas) : rota.top_ofertas;
+    const melhorOpcaoDireta = dados.melhor_opcao_direta_rapida !== undefined ? (typeof dados.melhor_opcao_direta_rapida === 'object' && dados.melhor_opcao_direta_rapida !== null ? JSON.stringify(dados.melhor_opcao_direta_rapida) : dados.melhor_opcao_direta_rapida) : rota.melhor_opcao_direta_rapida;
+    const melhorOpcaoFlexivelFinal = dados.melhor_opcao_flexivel !== undefined ? (typeof dados.melhor_opcao_flexivel === 'object' && dados.melhor_opcao_flexivel !== null ? JSON.stringify(dados.melhor_opcao_flexivel) : dados.melhor_opcao_flexivel) : melhorOpcaoFlexivel;
+    const rankingDestinosRegionais = dados.ranking_destinos_regionais !== undefined ? (typeof dados.ranking_destinos_regionais === 'object' && dados.ranking_destinos_regionais !== null ? JSON.stringify(dados.ranking_destinos_regionais) : dados.ranking_destinos_regionais) : rota.ranking_destinos_regionais;
+    const calendarioPrecos = dados.calendario_precos !== undefined ? (typeof dados.calendario_precos === 'object' && dados.calendario_precos !== null ? JSON.stringify(dados.calendario_precos) : dados.calendario_precos) : rota.calendario_precos;
+    const melhorDataAlternativa = dados.melhor_data_alternativa !== undefined ? (typeof dados.melhor_data_alternativa === 'object' && dados.melhor_data_alternativa !== null ? JSON.stringify(dados.melhor_data_alternativa) : dados.melhor_data_alternativa) : rota.melhor_data_alternativa;
+    const ultimaChecagem = dados.ultima_checagem !== undefined ? dados.ultima_checagem : rota.ultima_checagem;
+    const destinoReal = dados.destino_real !== undefined ? dados.destino_real : rota.destino_real;
+
     const stmt = db.prepare(`
       UPDATE rotas SET
         origem = ?,
@@ -362,6 +376,19 @@ export const rotasRepo = {
         data_ida = ?,
         data_volta = ?,
         preco_alvo = ?,
+        preco_atual = ?,
+        menor_preco_historico = ?,
+        variacao_texto = ?,
+        termometro = ?,
+        detalhes_voo = ?,
+        top_ofertas = ?,
+        melhor_opcao_direta_rapida = ?,
+        melhor_opcao_flexivel = ?,
+        ranking_destinos_regionais = ?,
+        calendario_precos = ?,
+        melhor_data_alternativa = ?,
+        ultima_checagem = ?,
+        destino_real = ?,
         duracao_max_horas = ?,
         cabine = ?,
         flexibilidade_dias = ?,
@@ -370,7 +397,6 @@ export const rotasRepo = {
         dias_estadia = ?,
         link_google_flights = ?,
         ativa = ?,
-        melhor_opcao_flexivel = ?,
         moeda = ?,
         paridade_milhas = ?,
         programa_milhas = ?,
@@ -381,7 +407,44 @@ export const rotasRepo = {
       WHERE id = ?
     `);
 
-    stmt.run(origem, destino, codigoOrigem, codigoDestino, dataIda, dataVolta, precoAlvo, duracaoMaxHoras, cabine, flexibilidadeDias, diasFlexiveis, semData ? 1 : 0, soIda ? null : diasEstadia, link, ativa, melhorOpcaoFlexivel, moeda, paridadeMilhas, programaMilhas, maxStops, carryOnBags, checkedBags, tipoViagem, id);
+    stmt.run(
+      origem,
+      destino,
+      codigoOrigem,
+      codigoDestino,
+      dataIda,
+      dataVolta,
+      precoAlvo,
+      precoAtual,
+      menorHist,
+      variacaoTexto,
+      termometro,
+      detalhesVoo,
+      topOfertas,
+      melhorOpcaoDireta,
+      melhorOpcaoFlexivelFinal,
+      rankingDestinosRegionais,
+      calendarioPrecos,
+      melhorDataAlternativa,
+      ultimaChecagem,
+      destinoReal,
+      duracaoMaxHoras,
+      cabine,
+      flexibilidadeDias,
+      diasFlexiveis,
+      semData ? 1 : 0,
+      soIda ? null : diasEstadia,
+      link,
+      ativa,
+      moeda,
+      paridadeMilhas,
+      programaMilhas,
+      maxStops,
+      carryOnBags,
+      checkedBags,
+      tipoViagem,
+      id
+    );
     return rotasRepo.buscarPorId(id);
   },
 

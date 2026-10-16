@@ -283,18 +283,13 @@ export class RotasSyncService {
    * Garante que o ambiente local e produção sempre comecem com as rotas canônicas.
    */
   async sincronizarNoStartup() {
-    const db = getDb();
-    const contagem = db.prepare('SELECT COUNT(*) as total FROM rotas').get().total;
-
-    // Se o banco já possui rotas cadastradas, preserva a integridade e NUNCA sobrescreve ou deleta no startup
-    if (contagem > 0) {
-      console.log(`🔒 [Startup] Banco SQLite já possui ${contagem} rotas ativas. Preservando rotas do usuário sem modificação.`);
-      return;
+    const rotasSalvas = this.lerArquivoRotas();
+    if (rotasSalvas.length > 0) {
+      console.log(`📦 [Startup] Sincronizando ${rotasSalvas.length} rotas canônicas e snapshots de preços a partir de data/rotas.json...`);
+      this.sincronizarRotasComBanco(rotasSalvas, { excluirAusentes: true });
+    } else {
+      console.log('📦 [Startup] Banco SQLite vazio detectado e sem rotas no data/rotas.json.');
     }
-
-    // Apenas se o banco estiver 100% vazio (ex: novo volume limpo), inicializa a partir do arquivo canônico data/rotas.json
-    console.log('📦 [Startup] Banco SQLite vazio detectado. Restaurando rotas canônicas do usuário...');
-    this.inicializarRotasNoBancoSeVazio();
   }
 
   /**

@@ -78,7 +78,7 @@ const IPS_BRASIL = Object.freeze([
  * Cookie de consentimento pré-aceito para evitar tela de consent.google.com.
  * Formato: SOCS (Google One-tap consent), 1P_JAR e NID mínimos.
  */
-const COOKIE_CONSENT = 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn_gKlhOXVhGj9RTYA';
+const COOKIE_CONSENT = 'CONSENT=YES+cb.20240116-07-p0.pt-BR+FX+999; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMTYtMF9SQzIaBXB0LUJSIAEaBgiA_LuuBg; PREF=hl=pt-BR&gl=BR&tz=America.Sao_Paulo&f6=40000000; 1P_JAR=2026-10-16-22; NID=511=Qn_gKlhOXVhGj9RTYA';
 
 /** Tempo mínimo de jitter em ms entre tentativas (padrão scrapling anti-bot) */
 const JITTER_MIN_MS = 800;
@@ -260,6 +260,8 @@ export function montarHeaders(perfil) {
     'Sec-Fetch-Site': 'none',
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
+    'X-Geo': 'a w+CAIQICIQU2FvIFBhdWxvLEJyYXppbA',
+    'CF-IPCountry': 'BR',
     'X-Forwarded-For': ip,
     'Cookie': COOKIE_CONSENT
   };

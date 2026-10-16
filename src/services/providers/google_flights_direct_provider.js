@@ -34,7 +34,7 @@ export function construirHeadersStealth(perfilStealth = USER_AGENTS_STEALTH[0]) 
   return {
     'User-Agent': perfil.ua,
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Language': 'pt-BR,pt;q=0.9',
     'Cache-Control': 'no-cache',
     'Pragma': 'no-cache',
     'Sec-Ch-Ua': perfil.chUa,
@@ -45,8 +45,10 @@ export function construirHeadersStealth(perfilStealth = USER_AGENTS_STEALTH[0]) 
     'Sec-Fetch-Site': 'none',
     'Sec-Fetch-User': '?1',
     'Upgrade-Insecure-Requests': '1',
-    'X-Forwarded-For': '177.16.24.12',
-    'Cookie': 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn'
+    'X-Geo': 'a w+CAIQICIQU2FvIFBhdWxvLEJyYXppbA',
+    'CF-IPCountry': 'BR',
+    'X-Forwarded-For': '177.67.80.14',
+    'Cookie': 'CONSENT=YES+cb.20240116-07-p0.pt-BR+FX+999; SOCS=CAISHAgBEhJnd3NfMjAyNDAxMTYtMF9SQzIaBXB0LUJSIAEaBgiA_LuuBg; PREF=hl=pt-BR&gl=BR&tz=America.Sao_Paulo&f6=40000000; 1P_JAR=2026-10-16-22'
   };
 }
 
