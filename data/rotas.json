@@ -126,5 +126,21 @@
     "dias_estadia": 10,
     "tipo_viagem": "round_trip",
     "ativa": 1
+  },
+  {
+    "origem": "Rio de Janeiro",
+    "destino": "Belém",
+    "codigo_origem": "RIO",
+    "codigo_destino": "BEL",
+    "data_ida": "2027-01-17",
+    "data_volta": null,
+    "duracao_max_horas": 999,
+    "preco_alvo": 600,
+    "cabine": "economy",
+    "flexibilidade_dias": 0,
+    "sem_data": 0,
+    "dias_estadia": null,
+    "tipo_viagem": "one_way",
+    "ativa": 1
   }
 ]
