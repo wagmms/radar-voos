@@ -191,6 +191,24 @@ export function formatarDiaMes(dataIso) {
 }
 
 /**
+ * Calcula a diferença em dias entre duas datas YYYY-MM-DD
+ */
+export function calcularDiferencaDias(dataIdaStr, dataVoltaStr) {
+  const ida = formatarDataParaBusca(dataIdaStr);
+  const volta = formatarDataParaBusca(dataVoltaStr);
+  if (!ida || !volta) return 0;
+
+  const [ano1, mes1, dia1] = ida.split('-').map(Number);
+  const [ano2, mes2, dia2] = volta.split('-').map(Number);
+
+  const d1 = Date.UTC(ano1, mes1 - 1, dia1);
+  const d2 = Date.UTC(ano2, mes2 - 1, dia2);
+  if (isNaN(d1) || isNaN(d2)) return 0;
+
+  return Math.round((d2 - d1) / (1000 * 60 * 60 * 24));
+}
+
+/**
  * Extrai o número de dias de estadia de campos de texto ou números (ex: "10 dias", "10", "14d")
  */
 export function extrairDiasEstadia(valor, padrao = 10) {
@@ -335,7 +353,8 @@ export const KGMID_PARA_NOME = {
 };
 
 /**
- * Converte códigos IATA, KGMIDs, regiões ou nomes com parênteses em termos aceitos e funcionais no Google Flights
+ * Converte códigos IATA, KGMIDs, regiões ou nomes com parênteses em códigos IATA físicos ou regionais válidos
+ * compatíveis com o Google Flights e Protobuf (nunca retorna nomes extensos em inglês que quebram o Protobuf)
  */
 export function resolverCodigoParaLink(cod) {
   if (cod === null || cod === undefined) return 'SAO';
@@ -357,18 +376,38 @@ export function resolverCodigoParaLink(cod) {
   const limpoLower = normalizarTexto(str);
   if (limpoLower === 'america do sul' || limpoLower === 'south america' || limpoLower === 'sam') return 'South America';
   if (limpoLower === 'europa' || limpoLower === 'europe' || limpoLower === 'eur') return 'Europe';
-  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa' || limpoLower === 'america do norte') return 'United States';
-  if (limpoLower === 'caribe' || limpoLower === 'car') return 'Caribbean';
+  if (limpoLower === 'estados unidos' || limpoLower === 'eua' || limpoLower === 'usa' || limpoLower === 'america do norte' || limpoLower === 'united states') return 'United States';
+  if (limpoLower === 'caribe' || limpoLower === 'car' || limpoLower === 'caribbean') return 'Caribbean';
   if (limpoLower === 'nordeste' || limpoLower === 'neb') return 'REC';
   if (limpoLower === 'asia') return 'Asia';
   if (/^\/[mg]\//i.test(str)) return str.replace(/^\/[mg]\//i, '');
 
-  // Código IATA único de 3 letras (ex: "gru", "mia")
-  if (str.length === 3 && /^[A-Za-z]{3}$/.test(str)) {
-    return str.toUpperCase();
+  // Dicionário de termos regionais e cidades
+  if (Object.hasOwn(MAPA_TERMOS_REGIONAIS, limpoLower)) {
+    const regCod = MAPA_TERMOS_REGIONAIS[limpoLower];
+    const hubs = expandirDestinoOuOrigemRegional(regCod);
+    if (hubs && hubs.length > 0) return hubs[0];
   }
 
-  return str;
+  if (Object.hasOwn(DICIONARIO_CIDADES, limpoLower)) {
+    return DICIONARIO_CIDADES[limpoLower];
+  }
+
+  // Código IATA único de 3 letras (ex: "gru", "mia", "sao", "rio")
+  if (str.length === 3 && /^[A-Za-z]{3}$/.test(str)) {
+    const upper = str.toUpperCase();
+    if (['EUR', 'SAM', 'CAR', 'NAM', 'ASI'].includes(upper)) {
+      const hubs = expandirDestinoOuOrigemRegional(upper);
+      if (hubs && hubs.length > 0) return hubs[0];
+    }
+    return upper;
+  }
+
+  if (/^\/[mg]\//i.test(str)) {
+    return KGMID_PARA_HUB_IATA[strLower] || str.replace(/^\/[mg]\//i, '');
+  }
+
+  return 'SAO';
 }
 
 /**
@@ -554,7 +593,7 @@ export const MAPA_CLASSES_CABINE = Object.freeze({
 });
 
 /**
- * Gera o payload binário protobuf (tfs) compatível com o Google Flights,
+ * Gera o payload binário protobuf (tfs) compatível com o Google Flights (em Base64URL RFC 4648 §5),
  * suportando filtros avançados (passageiros, classe de cabine, maxStops, layover e bagagem).
  *
  * @param {object} params
@@ -570,7 +609,7 @@ export const MAPA_CLASSES_CABINE = Object.freeze({
  * @param {number|null} [params.maxStops=null] - Limite de paradas (0 = direto, 1 = até 1 parada, 2 = até 2 paradas)
  * @param {number|null} [params.carryOnBags=null] - Bagagem de mão inclusa (>= 1)
  * @param {number|null} [params.maxLayoverMinutes=null] - Tempo máximo de conexão/escala em minutos
- * @returns {string} Payload em base64 compatível com parâmetro tfs
+ * @returns {string} Payload em base64url compatível com parâmetro tfs
  */
 export function gerarTfs({
   origens,
@@ -603,25 +642,67 @@ export function gerarTfs({
   excludeBasicEconomy = null
 } = {}) {
   const resolverHubFisico = (cod) => {
-    if (!cod) return '';
-    const codTrim = String(cod).trim().toUpperCase();
-    if (ehCodigoRegional(codTrim)) {
-      const hubs = expandirDestinoOuOrigemRegional(codTrim);
-      return hubs.length > 0 ? hubs[0] : codTrim;
+    if (cod === null || cod === undefined) return [];
+    const str = String(cod).trim();
+    if (!str) return [];
+
+    // Se vier lista separada por vírgula (ex: "GRU,CGH,VCP"), expande recursivamente
+    if (str.includes(',')) {
+      return str.split(',').flatMap(item => resolverHubFisico(item));
     }
-    return codTrim;
+
+    // 1. KGMID direto (/m/02j9z -> MAD, etc.)
+    const strLower = str.toLowerCase();
+    if (Object.hasOwn(KGMID_PARA_HUB_IATA, strLower)) {
+      return [KGMID_PARA_HUB_IATA[strLower]];
+    }
+
+    // 2. Código IATA entre parênteses
+    const matchIata = str.match(/\(\s*([A-Za-z]{3})\s*\)/i);
+    if (matchIata) {
+      const iataPar = matchIata[1].toUpperCase();
+      if (ehCodigoRegional(iataPar)) {
+        return expandirDestinoOuOrigemRegional(iataPar);
+      }
+      return normalizarParaSerpApi(iataPar).split(',').map(s => s.trim()).filter(s => /^[A-Z]{3}$/.test(s));
+    }
+
+    // 3. Código de 3 letras (pode ser regional como EUR, SAM ou metropolitano como SAO, RIO ou IATA físico como GRU)
+    const codUpper = str.toUpperCase();
+    if (/^[A-Z]{3}$/.test(codUpper)) {
+      if (ehCodigoRegional(codUpper)) {
+        const hubs = expandirDestinoOuOrigemRegional(codUpper);
+        return hubs.length > 0 ? [hubs[0]] : [];
+      }
+      return normalizarParaSerpApi(codUpper).split(',').map(s => s.trim()).filter(s => /^[A-Z]{3}$/.test(s));
+    }
+
+    // 4. Termos regionais / cidades / nomes em inglês ("Europe", "South America", "United States", etc.)
+    const limpo = normalizarTexto(str);
+    if (limpo === 'europe' || limpo === 'europa' || limpo === 'eur') return ['MAD'];
+    if (limpo === 'south america' || limpo === 'america do sul' || limpo === 'sam') return ['EZE'];
+    if (limpo === 'united states' || limpo === 'estados unidos' || limpo === 'eua' || limpo === 'usa') return ['MIA'];
+    if (limpo === 'caribbean' || limpo === 'caribe' || limpo === 'car') return ['CUN'];
+    if (limpo === 'asia') return ['TYO'];
+
+    const resolved = resolverCodigoParaLink(str);
+    if (resolved && /^[A-Z]{3}(,[A-Z]{3})*$/.test(resolved)) {
+      return resolved.split(',').flatMap(c => normalizarParaSerpApi(c).split(',')).map(s => s.trim()).filter(s => /^[A-Z]{3}$/.test(s));
+    }
+
+    return [];
   };
 
-  // Normalização defensiva de origens e destinos (suporta arrays, strings únicas e filtra entradas inválidas)
+  // Normalização defensiva de origens e destinos (garante estritamente códigos IATA de 3 letras no Protobuf)
   const listaOrigens = (Array.isArray(origens) ? origens : (origens ? [origens] : ['SAO']))
-    .map(o => (o !== null && o !== undefined) ? resolverHubFisico(o) : '')
+    .flatMap(o => resolverHubFisico(o))
     .filter(Boolean);
-  const origensEfetivas = listaOrigens.length > 0 ? listaOrigens : ['SAO'];
+  const origensEfetivas = listaOrigens.length > 0 ? [...new Set(listaOrigens)] : ['GRU', 'CGH', 'VCP'];
 
   const listaDestinos = (Array.isArray(destinos) ? destinos : (destinos ? [destinos] : []))
-    .map(d => (d !== null && d !== undefined) ? resolverHubFisico(d) : '')
+    .flatMap(d => resolverHubFisico(d))
     .filter(Boolean);
-  const destinosEfetivos = listaDestinos.length > 0 ? listaDestinos : ['SAO'];
+  const destinosEfetivos = listaDestinos.length > 0 ? [...new Set(listaDestinos)] : ['GRU'];
 
   // Normalização e validação das datas para formato YYYY-MM-DD
   const idaNorm = formatarDataParaBusca(dataIda) || (typeof dataIda === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataIda.trim()) ? dataIda.trim() : '2027-01-01');
@@ -817,7 +898,8 @@ export function gerarTfs({
     ...(excludeBasicPart ? [excludeBasicPart] : [])
   ];
 
-  return Buffer.concat(rootParts).toString('base64');
+  // RFC 4648 §5 Base64URL evita caracteres '+', '/' e '=' que corrompem query strings não escapadas
+  return Buffer.concat(rootParts).toString('base64url');
 }
 
 /**
@@ -964,7 +1046,16 @@ export function gerarLinkGoogleFlightsCheapest(
     ? Number(infantsOnLap)
     : ((infantsInSeat !== null && infantsInSeat !== undefined) ? Number(infantsInSeat) : Number(bebes || 0));
 
-  const tfu = construirTfu(adultos, criancas, nBebesTfu, classeViagem);
+  const nAdultosNorm = Math.max(1, Math.min(9, Number.isFinite(+adultos) ? Math.floor(+adultos) : 1));
+  const nCriancasNorm = Math.max(0, Math.min(8, Number.isFinite(+criancas) ? Math.floor(+criancas) : 0));
+  const nBebesNorm = Math.max(0, Math.min(nAdultosNorm, Number.isFinite(+nBebesTfu) ? Math.floor(+nBebesTfu) : 0));
+  const classeNorm = typeof classeViagem === 'string' ? classeViagem.toLowerCase().trim() : 'economy';
+  const ehBuscaPadrao = nAdultosNorm === 1 && nCriancasNorm === 0 && nBebesNorm === 0 && (classeNorm === 'economy' || !MAPA_CLASSES_CABINE[classeNorm] || MAPA_CLASSES_CABINE[classeNorm] === 1);
+
+  const tfu = ehBuscaPadrao
+    ? 'EgoIABAAGAAgAigD'
+    : construirTfu(nAdultosNorm, nCriancasNorm, nBebesNorm, classeViagem);
+
   const moedaCode = (typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL';
   return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaCode}&tfs=${tfs}&tfu=${tfu}`;
 }
@@ -1154,4 +1245,3 @@ export function gerarJanelaDatasFlexiveis(dataIda, dataVolta, diasFlexiveis = 0,
 
   return resultado;
 }
-

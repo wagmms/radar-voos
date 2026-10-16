@@ -15,12 +15,12 @@ import {
   extrairInfoConexoes,
   extrairInfoBagagem
 } from './google_flights_direct_provider.js';
-import { PADROES_IGNORAR_RODAPE } from '../../domain/dicionarios.js';
+import { PADROES_IGNORAR_RODAPE, NOMES_CIDADES_IATA } from '../../domain/dicionarios.js';
 import { fetchComPrimpTls, verificarPrimpDisponivel } from './tls_impersonate_client.js';
 
 
 /**
- * ScraplingClient v1.0 — Adaptador de Scraping Resiliente para Google Flights
+ * ScraplingClient v1.1 — Adaptador de Scraping Resiliente para Google Flights
  *
  * Baseado nos padrões das skills `scrapling` e `flight-search`.
  * Foco: extração da aba "Cheapest" via Protobuf tfs com evasão anti-bot,
@@ -670,28 +670,29 @@ export function formatarTempoConexaoTexto(minutos) {
 }
 
 /**
- * Extrai voos diretamente do payload JSON nativo (script.ds:1 / AF_initDataCallback) do Google Flights.
- * Padrão de alta precisão absorvido do `fast-flights` (v3.0): extrai diretamente do modelo de dados interno
- * do Google sem dependência de seletores DOM, atributos aria-label ou variações linguísticas de layout.
+ * Extrai e faz o parse defensivo do array JSON contido em script.ds:1 ou AF_initDataCallback(ds:1).
+ * Tolera tanto a captura do interior da tag `<script>` quanto a captura direta do array `data: [...]`.
  *
  * @param {string} html
- * @returns {Array<{preco:number, cia:string, numeroVoo:string|null, horarioPartida:string|null, horarioChegada:string|null, duracaoTexto:string, duracaoHoras:number, escalas:number, detalhesEscalas:string, tempoConexao:string|null, tempoConexaoMinutos:number|null, aeroportoConexao:string|null, isBest:boolean, bagagem:object}>}
+ * @returns {Array|null}
  */
-export function extrairVoosDoPayloadJs(html) {
-  if (!html || typeof html !== 'string') return [];
+function extrairArrayPayloadDs1(html) {
+  if (!html || typeof html !== 'string') return null;
 
-  try {
-    // 1. Localiza a tag script correspondente ao container ds:1 ou callback AF_initDataCallback
-    const matchScript = html.match(/<script[^>]*class=["'][^"']*ds:1[^"']*["'][^>]*>([\s\S]*?)<\/script>/i) ||
-                        html.match(/AF_initDataCallback\s*\(\s*\{[^}]*?key:\s*['"]ds:1['"][\s\S]*?data:\s*(\[[\s\S]*?\])\s*\}\s*\)\s*;/i);
-    if (!matchScript) return [];
+  const matchScript = html.match(/<script[^>]*class=["'][^"']*ds:1[^"']*["'][^>]*>([\s\S]*?)<\/script>/i) ||
+                      html.match(/AF_initDataCallback\s*\(\s*\{[^}]*?key:\s*['"]ds:1['"][\s\S]*?data:\s*(\[[\s\S]*?\])\s*(?:,\s*sideChannel\s*:[\s\S]*?)?\}\s*\)\s*;/i);
+  if (!matchScript) return null;
 
-    const scriptContent = matchScript[1] || matchScript[0];
+  const scriptContent = (matchScript[1] || matchScript[0]).trim();
+  let dataStr = '';
+
+  if (scriptContent.startsWith('[')) {
+    dataStr = scriptContent;
+  } else {
     const idxData = scriptContent.indexOf('data:');
-    if (idxData === -1) return [];
+    if (idxData === -1) return null;
 
     const resto = scriptContent.slice(idxData + 5).trim();
-    let dataStr;
     const idxSc = resto.lastIndexOf(', sideChannel:');
     const idxSc2 = resto.lastIndexOf(',sideChannel:');
     const corte = Math.max(idxSc, idxSc2);
@@ -701,12 +702,34 @@ export function extrairVoosDoPayloadJs(html) {
       const lastComma = resto.lastIndexOf(',');
       dataStr = (lastComma !== -1 ? resto.slice(0, lastComma) : resto).trim();
     }
+  }
 
-    if (!dataStr.startsWith('[') || dataStr.includes('errorHasStatus: true')) {
-      return [];
-    }
+  if (!dataStr.startsWith('[') || dataStr.includes('errorHasStatus: true')) {
+    return null;
+  }
 
-    const payload = JSON.parse(dataStr);
+  const dataStrLimpo = dataStr.replace(/^\s*\/\/.*$/gm, '');
+  try {
+    const parsed = JSON.parse(dataStrLimpo);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extrai voos diretamente do payload JSON nativo (script.ds:1 / AF_initDataCallback) do Google Flights.
+ * Padrão de alta precisão absorvido do `fast-flights` (v3.0): extrai diretamente do modelo de dados interno
+ * do Google sem dependência de seletores DOM, atributos aria-label ou variações linguísticas de layout.
+ *
+ * @param {string} html
+ * @returns {Array<{preco:number, precoOriginal:number|null, moeda:string, moedaOriginal:string, cia:string, numeroVoo:string|null, horarioPartida:string|null, horarioChegada:string|null, duracaoTexto:string, duracaoHoras:number, escalas:number, detalhesEscalas:string, tempoConexao:string|null, tempoConexaoMinutos:number|null, aeroportoConexao:string|null, aeroportoOrigem:string|null, aeroportoDestino:string|null, isBest:boolean, bagagem:object}>}
+ */
+export function extrairVoosDoPayloadJs(html) {
+  if (!html || typeof html !== 'string') return [];
+
+  try {
+    const payload = extrairArrayPayloadDs1(html);
     if (!Array.isArray(payload) || payload.length < 3) return [];
 
     const groups = [];
@@ -730,8 +753,20 @@ export function extrairVoosDoPayloadJs(html) {
         if (typeof flight[0] !== 'string' || !Array.isArray(trechos) || trechos.length === 0 ||
             !trechos.every(t => Array.isArray(t) && typeof t[3] === 'string' && typeof t[6] === 'string')) continue;
 
-        // Tarifa / Preço: fare[1] e Moeda: fare[0]
-        const fare = (Array.isArray(k[1]) && k[1][0]) ? k[1][0] : [];
+        // Tarifa / Preço: inspeciona k[1][0] e, se ausente, varre todos os slots de k[1] (OTAs/parceiros da aba Cheapest)
+        let fare = null;
+        if (Array.isArray(k[1])) {
+          for (const slot of k[1]) {
+            if (Array.isArray(slot) && Number.isFinite(slot[1]) && slot[1] > 0) {
+              fare = slot;
+              break;
+            }
+          }
+          if (!fare && Array.isArray(k[1][0])) {
+            fare = k[1][0];
+          }
+        }
+
         const precoBruto = (Array.isArray(fare) && Number.isFinite(fare[1])) ? Math.round(fare[1]) : null;
         if (!precoBruto) continue;
 
@@ -773,6 +808,12 @@ export function extrairVoosDoPayloadJs(html) {
         const horarioPartida = legs.length > 0 ? formatarHorarioTrecho(legs[0]?.[8]) : null;
         const horarioChegada = legs.length > 0 ? formatarHorarioTrecho(legs[legs.length - 1]?.[10]) : null;
         const numeroVoo = legs.length > 0 ? extrairNumeroVooTrecho(legs[0]) : null;
+        const aeroportoOrigem = (legs.length > 0 && typeof legs[0]?.[3] === 'string')
+          ? legs[0][3].trim().toUpperCase()
+          : null;
+        const aeroportoDestino = (legs.length > 0 && typeof legs[legs.length - 1]?.[6] === 'string')
+          ? legs[legs.length - 1][6].trim().toUpperCase()
+          : null;
 
         if (escalas > 0) {
           const conexoesIatas = [];
@@ -813,6 +854,8 @@ export function extrairVoosDoPayloadJs(html) {
           tempoConexao,
           tempoConexaoMinutos,
           aeroportoConexao,
+          aeroportoOrigem,
+          aeroportoDestino,
           isBest,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
@@ -830,7 +873,7 @@ export function extrairVoosDoPayloadJs(html) {
  * Identifica o nível ('baixo' | 'tipico' | 'alto') e a faixa típica de tarifas (faixaMinima, faixaMaxima).
  *
  * @param {Array|string} payloadOuHtml
- * @returns {{ nivel: 'baixo'|'tipico'|'alto', faixaMinima: number|null, faixaMaxima: number|null } | null}
+ * @returns {{ nivel: 'baixo'|'tipico'|'alto', faixaMinima: number|null, faixaMaxima: number|null, moeda: string, moedaOriginal: string } | null}
  */
 export function extrairPriceInsightsDoPayloadJs(payloadOuHtml) {
   if (!payloadOuHtml) return null;
@@ -839,37 +882,7 @@ export function extrairPriceInsightsDoPayloadJs(payloadOuHtml) {
 
   // Se receber string HTML, extrai o JSON da tag script ds:1
   if (typeof payloadOuHtml === 'string') {
-    try {
-      const matchScript = payloadOuHtml.match(/<script[^>]*class=["'][^"']*ds:1[^"']*["'][^>]*>([\s\S]*?)<\/script>/i) ||
-                          payloadOuHtml.match(/AF_initDataCallback\s*\(\s*\{[^}]*?key:\s*['"]ds:1['"][\s\S]*?data:\s*(\[[\s\S]*?\])\s*\}\s*\)\s*;/i);
-      if (!matchScript) return null;
-
-      const scriptContent = matchScript[1] || matchScript[0];
-      const idxData = scriptContent.indexOf('data:');
-      if (idxData === -1) return null;
-
-      const resto = scriptContent.slice(idxData + 5).trim();
-      let dataStr;
-      const idxSc = resto.lastIndexOf(', sideChannel:');
-      const idxSc2 = resto.lastIndexOf(',sideChannel:');
-      const corte = Math.max(idxSc, idxSc2);
-      if (corte !== -1) {
-        dataStr = resto.slice(0, corte).trim();
-      } else {
-        const lastComma = resto.lastIndexOf(',');
-        dataStr = (lastComma !== -1 ? resto.slice(0, lastComma) : resto).trim();
-      }
-
-      if (!dataStr.startsWith('[') || dataStr.includes('errorHasStatus: true')) {
-        return null;
-      }
-
-      // Remove comentários de linha defensivamente antes de fazer o parse
-      const dataStrSemComentarios = dataStr.replace(/\/\/.*$/gm, '');
-      payload = JSON.parse(dataStrSemComentarios);
-    } catch (_) {
-      return null;
-    }
+    payload = extrairArrayPayloadDs1(payloadOuHtml);
   }
 
   if (!Array.isArray(payload) || payload.length < 3) return null;
@@ -1065,6 +1078,8 @@ export function extrairVoosDoHtml(html) {
       tempoConexao: conexoes.tempoConexao,
       tempoConexaoMinutos: null,
       aeroportoConexao: conexoes.aeroportoConexao,
+      aeroportoOrigem: null,
+      aeroportoDestino: null,
       isBest: false,
       bagagem
     });
@@ -1102,6 +1117,8 @@ export function extrairVoosDoHtml(html) {
           tempoConexao: null,
           tempoConexaoMinutos: null,
           aeroportoConexao: null,
+          aeroportoOrigem: null,
+          aeroportoDestino: null,
           isBest: false,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
@@ -1134,15 +1151,18 @@ export function extrairVoosDoHtml(html) {
           tempoConexao: null,
           tempoConexaoMinutos: null,
           aeroportoConexao: null,
+          aeroportoOrigem: null,
+          aeroportoDestino: null,
           isBest: false,
           bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
         });
       }
     }
 
-    // Se nenhum preço em R$ for encontrado no HTML, busca US$ / $ e converte para BRL
+    // Se nenhum preço em R$ for encontrado no HTML, busca marcadores explícitos de USD (US$, U$S, USD)
+    // Evita `(?<!R)\$` isolado para não capturar variáveis JS minificadas como `$100`
     if (voos.length === 0) {
-      const regexUSD = /(?:US\$|U\$S|\bUSD\b|(?<!R)\$)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
+      const regexUSD = /(?:US\$|U\$S|\bUSD\b)\s*([0-9]{1,3}(?:\.[0-9]{3})*|[0-9]+)/gi;
       let mu;
       while ((mu = regexUSD.exec(html)) !== null) {
         const posIni = Math.max(0, mu.index - 250);
@@ -1169,6 +1189,8 @@ export function extrairVoosDoHtml(html) {
             tempoConexao: null,
             tempoConexaoMinutos: null,
             aeroportoConexao: null,
+            aeroportoOrigem: null,
+            aeroportoDestino: null,
             isBest: false,
             bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
           });
@@ -1188,7 +1210,7 @@ export function extrairVoosDoHtml(html) {
  * 2. Executa requisição HTTP com headers stealth e jitter de delay.
  * 3. Detecta bloqueio de bot → retry com novo perfil stealth.
  * 4. Extrai preço da aba Cheapest do HTML (regex multicamada).
- * 5. Extrai lista de voos detalhados (aria-label → BRL fallback).
+ * 5. Extrai lista de voos detalhados (JSON ds:1 → aria-label → BRL fallback).
  * 6. Retorna resultado compatível com FlightProviderManager.
  *
  * Em caso de bloqueio persistente, retorna { ok: false } para acionar failover SerpAPI.
@@ -1348,7 +1370,6 @@ export class ScraplingProvider extends FlightProviderInterface {
         this._requisicoesCiclo++;
 
         let respOk = resp.ok;
-        let respUrl = resp.url;
         let html = respOk ? await resp.text() : '';
 
         // Se detectar bloqueio anti-bot ou HTML vazio e primp estiver disponível no sistema (produção/live),
@@ -1412,6 +1433,8 @@ export class ScraplingProvider extends FlightProviderInterface {
                 detalhesEscalas: 'Direto',
                 tempoConexao: null,
                 aeroportoConexao: null,
+                aeroportoOrigem: null,
+                aeroportoDestino: null,
                 bagagem: { mao: 'desconhecido', despachada: 'desconhecido', texto: null }
               };
             }
@@ -1454,6 +1477,8 @@ export class ScraplingProvider extends FlightProviderInterface {
           detalhesEscalas: v.detalhesEscalas || 'Direto',
           tempoConexao: v.tempoConexao ?? null,
           aeroportoConexao: v.aeroportoConexao ?? null,
+          aeroportoOrigem: v.aeroportoOrigem ?? null,
+          aeroportoDestino: v.aeroportoDestino ?? null,
           isBest: Boolean(v.isBest)
         }));
 
@@ -1479,6 +1504,8 @@ export class ScraplingProvider extends FlightProviderInterface {
               detalhesEscalas: opcaoCandidata.detalhesEscalas || 'Direto',
               tempoConexao: opcaoCandidata.tempoConexao ?? null,
               aeroportoConexao: opcaoCandidata.aeroportoConexao ?? null,
+              aeroportoOrigem: opcaoCandidata.aeroportoOrigem ?? null,
+              aeroportoDestino: opcaoCandidata.aeroportoDestino ?? null,
               isBest: Boolean(opcaoCandidata.isBest),
               diferencaPreco,
               economiaHoras
@@ -1486,15 +1513,23 @@ export class ScraplingProvider extends FlightProviderInterface {
           }
         }
 
+        const iataDestReal = melhorOferta.aeroportoDestino || null;
+        const destinoRealResolvido = (iataDestReal && NOMES_CIDADES_IATA && NOMES_CIDADES_IATA[iataDestReal])
+          ? NOMES_CIDADES_IATA[iataDestReal]
+          : (iataDestReal || destinoCod);
+
         return {
           ok: true,
           encontrouVoos: true,
           oferta: {
             preco: melhorOferta.preco,
+            cia: melhorOferta.cia,
             moeda: moedaEfetiva,
             precoOriginal: melhorOferta.precoOriginal,
             duracaoHoras: melhorOferta.duracaoHoras,
-            destinoReal: destinoCod,
+            codigoDestinoReal: iataDestReal || destinoCod,
+            destinoReal: destinoRealResolvido,
+            aeroportoOrigemReal: melhorOferta.aeroportoOrigem || origemCod,
             termometro: '🟢 Preço Mais Barato (Scrapling Cheapest)',
             nivelPreco: 'low',
             detalhes: detalhesVoo,

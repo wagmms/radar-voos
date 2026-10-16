@@ -56,18 +56,10 @@ export class FlightProviderManager {
             melhorResultado = resultado;
           }
 
-          // Provedores diretos (Scrapling ou GoogleFlightsDirect) com tarifa Cheapest capturam
-          // o menor preço disponível — encerra a cadeia sem precisar da SerpAPI.
-          // Caso contrário, deixa a SerpAPI buscar descontos adicionais de parceiros/OTAs.
-          const ehProveedorDireto = provider instanceof ScraplingProvider || provider instanceof GoogleFlightsDirectProvider;
-          const temSerpApiDisponivel = this.providers.some(p => p instanceof SerpApiProvider && p.estaDisponivel());
-          const jaTemDescontoOta = resultado.oferta.cheapestTabAtivada ||
-            resultado.oferta.detalhes?.includes('Aba Cheapest') ||
-            Boolean(resultado.oferta.precoOriginal);
-
-          if (!ehProveedorDireto || !temSerpApiDisponivel || jaTemDescontoOta) {
-            return melhorResultado;
-          }
+          // Se um provedor (Scrapling ou GoogleFlightsDirect) retornou voos com tarifa válida,
+          // encerra a busca imediatamente, estancando o consumo desnecessário da SerpAPI
+          // e eliminando chamadas duplicadas. A SerpAPI atua estritamente em failover.
+          return melhorResultado;
         } else if (resultado.ok && !melhorResultado) {
           melhorResultado = resultado;
         }

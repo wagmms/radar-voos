@@ -608,7 +608,7 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
     }
   });
 
-  it('compara SerpAPI quando preço BRL do ds:1 não representa desconto OTA', async () => {
+  it('preserva cota da SerpAPI quando Scrapling encontra voos válidos e aciona failover apenas na falha', async () => {
     const { FlightProviderManager } = await import('../src/services/providers/provider_manager.js');
     const { GoogleFlightsDirectProvider } = await import('../src/services/providers/google_flights_direct_provider.js');
     const { SerpApiProvider } = await import('../src/services/providers/serpapi_provider.js');
@@ -630,9 +630,16 @@ describe('ScraplingClient: ScraplingProvider (buscarOfertas)', () => {
       const manager = new FlightProviderManager();
       manager.providers = [new ScraplingProvider(), new GoogleFlightsDirectProvider(), serpApi];
 
-      const resultado = await manager.buscarOfertas({ origemCod: 'RIO', destinoCod: 'BEL', dataIda: '2027-01-17', duracaoMaxHoras: 8 });
-      assert.equal(consultasSerpApi, 1);
-      assert.equal(resultado.oferta.preco, 539);
+      // Caso 1: Scrapling encontrou tarifa válida de R$ 1002 -> SerpAPI NUNCA deve ser chamada (0 consultas)
+      const resultadoSucesso = await manager.buscarOfertas({ origemCod: 'RIO', destinoCod: 'BEL', dataIda: '2027-01-17', duracaoMaxHoras: 8 });
+      assert.equal(consultasSerpApi, 0, 'SerpAPI não deve ser consultada quando Scrapling obtém voos válidos');
+      assert.equal(resultadoSucesso.oferta.preco, 1002);
+
+      // Caso 2: Falha nos provedores diretos -> Failover aciona SerpAPI com sucesso
+      globalThis.fetch = async () => ({ ok: false, status: 500, url: 'https://www.google.com/travel/flights' });
+      const resultadoFailover = await manager.buscarOfertas({ origemCod: 'RIO', destinoCod: 'BEL', dataIda: '2027-01-17', duracaoMaxHoras: 8 });
+      assert.equal(consultasSerpApi, 1, 'SerpAPI deve ser acionada em failover quando scraping falha');
+      assert.equal(resultadoFailover.oferta.preco, 539);
     } finally {
       globalThis.fetch = fetchOriginal;
     }

@@ -1,19 +1,19 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.5.1)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.6.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Auditoria de Resiliência e Correção dos 4 Bugs Críticos concluída com 100% de aprovação (438/438 testes passando no `./validate.sh fast`). Rotas de Ida e Volta agora possuem round-trip garantido nos links e no scanner, cotações espúrias no teto da meta eliminadas, badge flexível sem `()` vazio e subtítulos precisos no Cockpit PWA.
+- **Estado Geral**: 🟢 Modernização de Scraping e Resiliência via Gemini 4 Argon concluída com 100% de aprovação (443/443 testes passando no `./validate.sh fast`). Links do Google Flights protegidos com RFC 4648 §5 base64url e resolução de hubs físicos, curto-circuito da SerpAPI preservando 100% da cota mensal, parser SSR `script.ds:1` robusto e Caçador de Bug Fares integrado ao Scrapling.
 - **Camadas Entregues & Verificadas**:
-  - `src/domain/rotas.js`: `rotaEhSoIda` e `obterDatasEfetivasRota` com cálculo automático de `data_volta` via `dias_estadia` e `somarDiasData` para rotas sem marcação explícita de só-ida.
-  - `src/services/flight_scanner.js`: desvinculação de `maxPrice: rota.preco_alvo` dos filtros Protobuf `tfs` do Google Flights (eliminando leitura de sliders no teto), varreduras flexíveis e regionais com datas de volta reais, links round-trip no Telegram e eliminação de rótulo vazio no termômetro.
-  - `src/db.js`: `rotasRepo.criar` e `atualizar` blindados contra links one-way em rotas de Ida e Volta; método `rotasRepo.sanitizarRotasIdaEVolta` na inicialização para expurgar cotações espúrias pré-existentes.
-  - `src/public/js/card_rota.js`: sanitização regex contra `()` vazios, helpers `ehRotaSoIdaVisual` e `calcularDataVoltaSegura` e subtítulo `periodoTexto` exibindo intervalo completo de Ida e Volta (`data_ida ➔ data_volta (${dias}d)`).
-  - **Suíte de Testes**: 438/438 testes aprovados (100% de sucesso).
+  - `src/domain/rotas.js`: migração de `gerarTfs` e `construirTfu` para RFC 4648 §5 base64url (`-`, `_`), resolução canônica de hubs físicos (`resolverHubFisico`) evitando injeção de nomes regionais no Protobuf, e link canônico Cheapest com token canônico `EgoIABAAGAAgAigD`.
+  - `src/services/providers/provider_manager.js`: curto-circuito em `FlightProviderManager` quando o scraping gratuito obtém ofertas válidas com preço, isolando a SerpAPI estritamente como failover de contingência (zero desperdício de cota).
+  - `src/services/providers/scrapling_client.js`: parser resiliente para `script.ds:1` com `extrairArrayPayloadDs1`, extração de ofertas Cheapest em slots alternativos de `k[1]`, detecção de aeroportos e companhia aérea nos trechos, e eliminação de regex que capturava `$100` minificado.
+  - `src/services/bug_fare_hunter.js`: migrado para `ScraplingProvider` com suporte a TLS Impersonation via `primp`, corredores continentais mapeados para IATAs reais e captura de cia aérea e destino real nos cards.
+  - **Suíte de Testes**: 443/443 testes aprovados (100% de sucesso).
 - **Diretriz Prioritária**: Implementar telemetria em tempo real com Server-Sent Events (SSE) e sparkline SVG de histórico no Cockpit PWA.
-- **Última Tarefa Concluída**: Bugfix & Auditoria de Resiliência: Round-Trip Obrigatório, Eliminação de Cotações Espúrias no Teto e Correção de Subtítulos no Cockpit PWA.
+- **Última Tarefa Concluída**: Modernização de Scraping e Resiliência pelo Gemini 4 Argon: Links Seguros base64url, Curto-Circuito SerpAPI e Caçador de Bug Fares com Scrapling.
 
 ---
 

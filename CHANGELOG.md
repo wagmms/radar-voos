@@ -4,6 +4,28 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.6.0] - 2026-10-15 — Modernização de Scraping e Resiliência pelo Gemini 4 Argon: Links Seguros base64url, Curto-Circuito SerpAPI e Caçador de Bug Fares com Scrapling
+
+### 🚀 Melhorias de Alta Precisão & Eliminação de Bugs:
+- **Resolução de Links Quebrados no Google Flights (`src/domain/rotas.js`)**:
+  - Migração de `gerarTfs` e `construirTfu` de Base64 padrão (`+`, `/`) para Base64URL (RFC 4648 §5: `-`, `_`), eliminando a corrupção de URLs quando o navegador ou cliente HTTP interpreta `+` como espaço (`%20`).
+  - Criação de `resolverHubFisico(termoOuCodigo)` para impedir que códigos regionais sintéticos (`EUR`, `SAM`) ou strings abertas sejam injetados no Protobuf `tfs`, garantindo que o Protobuf sempre receba códigos IATA de 3 letras válidos.
+  - Atualização de `gerarLinkGoogleFlightsCheapest` para utilizar o token canônico de ordenação `EgoIABAAGAAgAigD`, eliminando redirecionamentos erráticos para a home do Google Flights.
+- **Blindagem e Economia Máxima de Cota SerpAPI (`src/services/providers/provider_manager.js`)**:
+  - Implementação de curto-circuito imediato quando o provedor gratuito (`ScraplingProvider` ou `GoogleFlightsDirectProvider`) obtém voos válidos com preço.
+  - A SerpAPI agora opera estritamente como failover de contingência em caso de bloqueio ou erro do scraping gratuito, preservando 100% da cota mensal (250 buscas).
+- **Extração Resiliente SSR e aba Cheapest (`src/services/providers/scrapling_client.js`)**:
+  - Parser robusto de `script.ds:1` com função auxiliar `extrairArrayPayloadDs1`, suportando estruturas alternativas de dados serializados.
+  - Extração de ofertas de OTAs da aba Cheapest inspecionando slots secundários de `k[1]`.
+  - Extração contextual de `aeroportoOrigem`, `aeroportoDestino`, `codigoDestinoReal` e companhia aérea real (`cia`) nos trechos, propagando para a raiz de `oferta`.
+  - Remoção de heurística de regex em HTML que confundia nomes de variáveis minificadas `$100` com preços em moeda USD.
+- **Modernização do Caçador de Bug Fares (`src/services/bug_fare_hunter.js`)**:
+  - Migração do motor de busca de `GoogleFlightsDirectProvider` para `ScraplingProvider` com suporte a TLS Impersonation (`primp`).
+  - Atualização dos `CORREDORES_GLOBAIS_SWEET_SPOT` continentais para listas multi-aeroporto IATA reais (`LIS,MAD,CDG,FCO,AMS`, `MIA,MCO,JFK,LAX`, `BUE,SCL,LIM,MVD`, `TYO,BKK,SIN,DXB`).
+  - Identificação de destino real e companhia aérea no card de alerta do Telegram via `montarCardBugFare`.
+- **Validação Automatizada**:
+  - 443 testes em 59 suítes aprovados com 100% de sucesso no `./validate.sh fast`.
+
 ## [v3.5.1] - 2026-10-14 — Bugfix & Auditoria de Resiliência: Round-Trip Obrigatório, Eliminação de Cotações Espúrias no Teto e Correção de Subtítulos no Cockpit PWA
 
 ### 🐛 Correções Críticas dos 4 Bugs de Produção:

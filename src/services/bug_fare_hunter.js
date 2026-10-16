@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { GoogleFlightsDirectProvider } from './providers/google_flights_direct_provider.js';
+import { ScraplingProvider } from './providers/scrapling_client.js';
 import { detectarBugFareEstatistico } from '../domain/bug_fares.js';
 import { montarCardBugFare } from '../domain/aeroportos.js';
 import { bugFaresRepo } from '../db.js';
@@ -14,11 +14,12 @@ export const ARQUIVO_WORKING_BUFFER_PADRAO = path.resolve(__dirname, '../../data
 
 /**
  * Matriz de Corredores Globais de Alta Sensibilidade a Bug Fares
- * Focada nas principais rotas emissoras do Brasil e destinos mundiais com maior histórico de falha tarifária GDS
+ * Focada nas principais rotas emissoras do Brasil e destinos mundiais com maior histórico de falha tarifária GDS.
+ * Utiliza códigos IATA reais (incluindo listas multi-aeroporto para varreduras continentais) compatíveis com o Protobuf tfs.
  */
 export const CORREDORES_GLOBAIS_SWEET_SPOT = [
   // Europa (Piso Econômica R$ 1.950 ida/volta)
-  { origem: 'SAO', destino: '/m/02j9z', labelDestino: 'Europa (Geral)', regiao: 'EUROPA', diasEstadia: 12 },
+  { origem: 'SAO', destino: 'LIS,MAD,CDG,FCO,AMS', labelDestino: 'Europa (Geral)', regiao: 'EUROPA', diasEstadia: 12 },
   { origem: 'SAO', destino: 'LIS', labelDestino: 'Lisboa', regiao: 'EUROPA', diasEstadia: 10 },
   { origem: 'SAO', destino: 'MAD', labelDestino: 'Madrid', regiao: 'EUROPA', diasEstadia: 10 },
   { origem: 'SAO', destino: 'PAR', labelDestino: 'Paris', regiao: 'EUROPA', diasEstadia: 12 },
@@ -27,7 +28,7 @@ export const CORREDORES_GLOBAIS_SWEET_SPOT = [
   { origem: 'RIO', destino: 'PAR', labelDestino: 'Paris', regiao: 'EUROPA', diasEstadia: 12 },
 
   // América do Norte (Piso Econômica R$ 1.700 ida/volta)
-  { origem: 'SAO', destino: '/m/09c7w0', labelDestino: 'Estados Unidos (Geral)', regiao: 'AMERICA_NORTE', diasEstadia: 10 },
+  { origem: 'SAO', destino: 'MIA,MCO,JFK,LAX', labelDestino: 'Estados Unidos (Geral)', regiao: 'AMERICA_NORTE', diasEstadia: 10 },
   { origem: 'SAO', destino: 'MIA', labelDestino: 'Miami', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
   { origem: 'SAO', destino: 'MCO', labelDestino: 'Orlando', regiao: 'AMERICA_NORTE', diasEstadia: 10 },
   { origem: 'SAO', destino: 'NYC', labelDestino: 'Nova York', regiao: 'AMERICA_NORTE', diasEstadia: 8 },
@@ -39,14 +40,14 @@ export const CORREDORES_GLOBAIS_SWEET_SPOT = [
   { origem: 'BSB', destino: 'CUN', labelDestino: 'Cancún', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
 
   // América do Sul (Piso Econômica R$ 850 ida/volta)
-  { origem: 'SAO', destino: '/m/06_1', labelDestino: 'América do Sul (Geral)', regiao: 'AMERICA_SUL', diasEstadia: 6 },
+  { origem: 'SAO', destino: 'BUE,SCL,LIM,MVD', labelDestino: 'América do Sul (Geral)', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   { origem: 'SAO', destino: 'BUE', labelDestino: 'Buenos Aires', regiao: 'AMERICA_SUL', diasEstadia: 5 },
   { origem: 'SAO', destino: 'SCL', labelDestino: 'Santiago', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   { origem: 'SAO', destino: 'MVD', labelDestino: 'Montevidéu', regiao: 'AMERICA_SUL', diasEstadia: 4 },
   { origem: 'RIO', destino: 'BUE', labelDestino: 'Buenos Aires', regiao: 'AMERICA_SUL', diasEstadia: 5 },
 
   // Ásia & Oriente Médio (Pisos R$ 2.800 a R$ 3.000)
-  { origem: 'SAO', destino: '/m/02j1x', labelDestino: 'Ásia (Geral)', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
+  { origem: 'SAO', destino: 'TYO,BKK,SIN,DXB', labelDestino: 'Ásia (Geral)', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
   { origem: 'SAO', destino: 'DXB', labelDestino: 'Dubai', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   { origem: 'SAO', destino: 'DOH', labelDestino: 'Doha', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   { origem: 'SAO', destino: 'TYO', labelDestino: 'Tóquio', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
@@ -86,7 +87,7 @@ const QUEDA_PCT_OPORTUNIDADE = 0.30;
 export class BugFareHunter {
   constructor(opcoes = {}) {
     const config = typeof opcoes === 'string' ? { arquivoBuffer: opcoes } : (opcoes || {});
-    this.provedorDirect = config.provedorDirect || new GoogleFlightsDirectProvider();
+    this.provedorDirect = config.provedorDirect || new ScraplingProvider();
     this.indiceRotacao = 0;
     this.arquivoBuffer = config.arquivoBuffer !== undefined ? config.arquivoBuffer : ARQUIVO_WORKING_BUFFER_PADRAO;
 
@@ -340,6 +341,7 @@ export class BugFareHunter {
    * Deduplicação defensiva: suprime alertas repetidos do mesmo tipo dentro da janela.
    * @param {string} chave
    * @param {string} tipo - Categoria do alerta ('OPORTUNIDADE' | 'BUG_FARE')
+   * @param {number|null} preco - Preço atual para verificar se houve melhoria significativa
    * @returns {boolean} true se deve suprimir (alerta recente ainda válido)
    */
   _ehAlertaDuplicado(chave, tipo, preco = null) {
@@ -377,12 +379,159 @@ export class BugFareHunter {
   }
 
   /**
+   * Escaneia um único corredor específico, resolvendo o aeroporto/cidade real vencedora
+   * (especialmente em buscas multi-aeroporto), atualizando o Working Buffer e avaliando Bug Fares.
+   *
+   * @param {Object} corredor - Objeto do corredor a ser escaneado
+   * @param {Object} opcoes
+   * @param {number} [opcoes.diasNoFuturo=60]
+   * @param {boolean} [opcoes.notificar=true]
+   * @returns {Promise<{ avaliado: boolean, categoria: string|null, bugCard: Object|null, oportunidade: Object|null }>}
+   */
+  async escanearCorredor(corredor, { diasNoFuturo = 60, notificar = true } = {}) {
+    const chaveCorreder = `${corredor.origem}:${corredor.destino}`;
+    const { dataIda, dataVolta } = this.gerarDatasEstrategicas(
+      diasNoFuturo,
+      corredor.diasEstadia || 10
+    );
+
+    console.log(`🔍 Investigando corredor: ${corredor.origem} ➔ ${corredor.labelDestino} (${dataIda} a ${dataVolta})`);
+    const res = await this.provedorDirect.buscarOfertas({
+      origemCod: corredor.origem,
+      destinoCod: corredor.destino,
+      dataIda,
+      dataVolta,
+      cabine: 'economy',
+      adultos: 1
+    });
+
+    if (!res.ok || !res.encontrouVoos || !(res.oferta?.preco > 0)) {
+      console.log(`⚪ Sem resultado válido para ${corredor.origem} ➔ ${corredor.labelDestino}`);
+      return { avaliado: false, categoria: null, bugCard: null, oportunidade: null };
+    }
+
+    const preco = res.oferta.preco;
+    const codigoDestinoReal = res.oferta.codigoDestinoReal || (corredor.destino.includes(',') ? corredor.destino.split(',')[0].trim() : corredor.destino);
+    const destinoReal = res.oferta.destinoReal || corredor.labelDestino;
+    const ciaAerea = res.oferta.cia || 'Cia Aérea';
+    const ehMultiAeroporto = corredor.destino.includes(',');
+    const labelExibicaoDestino = ehMultiAeroporto && res.oferta.destinoReal
+      ? res.oferta.destinoReal
+      : corredor.labelDestino;
+
+    // --- Working Buffer: registrar leitura atual ---
+    this._registrarLeitura(chaveCorreder, preco);
+    const { categoria, zScore, quedaPct, media } = this._classificarPrecoBuffer(chaveCorreder, preco);
+
+    // --- Validação por Piso Estrutural (detectarBugFareEstatistico) ---
+    const buffer = this._obterBufferCorreder(chaveCorreder);
+    const { media: mediaBuffer, desvioPadrao: dpBuffer } = this._calcularEstatisticasBuffer(buffer.leituras);
+    const analiseEstatistica = detectarBugFareEstatistico({
+      origemCod: corredor.origem,
+      destinoCod: codigoDestinoReal || corredor.destino,
+      preco,
+      precoMedioHistorico: mediaBuffer,
+      desvioPadrao: dpBuffer,
+      cabine: 'economy',
+      dataVolta
+    });
+
+    // --- Determinar categoria final (piso estrutural sobrepõe classificação do buffer) ---
+    const categoriaFinal = analiseEstatistica.ehBugFare ? 'BUG_FARE' : categoria;
+    const motivoFinal = analiseEstatistica.ehBugFare
+      ? analiseEstatistica.motivo
+      : (zScore !== null
+        ? `Z-Score: ${zScore.toFixed(2)} | Queda: ${quedaPct !== null ? (quedaPct * 100).toFixed(1) : '?'}% vs média R$ ${media?.toFixed(0) ?? '?'}`
+        : (quedaPct !== null ? `Queda de ${(quedaPct * 100).toFixed(1)}% vs média R$ ${media?.toFixed(0) ?? '?'}` : 'Detecção por piso estrutural'));
+    const tipoFinal = analiseEstatistica.ehBugFare
+      ? analiseEstatistica.tipo
+      : (categoriaFinal === 'BUG_FARE' ? '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA (Z-SCORE)' : '⚡ OPORTUNIDADE DE TARIFA');
+
+    // === CLASSIFICAÇÃO INFO: silêncio absoluto (padrão proactive-agent) ===
+    if (categoriaFinal === 'INFO') {
+      console.log(`ℹ️  [INFO] ${corredor.origem} ➔ ${labelExibicaoDestino} (${codigoDestinoReal}): R$ ${preco.toFixed(0)} via ${ciaAerea} (mercado normal)`);
+      return { avaliado: true, categoria: 'INFO', bugCard: null, oportunidade: null };
+    }
+
+    // === CLASSIFICAÇÃO OPORTUNIDADE ===
+    if (categoriaFinal === 'OPORTUNIDADE') {
+      console.log(`⚡ [OPORTUNIDADE] ${corredor.origem} ➔ ${labelExibicaoDestino} (${codigoDestinoReal}): R$ ${preco.toFixed(0)} via ${ciaAerea} | ${motivoFinal}`);
+      const oportunidade = {
+        corredor: chaveCorreder,
+        label: labelExibicaoDestino,
+        destinoReal,
+        codigoDestinoReal,
+        cia: ciaAerea,
+        preco,
+        zScore,
+        quedaPct,
+        media
+      };
+      return { avaliado: true, categoria: 'OPORTUNIDADE', bugCard: null, oportunidade };
+    }
+
+    // === CLASSIFICAÇÃO BUG_FARE ===
+    // Deduplicação defensiva: suprimir se mesmo tipo já foi alertado nas últimas 24h sem melhora
+    if (this._ehAlertaDuplicado(chaveCorreder, 'BUG_FARE', preco)) {
+      console.log(`🔇 [SUPRIMIDO] Alerta BUG_FARE duplicado sem queda relevante dentro de 24h para ${corredor.origem} ➔ ${labelExibicaoDestino}`);
+      return { avaliado: true, categoria: 'BUG_FARE_SUPRIMIDO', bugCard: null, oportunidade: null };
+    }
+
+    const bugCard = montarCardBugFare({
+      origem: corredor.origem,
+      codigoOrigem: corredor.origem,
+      destino: labelExibicaoDestino,
+      codigoDestino: codigoDestinoReal,
+      dataIda,
+      dataVolta,
+      preco,
+      cia: ciaAerea,
+      motivo: motivoFinal,
+      tipo: tipoFinal,
+      destinoReal,
+      codigoDestinoReal,
+      linkOriginal: res.oferta.link
+    });
+
+    // Garante que a cia aérea esteja presente no objeto final do card
+    if (!bugCard.cia) {
+      bugCard.cia = ciaAerea;
+    }
+
+    // Persistência defensiva com deduplicação por link no banco de dados
+    const jaCadastradoBD = bugFaresRepo.linkJaExiste(bugCard.link);
+    if (!jaCadastradoBD) {
+      bugFaresRepo.inserir(bugCard);
+
+      telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
+        ...bugCard,
+        severidade: analiseEstatistica.severidade || 'CRITICA',
+        zScore,
+        quedaPct
+      });
+
+      if (notificar) {
+        await notifierTelegram.enviarAlertaBugFare(bugCard);
+      }
+
+      // Registrar no Working Buffer para deduplicação futura de 24h
+      this._registrarAlertaDisparado(chaveCorreder, 'BUG_FARE', preco);
+
+      console.log(`💥 [BUG FARE ENCONTRADO!] ${bugCard.titulo} | Cia: ${bugCard.cia} | Z-Score: ${zScore?.toFixed(2) ?? 'N/A'}`);
+      return { avaliado: true, categoria: 'BUG_FARE', bugCard, oportunidade: null };
+    } else {
+      console.log(`🔇 [SUPRIMIDO] Bug Fare já registrado no banco: ${bugCard.link}`);
+      return { avaliado: true, categoria: 'BUG_FARE_DUPLICADO_BD', bugCard: null, oportunidade: null };
+    }
+  }
+
+  /**
    * Executa varredura proativa com Working Buffer + Z-Score + deduplicação de 24h.
    * Método principal: implementa o padrão proactive-agent com zero ruído.
    *
    * Fluxo:
    *   1. Seleciona corredores via round-robin
-   *   2. Consulta Google Flights Direct por preço atual
+   *   2. Consulta ScraplingProvider por preço atual, cia e destino real vencedor
    *   3. Registra leitura no Working Buffer
    *   4. Classifica: INFO → silêncio / OPORTUNIDADE → log / BUG_FARE → alerta
    *   5. Valida piso estrutural via detectarBugFareEstatistico
@@ -411,126 +560,20 @@ export class BugFareHunter {
     let totalChecados = 0;
     for (const corredor of corredoresAmostra) {
       totalChecados++;
-      const chaveCorreder = `${corredor.origem}:${corredor.destino}`;
-      const { dataIda, dataVolta } = this.gerarDatasEstrategicas(
-        50 + (totalChecados * 12),
-        corredor.diasEstadia || 10
-      );
+      const diasNoFuturo = 50 + (totalChecados * 12);
 
       try {
-        console.log(`🔍 Investigando corredor: ${corredor.origem} ➔ ${corredor.labelDestino} (${dataIda} a ${dataVolta})`);
-        const resultado = await this.provedorDirect.buscarOfertas({
-          origemCod: corredor.origem,
-          destinoCod: corredor.destino,
-          dataIda,
-          dataVolta,
-          cabine: 'economy',
-          adultos: 1
+        const resultadoCorredor = await this.escanearCorredor(corredor, {
+          diasNoFuturo,
+          notificar
         });
 
-        if (!resultado.ok || !resultado.encontrouVoos || !(resultado.oferta?.preco > 0)) {
-          console.log(`⚪ Sem resultado válido para ${corredor.origem} ➔ ${corredor.labelDestino}`);
-          continue;
+        if (resultadoCorredor.oportunidade) {
+          oportunidadesDetectadas.push(resultadoCorredor.oportunidade);
         }
-
-        const preco = resultado.oferta.preco;
-        const destinoReal = resultado.oferta.destinoReal || corredor.labelDestino;
-
-        // --- Working Buffer: registrar leitura atual ---
-        this._registrarLeitura(chaveCorreder, preco);
-        const { categoria, zScore, quedaPct, media } = this._classificarPrecoBuffer(chaveCorreder, preco);
-
-        // --- Validação por Piso Estrutural (detectarBugFareEstatistico) ---
-        const buffer = this._obterBufferCorreder(chaveCorreder);
-        const { media: mediaBuffer, desvioPadrao: dpBuffer } = this._calcularEstatisticasBuffer(buffer.leituras);
-        const analiseEstatistica = detectarBugFareEstatistico({
-          origemCod: corredor.origem,
-          destinoCod: corredor.destino,
-          preco,
-          precoMedioHistorico: mediaBuffer,
-          desvioPadrao: dpBuffer,
-          cabine: 'economy',
-          dataVolta
-        });
-
-        // --- Determinar categoria final (piso estrutural sobrepõe classificação do buffer) ---
-        const categoriaFinal = analiseEstatistica.ehBugFare ? 'BUG_FARE' : categoria;
-        const motivoFinal = analiseEstatistica.ehBugFare
-          ? analiseEstatistica.motivo
-          : (zScore !== null
-            ? `Z-Score: ${zScore.toFixed(2)} | Queda: ${quedaPct !== null ? (quedaPct * 100).toFixed(1) : '?'}% vs média R$ ${media?.toFixed(0) ?? '?'}`
-            : (quedaPct !== null ? `Queda de ${(quedaPct * 100).toFixed(1)}% vs média R$ ${media?.toFixed(0) ?? '?'}` : 'Detecção por piso estrutural'));
-        const tipoFinal = analiseEstatistica.ehBugFare
-          ? analiseEstatistica.tipo
-          : (categoriaFinal === 'BUG_FARE' ? '🚨 BUG FARE POR ANOMALIA ESTATÍSTICA (Z-SCORE)' : '⚡ OPORTUNIDADE DE TARIFA');
-
-        // === CLASSIFICAÇÃO INFO: silêncio absoluto (padrão proactive-agent) ===
-        if (categoriaFinal === 'INFO') {
-          console.log(`ℹ️  [INFO] ${corredor.origem} ➔ ${corredor.labelDestino}: R$ ${preco.toFixed(0)} (mercado normal)`);
-          continue;
+        if (resultadoCorredor.bugCard) {
+          bugsEncontrados.push(resultadoCorredor.bugCard);
         }
-
-        // === CLASSIFICAÇÃO OPORTUNIDADE ===
-        if (categoriaFinal === 'OPORTUNIDADE') {
-          console.log(`⚡ [OPORTUNIDADE] ${corredor.origem} ➔ ${corredor.labelDestino}: R$ ${preco.toFixed(0)} | ${motivoFinal}`);
-          oportunidadesDetectadas.push({
-            corredor: chaveCorreder,
-            label: corredor.labelDestino,
-            preco,
-            zScore,
-            quedaPct,
-            media
-          });
-          continue;
-        }
-
-        // === CLASSIFICAÇÃO BUG_FARE ===
-        // Deduplicação defensiva: suprimir se mesmo tipo já foi alertado nas últimas 24h sem melhora
-        if (this._ehAlertaDuplicado(chaveCorreder, 'BUG_FARE', preco)) {
-          console.log(`🔇 [SUPRIMIDO] Alerta BUG_FARE duplicado sem queda relevante dentro de 24h para ${corredor.origem} ➔ ${corredor.labelDestino}`);
-          continue;
-        }
-
-        const bugCard = montarCardBugFare({
-          origem: corredor.origem,
-          codigoOrigem: corredor.origem,
-          destino: corredor.labelDestino,
-          codigoDestino: corredor.destino,
-          dataIda,
-          dataVolta,
-          preco,
-          motivo: motivoFinal,
-          tipo: tipoFinal,
-          destinoReal: resultado.oferta.destinoReal || corredor.labelDestino,
-          codigoDestinoReal: resultado.oferta.codigoDestinoReal || null,
-          linkOriginal: resultado.oferta.link
-        });
-
-        // Persistência defensiva com deduplicação por link no banco de dados
-        const jaCadastradoBD = bugFaresRepo.linkJaExiste(bugCard.link);
-        if (!jaCadastradoBD) {
-          bugFaresRepo.inserir(bugCard);
-
-          telemetryEvents.emitirAtualizacao('bug_fare_detectado', {
-            ...bugCard,
-            severidade: analiseEstatistica.severidade || 'CRITICA',
-            zScore,
-            quedaPct
-          });
-
-          if (notificar) {
-            await notifierTelegram.enviarAlertaBugFare(bugCard);
-          }
-
-          // Registrar no Working Buffer para deduplicação futura de 24h
-          this._registrarAlertaDisparado(chaveCorreder, 'BUG_FARE', preco);
-
-          bugsEncontrados.push(bugCard);
-          console.log(`💥 [BUG FARE ENCONTRADO!] ${bugCard.titulo} | Z-Score: ${zScore?.toFixed(2) ?? 'N/A'}`);
-        } else {
-          console.log(`🔇 [SUPRIMIDO] Bug Fare já registrado no banco: ${bugCard.link}`);
-        }
-
       } catch (err) {
         console.warn(`⚠️ Falha ao checar corredor ${corredor.origem} ➔ ${corredor.labelDestino}: ${err.message}`);
       }
