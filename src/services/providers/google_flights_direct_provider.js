@@ -11,23 +11,44 @@ import { extrairVoosDoPayloadJs } from './scrapling_client.js';
  * Realiza requisições simulando um navegador moderno ou via headers stealth,
  * extraindo preços de referência sem consumir créditos da SerpAPI.
  */
-const USER_AGENTS_STEALTH = [
+export const USER_AGENTS_STEALTH = [
   {
-    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    ua: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
     platform: '"Windows"',
-    chUa: '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"'
+    chUa: '"Chromium";v="145", "Google Chrome";v="145", "Not?A_Brand";v="99"'
   },
   {
-    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    ua: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
     platform: '"macOS"',
-    chUa: '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"'
+    chUa: '"Chromium";v="145", "Google Chrome";v="145", "Not?A_Brand";v="99"'
   },
   {
-    ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+    ua: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
     platform: '"Linux"',
-    chUa: '"Chromium";v="130", "Google Chrome";v="130", "Not?A_Brand";v="99"'
+    chUa: '"Chromium";v="145", "Google Chrome";v="145", "Not?A_Brand";v="99"'
   }
 ];
+
+export function construirHeadersStealth(perfilStealth = USER_AGENTS_STEALTH[0]) {
+  const perfil = perfilStealth || USER_AGENTS_STEALTH[0];
+  return {
+    'User-Agent': perfil.ua,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Sec-Ch-Ua': perfil.chUa,
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': perfil.platform,
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+    'X-Forwarded-For': '177.16.24.12',
+    'Cookie': 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn'
+  };
+}
 
 export function converterDuracaoParaHoras(str) {
   if (typeof str === 'number') {
@@ -251,9 +272,9 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
     return this.ativo;
   }
 
-  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null }) {
+  async buscarOfertas({ origemCod, destinoCod, dataIda, dataVolta = null, duracaoMaxHoras = 999, cabine = 'economy', adultos = 1, moeda = 'BRL', curr = null, opcoesAvancadas = {} }) {
     const moedaCode = (curr || moeda || 'BRL').trim().toUpperCase();
-    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaCode) : null;
+    const linkCheapest = dataIda ? gerarLinkGoogleFlightsCheapest(origemCod, destinoCod, dataIda, dataVolta, duracaoMaxHoras, adultos, 0, cabine, moedaCode, opcoesAvancadas) : null;
     const linkBase = linkCheapest || gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moedaCode);
     let linkConsulta = linkBase;
     if (!linkConsulta.includes('&hl=')) linkConsulta += '&hl=pt-BR';
@@ -271,25 +292,7 @@ export class GoogleFlightsDirectProvider extends FlightProviderInterface {
       const timeoutId = setTimeout(() => controller.abort(), 12000);
 
       // 2. Headers autênticos de navegador real com bypass de tela de cookies do Google
-      const headers = {
-        'User-Agent': perfilStealth.ua,
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache',
-        'Pragma': 'no-cache',
-        'Sec-Ch-Ua': perfilStealth.chUa,
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': perfilStealth.platform,
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Upgrade-Insecure-Requests': '1',
-        // Injeta IP do Brasil para balanceadores geolocalizados do Google
-        'X-Forwarded-For': '177.16.24.12',
-        // Injeta cookie de consentimento pré-aceito para evitar redirecionamento de tela de consentimento
-        'Cookie': 'SOCS=CAISHAgBEhJnd3NfMjAyNDA5MTAtMF9SQzIaAnB0IAEaBgiA_L22Bg; 1P_JAR=2026-10-12-15; NID=511=Qn'
-      };
+      const headers = construirHeadersStealth(perfilStealth);
 
       const resp = await fetch(linkConsulta, {
         headers,

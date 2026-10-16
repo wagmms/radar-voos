@@ -1,31 +1,35 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.7.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.8.0)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Hard Guard arquitetural implementado via Gemini 4 Argon, bloqueando definitivamente vazamento de rotas de teste para GitHub/deploy. Rotas genéricas expurgadas do repositório remoto. 100% de aprovação (446/446 testes passando no `./validate.sh fast`).
+- **Estado Geral**: 🟢 **Etapas 1, 2 e 3 Concluídas com Sucesso!** Paridade total de engenharia reversa com `fast_flights` e `fli-js`. Parser JSPB robusto contra Sparse Times (`[8]`, `[null, 31]`), encoder Protobuf `tfs` com blindagem contra auto-transferência (`hideSeparateAndSelfTransfer = true`), exclusão de Basic Economy, fingerprint stealth Chrome 145, e alertas ricos no Telegram e PWA com aeronaves, dias extras (`+1d`) e CO₂. 100% de aprovação (467/467 testes passando no `./validate.sh fast`).
 - **Camadas Entregues & Verificadas**:
-  - `src/services/rotas_sync.js`: função `isExecucaoOficialAutorizada()` impedindo escrita em `data/rotas.json` e sync com GitHub fora do banco oficial de produção.
-  - `tests/routes.test.js`: isolamento estrito contra o GitHub token e runner de testes.
-  - `data/rotas.json`: restaurado canonicamente com as 4 rotas reais do usuário em `main` e `autoloop/dev`.
-  - **Suíte de Testes**: 446/446 testes aprovados (100% de sucesso).
-- **Diretriz Prioritária**: Implementar sparklines SVG de histórico nos cards e visualização ortodrômica de rotas no Cockpit PWA.
-- **Última Tarefa Concluída**: Expugo de todas as rotas mock/genéricas injetadas via testes no GitHub remoto e implementação do Hard Guard em `rotas_sync.js` bloqueando para sempre qualquer escrita ou sync em testes.
+  - `src/services/providers/scrapling_client.js`: `extrairHoraMinutoTrecho`, `formatarHorarioTrecho`, `formatarDataTrecho`, `calcularDiasExtrasChegada`, `extrairEmissoesCarbono` e `calcularTempoConexaoTrechos`.
+  - `src/domain/rotas.js`: `ehRotaIntercontinental`, padrão defensivo `hideSeparateAndSelfTransfer = true`, `excludeBasicEconomy` e `Baggage`.
+  - `src/services/providers/google_flights_direct_provider.js`: `USER_AGENTS_STEALTH` Chrome 145 e suporte a `opcoesAvancadas`.
+  - `src/services/notifier_telegram.js`: `formatarSufixoDiasExtras` e `formatarMetadadosVooTelegram` integrados aos alertas.
+  - `src/public/js/card_rota.js`: Renderização de `+1d` e modelo de aeronave no card do PWA.
+  - `src/domain/bug_fares.js`: `ehAeronaveWidebody` e bônus de Widebody em rotas sul-americanas/domésticas.
+  - **Suíte de Testes**: 467/467 testes aprovados (100% de sucesso em 64 suítes).
+- **Diretriz Prioritária**: Implementar a matriz de datas flexíveis (`search_dates`) e expor servidor MCP nativo do RadarVoos.
+- **Última Tarefa Concluída**: Implementação completa das Etapas 1, 2 e 3 de engenharia reversa do Google Flights com 467 testes automatizados aprovados.
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/public/js/card_rota.js`
-- **Função/Componente/Seletor**: `renderizarSparklineSvg`
-- **Comportamento Esperado / Critério de Aceite**: Desenhar sparkline em SVG puro leve para o histórico de preços dos últimos 10 checks no card da rota.
+- **Arquivo/Módulo Alvo**: `src/services/providers/google_flights_direct_provider.js`
+- **Função/Componente/Seletor**: `buscarMatrizDatasFlexiveis`
+- **Comportamento Esperado / Critério de Aceite**: Implementar endpoint/método de busca em matriz de calendário (`search_dates`), permitindo escanear o menor preço de até 60 dias em 1 único request HTTP.
 
 ---
 
 ## 📋 Backlog Prioritário
+- [ ] `src/services/providers/google_flights_direct_provider.js` • `buscarMatrizDatasFlexiveis` • Implementar busca de menor tarifa por dia em janela de 30-60 dias em 1 único request HTTP.
+- [ ] `src/server/routes/mcp.js` • `registrarServidorMcpRadarVoos` • Expor servidor MCP nativo com tools `search_flights`, `get_price_history` e `create_watch_rule`.
 - [ ] `src/public/js/card_rota.js` • `renderizarSparklineSvg` • Desenhar sparkline em SVG puro para o histórico de preços dos últimos 10 checks na rota.
-- [ ] `src/public/sw.js` • Service Worker Push • Adicionar handler de notificações Web Push nativas para alertar oportunidades e bug fares com o app fechado.
 
 ---
 

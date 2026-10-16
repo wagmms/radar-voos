@@ -4,6 +4,26 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.8.0] - 2026-10-16 — Paridade Completa fast_flights: Sparse Times, Encoder Protobuf tfs (Fields 13, 17, 25), Chrome 145 Stealth, Widebody Score e Alertas Telegram/PWA via Gemini 4 Argon
+
+### 🚀 Novas Funcionalidades & Correções Cirúrgicas (Etapas 1, 2 e 3 Concluídas):
+- **Etapa 1 (P0): Correção Crítica de Sparse Times & Enriquecimento do Parser (`src/services/providers/scrapling_client.js`)**:
+  - Implementado `extrairHoraMinutoTrecho` e reescrito `formatarHorarioTrecho` para suportar o formato compacto de arrays do JSPB (`[8]` $\rightarrow$ `08:00`, `[null, 31]` $\rightarrow$ `00:31`, `[14, 5]` $\rightarrow$ `14:05`, `[]` $\rightarrow$ `00:00`).
+  - Eliminado o descarte silencioso de voos que decolavam ou pousavam em horas redondas (`08:00`) ou na primeira hora da madrugada (`00:00` a `00:59`).
+  - Atualizado `calcularTempoConexaoTrechos` para calcular intervalos de conexão com total resiliência mesmo quando ambos os trechos possuem horários em formato esparso.
+  - Funções `formatarDataTrecho` (`[YYYY, M, D]` $\rightarrow$ `"YYYY-MM-DD"`), `calcularDiasExtrasChegada` (`+1`/`+2` dias), extração de modelo de aeronave (`aeronave`/`aeronaves`) e emissões de carbono (`extrairEmissoesCarbono`).
+- **Etapa 2 (P1): Evolução do Encoder Protobuf `tfs` & Assinatura Chrome 145 (`src/domain/rotas.js` e `google_flights_direct_provider.js`)**:
+  - Implementada `ehRotaIntercontinental(origem, destino)` e catálogo canônico `CODIGOS_AEROPORTOS_AMERICA_DO_SUL`.
+  - Padrão defensivo de `hideSeparateAndSelfTransfer = true` em `gerarLinkGoogleFlightsCheapest` e `construirUrlCheapest` (oculta conexões de alto risco por bilhetes separados e auto-transferência sem proteção).
+  - Suporte a `excludeBasicEconomy` e `autoExcludeBasicEconomyIntercontinental` (Field 25) e bagagem de mão/despachada (Field 13).
+  - Atualização de `USER_AGENTS_STEALTH` e `construirHeadersStealth` no `google_flights_direct_provider.js` com a assinatura autêntica do **Chrome 145** (Windows, macOS e Linux) em paridade com o motor `primp`.
+- **Etapa 3 (P2): Integração no Cockpit PWA, Telegram Bot e Bug Fare Hunter (`card_rota.js`, `notifier_telegram.js`, `bug_fares.js`)**:
+  - **Telegram Bot**: formatação de alertas de oportunidade e bug fare com `diasExtrasChegada` (`22:45 ➔ 06:15 (+1 dia)`), aeronave (`✈️ Boeing 787-9 Dreamliner`) e emissões (`🌱 Emissões: 412 kg CO₂ (-18%)`).
+  - **Cockpit PWA**: exibição de `<span class="badge-dias-extras">+1d</span>` ao lado do horário de chegada e tag de modelo da aeronave no card de rota.
+  - **Bug Fare Hunter**: função contratual `ehAeronaveWidebody(aeronave)` e `avaliarOportunidade` com concessão de bônus de relevância no score para voos operados por aeronaves de fuselagem larga (*Widebody*) na América do Sul e Brasil.
+- **Validação Automatizada Integral**:
+  - 467/467 testes aprovados com 100% de sucesso em 64 suítes (`./validate.sh fast`).
+
 ## [v3.7.0] - 2026-10-16 — Suporte Nativo a "Apenas Ida" (One-Way) no Cockpit PWA, Blindagem Cambial na América do Sul e Eliminação de Fantasmas de Ida e Volta via Gemini 4 Argon
 
 ### 🚀 Novas Funcionalidades & Correções Cirúrgicas:

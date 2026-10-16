@@ -389,4 +389,50 @@ export function detectarBugFareEstatistico(params = {}) {
   return { ehBugFare: false };
 }
 
+/**
+ * Identifica se a aeronave informada é um Widebody (fuselagem larga / duplo corredor).
+ * Suporta famílias Boeing (777, 787, 747, 767) e Airbus (A350, A330, A380, A340).
+ *
+ * @param {string|null|undefined} aeronave
+ * @returns {boolean}
+ */
+export function ehAeronaveWidebody(aeronave) {
+  if (!aeronave || typeof aeronave !== 'string') return false;
+  const texto = aeronave.trim();
+  if (!texto) return false;
+
+  const regexWidebody = /\b(?:Boeing\s*)?(?:777|787|747|767)(?:-\d+[A-Z]*)?\b|\b(?:B777|B787|B747|B767|Dreamliner)\b|\b(?:Airbus\s*)?A3(?:30|40|50|80)(?:-\d+[A-Z]*|neo)?\b/i;
+  return regexWidebody.test(texto);
+}
+
+/**
+ * Avalia oportunidade e calcula bônus por aeronave Widebody em rotas na América do Sul/Brasil.
+ * @param {Object} params
+ * @returns {Object}
+ */
+export function avaliarOportunidade(dados = {}) {
+  const { origem, destino, precoAtual, precoMedio, aeronave = null, regiao = null } = dados;
+  const isWidebody = ehAeronaveWidebody(aeronave);
+  const regiaoEfetiva = regiao || identificarRegiaoDestino(destino);
+  const isSulAmericanaOuBrasil = regiaoEfetiva === 'BRASIL' || regiaoEfetiva === 'AMERICA_SUL' || regiaoEfetiva === 'AMERICA_DO_SUL';
+  const bonusWidebody = Boolean(isWidebody && isSulAmericanaOuBrasil);
+
+  let score = 50;
+  if (Number.isFinite(precoAtual) && Number.isFinite(precoMedio) && precoMedio > 0) {
+    const economiaPct = Math.round(((precoMedio - precoAtual) / precoMedio) * 100);
+    score = Math.max(0, Math.min(100, 50 + economiaPct));
+  }
+
+  if (bonusWidebody) {
+    score = Math.min(100, score + 10);
+  }
+
+  return {
+    ehWidebody: isWidebody,
+    bonusWidebody,
+    score,
+    regiao: regiaoEfetiva
+  };
+}
+
 

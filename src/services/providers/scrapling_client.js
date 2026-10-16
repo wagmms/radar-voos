@@ -554,6 +554,9 @@ export function construirUrlCheapest(
   } = opts || {};
 
   const cabineFinal = classeViagem || cabine || 'economy';
+  const hideTransferFinal = (hideSeparateAndSelfTransfer !== null && hideSeparateAndSelfTransfer !== undefined)
+    ? Boolean(hideSeparateAndSelfTransfer)
+    : true;
 
   const tfsPayload = gerarTfs({
     origens,
@@ -571,7 +574,7 @@ export function construirUrlCheapest(
     carryOnBags,
     checkedBags,
     maxPrice,
-    hideSeparateAndSelfTransfer,
+    hideSeparateAndSelfTransfer: hideTransferFinal,
     excludeBasicEconomy,
     airlines,
     connectingAirports,
@@ -593,15 +596,96 @@ export function construirUrlCheapest(
 }
 
 /**
- * Formata horário de trecho [hora, minuto] para string "HH:MM".
- * @param {Array<number>|null} arr
+ * Constrói a URL completa para busca no Google Flights (helper direto).
+ */
+export function construirUrlBuscaScrapling(origem, destino, dataIda, dataVolta = null, opcoesAvancadas = {}) {
+  const opts = (opcoesAvancadas && typeof opcoesAvancadas === 'object') ? opcoesAvancadas : {};
+  const res = construirUrlCheapest(origem, destino, dataIda, dataVolta, opts.duracaoMaxHoras || null, opts.moeda || 'BRL', opts);
+  return res.url;
+}
+
+/**
+ * Extrai { h, m } de um array de horário JSPB do Google Flights.
+ * Suporta Sparse Time Arrays onde zeros são omitidos ou nulos:
+ * - [8] -> { h: 8, m: 0 }
+ * - [null, 31] -> { h: 0, m: 31 }
+ * - [14, 5] -> { h: 14, m: 5 }
+ * - [] -> { h: 0, m: 0 }
+ */
+export function extrairHoraMinutoTrecho(arr) {
+  if (!Array.isArray(arr) || arr.length > 2) return null;
+  const h = arr[0] ?? 0;
+  const m = arr[1] ?? 0;
+  if (typeof h !== 'number' || typeof m !== 'number' || !Number.isInteger(h) || !Number.isInteger(m)) return null;
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+  return { h, m };
+}
+
+/**
+ * Formata horário de trecho (incluindo sparse arrays do JSPB) para string "HH:MM".
+ * @param {Array<number|null>|null} arr
  * @returns {string|null}
  */
 export function formatarHorarioTrecho(arr) {
-  if (!Array.isArray(arr) || arr.length < 2) return null;
-  const [h, m] = arr;
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const hm = extrairHoraMinutoTrecho(arr);
+  if (!hm) return null;
+  return `${String(hm.h).padStart(2, '0')}:${String(hm.m).padStart(2, '0')}`;
+}
+
+/**
+ * Formata um array de data [YYYY, M, D] do Google Flights em string ISO "YYYY-MM-DD".
+ * @param {Array<number>|null} arr
+ * @returns {string|null}
+ */
+export function formatarDataTrecho(arr) {
+  if (!Array.isArray(arr) || arr.length < 3) return null;
+  const [ano, mes, dia] = arr;
+  if (
+    typeof ano !== 'number' || !Number.isInteger(ano) || ano < 2000 || ano > 2100 ||
+    typeof mes !== 'number' || !Number.isInteger(mes) || mes < 1 || mes > 12 ||
+    typeof dia !== 'number' || !Number.isInteger(dia) || dia < 1 || dia > 31
+  ) {
+    return null;
+  }
+  return `${String(ano).padStart(4, '0')}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+/**
+ * Calcula quantos dias após a partida o voo pousa no destino final (ex: 0 = mesmo dia, 1 = +1 dia).
+ * @param {string|null} dataPartidaIso
+ * @param {string|null} dataChegadaIso
+ * @returns {number}
+ */
+export function calcularDiasExtrasChegada(dataPartidaIso, dataChegadaIso) {
+  if (typeof dataPartidaIso !== 'string' || typeof dataChegadaIso !== 'string') return 0;
+  const tPartida = Date.parse(`${dataPartidaIso}T00:00:00Z`);
+  const tChegada = Date.parse(`${dataChegadaIso}T00:00:00Z`);
+  if (Number.isNaN(tPartida) || Number.isNaN(tChegada)) return 0;
+  const diffDias = Math.round((tChegada - tPartida) / 86400000);
+  return diffDias > 0 ? diffDias : 0;
+}
+
+/**
+ * Extrai dados de emissão de carbono do bloco flight[22] (em gramas -> kg e variação percentual).
+ * @param {Array|null} flight
+ * @returns {{ kg: number|null, tipicaKg: number|null, variacaoPct: number|null }|null}
+ */
+export function extrairEmissoesCarbono(flight) {
+  const extras = Array.isArray(flight?.[22]) ? flight[22] : null;
+  if (!extras) return null;
+
+  const gramas = typeof extras[7] === 'number' && Number.isFinite(extras[7]) && extras[7] > 0 ? extras[7] : null;
+  const tipicaGramas = typeof extras[8] === 'number' && Number.isFinite(extras[8]) && extras[8] > 0 ? extras[8] : null;
+
+  if (gramas === null && tipicaGramas === null) return null;
+
+  const kg = gramas !== null ? Math.round(gramas / 1000) : null;
+  const tipicaKg = tipicaGramas !== null ? Math.round(tipicaGramas / 1000) : null;
+  const variacaoPct = (gramas !== null && tipicaGramas !== null && tipicaGramas > 0)
+    ? Math.round(((gramas - tipicaGramas) / tipicaGramas) * 100)
+    : null;
+
+  return { kg, tipicaKg, variacaoPct };
 }
 
 /**
@@ -626,36 +710,32 @@ export function extrairNumeroVooTrecho(leg) {
 
 /**
  * Calcula a diferença real em minutos entre a chegada do trecho anterior e a partida do seguinte.
+ * Suporta sparse time arrays.
  * @param {Array|null} legChegada
  * @param {Array|null} legPartida
  * @returns {number|null}
  */
 export function calcularTempoConexaoTrechos(legChegada, legPartida) {
-  if (!Array.isArray(legChegada) || !Array.isArray(legPartida)) return null;
-  const horaChegada = legChegada[10];
-  const horaPartida = legPartida[8];
-  if (!Array.isArray(horaChegada) || horaChegada.length < 2 || !Array.isArray(horaPartida) || horaPartida.length < 2) {
-    return null;
-  }
-  const [hChegada, mChegada] = horaChegada;
-  const [hPartida, mPartida] = horaPartida;
-  if (!Number.isFinite(hChegada) || !Number.isFinite(mChegada) || !Number.isFinite(hPartida) || !Number.isFinite(mPartida)) {
-    return null;
-  }
+  const hmChegada = extrairHoraMinutoTrecho(legChegada?.[10]);
+  const hmPartida = extrairHoraMinutoTrecho(legPartida?.[8]);
+  if (!hmChegada || !hmPartida) return null;
 
-  const dataChegada = legChegada[21];
-  const dataPartida = legPartida[20];
+  const dataChegada = legChegada?.[21];
+  const dataPartida = legPartida?.[20];
 
-  if (Array.isArray(dataChegada) && dataChegada.length >= 3 && Array.isArray(dataPartida) && dataPartida.length >= 3) {
-    const tsChegada = Date.UTC(dataChegada[0], dataChegada[1] - 1, dataChegada[2], hChegada, mChegada);
-    const tsPartida = Date.UTC(dataPartida[0], dataPartida[1] - 1, dataPartida[2], hPartida, mPartida);
-    const diffMin = Math.round((tsPartida - tsChegada) / 60000);
-    return diffMin >= 0 ? diffMin : null;
+  if (
+    Array.isArray(dataChegada) && dataChegada.length >= 3 &&
+    Array.isArray(dataPartida) && dataPartida.length >= 3
+  ) {
+    const utcChegada = Date.UTC(dataChegada[0], dataChegada[1] - 1, dataChegada[2], hmChegada.h, hmChegada.m);
+    const utcPartida = Date.UTC(dataPartida[0], dataPartida[1] - 1, dataPartida[2], hmPartida.h, hmPartida.m);
+    const diffMin = Math.round((utcPartida - utcChegada) / 60000);
+    return (diffMin >= 0 && diffMin <= 2880) ? diffMin : null;
   }
 
-  let diffMin = (hPartida * 60 + mPartida) - (hChegada * 60 + mChegada);
+  let diffMin = (hmPartida.h * 60 + hmPartida.m) - (hmChegada.h * 60 + hmChegada.m);
   if (diffMin < 0) diffMin += 1440; // transição da meia-noite
-  return diffMin;
+  return (diffMin >= 0 && diffMin <= 1440) ? diffMin : null;
 }
 
 /**
@@ -817,6 +897,14 @@ export function extrairVoosDoPayloadJs(html) {
 
         const horarioPartida = legs.length > 0 ? formatarHorarioTrecho(legs[0]?.[8]) : null;
         const horarioChegada = legs.length > 0 ? formatarHorarioTrecho(legs[legs.length - 1]?.[10]) : null;
+        const dataPartida = legs.length > 0 ? formatarDataTrecho(legs[0]?.[20]) : null;
+        const dataChegada = legs.length > 0 ? formatarDataTrecho(legs[legs.length - 1]?.[21]) : null;
+        const diasExtrasChegada = calcularDiasExtrasChegada(dataPartida, dataChegada);
+        const aeronaves = legs
+          .map(leg => (typeof leg?.[17] === 'string' && leg[17].trim()) ? leg[17].trim() : null)
+          .filter(Boolean);
+        const aeronave = aeronaves[0] || null;
+        const emissoes = extrairEmissoesCarbono(flight);
         const numeroVoo = legs.length > 0 ? extrairNumeroVooTrecho(legs[0]) : null;
         const aeroportoOrigem = (legs.length > 0 && typeof legs[0]?.[3] === 'string')
           ? legs[0][3].trim().toUpperCase()
@@ -857,6 +945,12 @@ export function extrairVoosDoPayloadJs(html) {
           numeroVoo,
           horarioPartida,
           horarioChegada,
+          dataPartida,
+          dataChegada,
+          diasExtrasChegada,
+          aeronave,
+          aeronaves,
+          emissoes,
           duracaoTexto,
           duracaoHoras,
           escalas,

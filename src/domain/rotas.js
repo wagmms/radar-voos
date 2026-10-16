@@ -548,6 +548,54 @@ export function ehRotaDomesticaBrasil(origem, destino) {
 }
 
 /**
+ * Aeroportos e hubs da América do Sul para classificação de rotas intercontinentais
+ */
+export const CODIGOS_AEROPORTOS_AMERICA_DO_SUL = new Set([
+  ...CODIGOS_AEROPORTOS_BRASIL,
+  'SAM', // Metrópole / Código regional América do Sul
+  'EZE', 'AEP', 'COR', 'MDZ', 'ROS', 'BRC', 'SLA', 'IGR', 'USH', 'FTE', // Argentina
+  'SCL', 'ANF', 'CJC', 'PMC', 'PUQ', // Chile
+  'MVD', 'PDP', // Uruguai
+  'ASU', 'AGT', // Paraguai
+  'LIM', 'CUZ', 'AQP', 'TRU', // Peru
+  'BOG', 'MDE', 'CTG', 'CLO', 'BAQ', // Colômbia
+  'UIO', 'GYE', // Equador
+  'VVI', 'LPB', 'CBB', // Bolívia
+  'CCS', 'MAR', 'VLN', // Venezuela
+  'GEO', 'PBM', 'CAY' // Guianas e Suriname
+]);
+
+/**
+ * Verifica se um código pertence à América do Sul
+ * @param {string} termoOuCodigo
+ * @returns {boolean}
+ */
+export function ehAeroportoAmericaDoSul(termoOuCodigo) {
+  if (!termoOuCodigo) return false;
+  const resolvido = resolverCodigoIata(termoOuCodigo) || resolverDestino(termoOuCodigo) || String(termoOuCodigo).trim().toUpperCase();
+  const cod = String(resolvido).trim().toUpperCase();
+  if (CODIGOS_AEROPORTOS_AMERICA_DO_SUL.has(cod)) return true;
+  if (cod.includes(',')) {
+    const partes = cod.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    return partes.length > 0 && partes.every(p => CODIGOS_AEROPORTOS_AMERICA_DO_SUL.has(p));
+  }
+  return false;
+}
+
+/**
+ * Identifica se a rota é intercontinental (uma ponta na América do Sul e a outra fora).
+ * @param {string} origem
+ * @param {string} destino
+ * @returns {boolean}
+ */
+export function ehRotaIntercontinental(origem, destino) {
+  if (!origem || !destino) return false;
+  const origSul = ehAeroportoAmericaDoSul(origem);
+  const destSul = ehAeroportoAmericaDoSul(destino);
+  return (origSul && !destSul) || (!origSul && destSul);
+}
+
+/**
  * Gera link direto e estruturado para o Google Flights que abre direto no voo / rota
  */
 export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda = 'BRL') {
@@ -1055,8 +1103,18 @@ export function gerarLinkGoogleFlightsCheapest(
     checkedBags = null,
     maxPrice = null,
     hideSeparateAndSelfTransfer = null,
-    excludeBasicEconomy = null
+    excludeBasicEconomy = null,
+    autoExcludeBasicEconomyIntercontinental = false
   } = opcoesAvancadas || {};
+
+  const isIntercontinental = ehRotaIntercontinental(origCod, destCod) || ehRotaIntercontinental(origemCod, destinoCod);
+  const hideTransferFinal = (hideSeparateAndSelfTransfer !== null && hideSeparateAndSelfTransfer !== undefined)
+    ? Boolean(hideSeparateAndSelfTransfer)
+    : true;
+
+  const excludeBasicFinal = (excludeBasicEconomy !== null && excludeBasicEconomy !== undefined)
+    ? Boolean(excludeBasicEconomy)
+    : (autoExcludeBasicEconomyIntercontinental ? isIntercontinental : false);
 
   const tfs = gerarTfs({
     origens,
@@ -1082,8 +1140,8 @@ export function gerarLinkGoogleFlightsCheapest(
     carryOnBags,
     checkedBags,
     maxPrice,
-    hideSeparateAndSelfTransfer,
-    excludeBasicEconomy
+    hideSeparateAndSelfTransfer: hideTransferFinal,
+    excludeBasicEconomy: excludeBasicFinal
   });
 
   const nBebesTfu = (infantsOnLap !== null && infantsOnLap !== undefined)

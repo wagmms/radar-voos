@@ -12,7 +12,8 @@ import {
   ehSoIda,
   rotaEhSoIda,
   obterDatasEfetivasRota,
-  ehRotaDomesticaBrasil
+  ehRotaDomesticaBrasil,
+  ehAeroportoOuRegiaoBrasil
 } from './domain/rotas.js';
 
 let dbInstance = null;
@@ -628,9 +629,16 @@ export const rotasRepo = {
         precisaAtualizar = true;
       }
 
-      // 0. Correção de contaminação de moeda em rotas domésticas brasileiras e América do Sul
+      // 0a. Auto-higienização de artefatos deixados por mocks de testes automatizados
+      const ehPoluidaPorMock = (r.detalhes_voo && (r.detalhes_voo.includes('Voo Simulado') || r.detalhes_voo.includes('Voo EUR') || r.detalhes_voo.includes('Voo USD'))) ||
+        (r.destino_real && r.destino_real.includes('Miami') && codDestino !== 'MIA' && !r.destino.toLowerCase().includes('miami'));
+
+      // 0b. Correção de contaminação de moeda em rotas domésticas brasileiras, América do Sul ou com origem no Brasil
       const linkMoedaEstrangeira = novoLink && (novoLink.includes('curr=EUR') || novoLink.includes('curr=USD'));
-      if ((domestica || ehAmericaDoSul) && (novaMoeda !== 'BRL' || linkMoedaEstrangeira)) {
+      const origemNoBrasil = ehAeroportoOuRegiaoBrasil(codOrigem);
+      const deveOperarEmBrl = domestica || ehAmericaDoSul || (origemNoBrasil && (r.preco_alvo >= 500 || linkMoedaEstrangeira));
+
+      if (deveOperarEmBrl && (novaMoeda !== 'BRL' || linkMoedaEstrangeira)) {
         novaMoeda = 'BRL';
         if (codOrigem && codDestino) {
           novoLink = gerarLinkGoogleFlights(codOrigem, codDestino, r.data_ida, soIda ? null : novaDataVolta, 'BRL');
@@ -638,6 +646,13 @@ export const rotasRepo = {
         novoPrecoAtual = null;
         novoMenorHistorico = null;
         novoTermometro = '⚪ Aguardando rechecagem em BRL';
+        precisaAtualizar = true;
+      }
+
+      if (ehPoluidaPorMock) {
+        novoPrecoAtual = null;
+        novoMenorHistorico = null;
+        novoTermometro = '⚪ Aguardando checagem real';
         precisaAtualizar = true;
       }
 
@@ -657,18 +672,37 @@ export const rotasRepo = {
           precisaAtualizar = true;
         }
         if (precisaAtualizar) {
-          db.prepare(`
-            UPDATE rotas SET
-              preco_atual = ?,
-              menor_preco_historico = ?,
-              link_google_flights = ?,
-              termometro = ?,
-              moeda = ?,
-              tipo_viagem = ?,
-              data_volta = NULL,
-              dias_estadia = NULL
-            WHERE id = ?
-          `).run(novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, novaMoeda, tipoViagemEsperado, r.id);
+          if (ehPoluidaPorMock) {
+            db.prepare(`
+              UPDATE rotas SET
+                preco_atual = NULL,
+                menor_preco_historico = NULL,
+                link_google_flights = ?,
+                termometro = ?,
+                moeda = ?,
+                tipo_viagem = ?,
+                data_volta = NULL,
+                dias_estadia = NULL,
+                detalhes_voo = NULL,
+                destino_real = NULL,
+                ultima_checagem = NULL,
+                variacao_texto = '-'
+              WHERE id = ?
+            `).run(novoLink, novoTermometro, novaMoeda, tipoViagemEsperado, r.id);
+          } else {
+            db.prepare(`
+              UPDATE rotas SET
+                preco_atual = ?,
+                menor_preco_historico = ?,
+                link_google_flights = ?,
+                termometro = ?,
+                moeda = ?,
+                tipo_viagem = ?,
+                data_volta = NULL,
+                dias_estadia = NULL
+              WHERE id = ?
+            `).run(novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, novaMoeda, tipoViagemEsperado, r.id);
+          }
           totalSanitizadas++;
         }
         continue;
@@ -701,17 +735,35 @@ export const rotasRepo = {
       }
 
       if (precisaAtualizar) {
-        db.prepare(`
-          UPDATE rotas SET
-            data_volta = ?,
-            preco_atual = ?,
-            menor_preco_historico = ?,
-            link_google_flights = ?,
-            termometro = ?,
-            moeda = ?,
-            tipo_viagem = ?
-          WHERE id = ?
-        `).run(novaDataVolta, novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, novaMoeda, tipoViagemEsperado, r.id);
+        if (ehPoluidaPorMock) {
+          db.prepare(`
+            UPDATE rotas SET
+              data_volta = ?,
+              preco_atual = NULL,
+              menor_preco_historico = NULL,
+              link_google_flights = ?,
+              termometro = ?,
+              moeda = ?,
+              tipo_viagem = ?,
+              detalhes_voo = NULL,
+              destino_real = NULL,
+              ultima_checagem = NULL,
+              variacao_texto = '-'
+            WHERE id = ?
+          `).run(novaDataVolta, novoLink, novoTermometro, novaMoeda, tipoViagemEsperado, r.id);
+        } else {
+          db.prepare(`
+            UPDATE rotas SET
+              data_volta = ?,
+              preco_atual = ?,
+              menor_preco_historico = ?,
+              link_google_flights = ?,
+              termometro = ?,
+              moeda = ?,
+              tipo_viagem = ?
+            WHERE id = ?
+          `).run(novaDataVolta, novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, novaMoeda, tipoViagemEsperado, r.id);
+        }
         totalSanitizadas++;
       }
     }

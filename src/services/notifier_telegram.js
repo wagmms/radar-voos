@@ -28,6 +28,59 @@ export function ehPeriodoNoturno(dataRef = new Date()) {
   return hora >= 22 || hora < 8;
 }
 
+/**
+ * Formata o sufixo de dias extras após o horário de chegada.
+ * Ex: 1 -> " (+1 dia)", 2 -> " (+2 dias)"
+ * @param {number|null|undefined} diasExtrasChegada
+ * @returns {string}
+ */
+export function formatarSufixoDiasExtras(diasExtrasChegada) {
+  const dias = Number(diasExtrasChegada);
+  if (!Number.isFinite(dias) || dias <= 0) return '';
+  return ` (+${dias} ${dias === 1 ? 'dia' : 'dias'})`;
+}
+
+/**
+ * Formata as linhas adicionais de aeronave e emissões para mensagens HTML do Telegram.
+ * @param {Object} params
+ * @param {string|null} [params.aeronave]
+ * @param {Object|string|null} [params.emissoes]
+ * @returns {string}
+ */
+export function formatarMetadadosVooTelegram({ aeronave = null, emissoes = null } = {}) {
+  let linhas = '';
+
+  if (aeronave && String(aeronave).trim()) {
+    linhas += `✈️ <b>Aeronave:</b> ${escapeHtml(String(aeronave).trim())}\n`;
+  }
+
+  if (emissoes) {
+    let objEmissoes = emissoes;
+    if (typeof emissoes === 'string') {
+      try {
+        objEmissoes = JSON.parse(emissoes);
+      } catch {
+        objEmissoes = null;
+      }
+    }
+
+    if (objEmissoes && Number.isFinite(Number(objEmissoes.kg)) && Number(objEmissoes.kg) > 0) {
+      const kg = Number(objEmissoes.kg);
+      let pctStr = '';
+      if (objEmissoes.variacaoPct !== undefined && objEmissoes.variacaoPct !== null && objEmissoes.variacaoPct !== '') {
+        const pct = Number(objEmissoes.variacaoPct);
+        if (Number.isFinite(pct)) {
+          const sinal = pct > 0 ? '+' : '';
+          pctStr = ` (${sinal}${pct}%)`;
+        }
+      }
+      linhas += `🌱 <b>Emissões:</b> ${kg} kg CO₂${escapeHtml(pctStr)}\n`;
+    }
+  }
+
+  return linhas;
+}
+
 class NotifierTelegram {
   constructor() {
     this.token = config.telegram.botToken;
@@ -139,7 +192,10 @@ class NotifierTelegram {
     melhorDataAlternativa = null,
     rankingDestinosRegionais = null,
     destinoVencedorIata = null,
-    destinoVencedorNome = null
+    destinoVencedorNome = null,
+    diasExtrasChegada = null,
+    aeronave = null,
+    emissoes = null
   }) {
     const ehSoIdaAlerta = ehSoIda(dataVolta);
     const escopoModalidade = ehSoIdaAlerta ? 'Apenas Ida' : 'Ida e Volta';
@@ -217,11 +273,13 @@ class NotifierTelegram {
     }
 
     if (horarioPartida && horarioChegada) {
+      const sufixoDias = formatarSufixoDiasExtras(diasExtrasChegada);
       const vooStr = numeroVoo ? ` (${escapeHtml(numeroVoo)})` : '';
-      msg += `🕒 <b>Horário:</b> ${escapeHtml(horarioPartida)} ➔ ${escapeHtml(horarioChegada)}${vooStr}\n`;
+      msg += `🕒 <b>Horário:</b> ${escapeHtml(horarioPartida)} ➔ ${escapeHtml(horarioChegada)}${sufixoDias}${vooStr}\n`;
     }
 
     msg += `⏱️ ${duracaoHoras.toFixed(1).replace('.', ',')}h | ${escapeHtml(detalhes)}\n`;
+    msg += formatarMetadadosVooTelegram({ aeronave, emissoes });
 
     const temEscala = escalas !== null ? Number(escalas) > 0 : (detalhes && !detalhes.toLowerCase().includes('direto'));
     if (temEscala && tempoConexao) {

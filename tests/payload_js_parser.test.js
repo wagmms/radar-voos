@@ -6,7 +6,12 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   extrairVoosDoPayloadJs,
-  extrairVoosDoHtml
+  extrairVoosDoHtml,
+  formatarHorarioTrecho,
+  formatarDataTrecho,
+  calcularDiasExtrasChegada,
+  extrairEmissoesCarbono,
+  calcularTempoConexaoTrechos
 } from '../src/services/providers/scrapling_client.js';
 
 // Fixture mockada simulando a resposta real do Google Flights com script.ds:1
@@ -392,6 +397,118 @@ describe('Fast-Flights Engine: extrairVoosDoPayloadJs (script.ds:1)', () => {
       assert.strictEqual(insights.faixaMaxima, 3480);
       assert.strictEqual(insights.moeda, 'BRL');
       assert.strictEqual(insights.moedaOriginal, 'USD');
+    });
+  });
+
+  describe('Enriquecimento Etapa 1 — Sparse Times, Datas, Aeronaves e Emissões de CO2', () => {
+    it('formatarHorarioTrecho suporta Sparse Time Arrays do JSPB', () => {
+      assert.strictEqual(formatarHorarioTrecho([8]), '08:00');
+      assert.strictEqual(formatarHorarioTrecho([null, 31]), '00:31');
+      assert.strictEqual(formatarHorarioTrecho([14, 5]), '14:05');
+      assert.strictEqual(formatarHorarioTrecho([]), '00:00');
+      assert.strictEqual(formatarHorarioTrecho([0, 0]), '00:00');
+
+      // Casos inválidos
+      assert.strictEqual(formatarHorarioTrecho(null), null);
+      assert.strictEqual(formatarHorarioTrecho('08:00'), null);
+      assert.strictEqual(formatarHorarioTrecho([24, 0]), null);
+      assert.strictEqual(formatarHorarioTrecho([-1, 10]), null);
+      assert.strictEqual(formatarHorarioTrecho([10, 60]), null);
+      assert.strictEqual(formatarHorarioTrecho([10, 30, 0]), null);
+    });
+
+    it('calcularTempoConexaoTrechos funciona com horários esparsos ([8] e [null, 31])', () => {
+      const legChegada = [];
+      legChegada[10] = [null, 31]; // pousa às 00:31
+      legChegada[21] = [2026, 11, 10];
+
+      const legPartida = [];
+      legPartida[8] = [8]; // decola às 08:00
+      legPartida[20] = [2026, 11, 10];
+
+      assert.strictEqual(calcularTempoConexaoTrechos(legChegada, legPartida), 449); // 7h29m = 449 min
+    });
+
+    it('formatarDataTrecho e calcularDiasExtrasChegada calculam corretamente voos noturnos (+1/+2 dias)', () => {
+      assert.strictEqual(formatarDataTrecho([2026, 5, 9]), '2026-05-09');
+      assert.strictEqual(formatarDataTrecho([2026, 11, 10]), '2026-11-10');
+      assert.strictEqual(formatarDataTrecho([2026, 13, 10]), null);
+      assert.strictEqual(formatarDataTrecho(null), null);
+
+      assert.strictEqual(calcularDiasExtrasChegada('2026-11-10', '2026-11-10'), 0);
+      assert.strictEqual(calcularDiasExtrasChegada('2026-11-10', '2026-11-11'), 1);
+      assert.strictEqual(calcularDiasExtrasChegada('2026-11-10', '2026-11-12'), 2);
+      assert.strictEqual(calcularDiasExtrasChegada(null, '2026-11-11'), 0);
+    });
+
+    it('extrairEmissoesCarbono converte gramas para kg e calcula variação percentual', () => {
+      const flight = [];
+      flight[22] = [null, null, null, null, null, null, null, 115000, 131000];
+
+      const emissoes = extrairEmissoesCarbono(flight);
+      assert.deepStrictEqual(emissoes, {
+        kg: 115,
+        tipicaKg: 131,
+        variacaoPct: -12
+      });
+
+      assert.strictEqual(extrairEmissoesCarbono([]), null);
+    });
+
+    it('extrairVoosDoPayloadJs extrai aeronave, datas, diasExtrasChegada, emissoes e sparse times', () => {
+      const leg1 = [];
+      leg1[3] = 'GRU';
+      leg1[6] = 'CMN';
+      leg1[8] = [null, 35]; // 00:35
+      leg1[10] = [13];      // 13:00
+      leg1[11] = 505;
+      leg1[17] = 'Boeing 787-8';
+      leg1[20] = [2026, 11, 10];
+      leg1[21] = [2026, 11, 10];
+      leg1[22] = ['AT', '215', null, 'Royal Air Maroc'];
+
+      const leg2 = [];
+      leg2[3] = 'CMN';
+      leg2[6] = 'CDG';
+      leg2[8] = [16];       // 16:00
+      leg2[10] = [20, 5];   // 20:05
+      leg2[11] = 185;
+      leg2[17] = 'Boeing 737-800';
+      leg2[20] = [2026, 11, 11];
+      leg2[21] = [2026, 11, 11];
+      leg2[22] = ['AT', '770', null, 'Royal Air Maroc'];
+
+      const flight = [
+        'Royal Air Maroc',
+        ['AT'],
+        [leg1, leg2],
+        null, null, null, null, null, null,
+        1650
+      ];
+      flight[22] = [null, null, null, null, null, null, null, 580000, 650000];
+
+      const wrapper = [flight, [[null, 3490]]];
+      const data = [null, null, [[wrapper]]];
+      const html = `<script class="ds:1">AF_initDataCallback({key:'ds:1',data:${JSON.stringify(data)},sideChannel:{}});</script>`;
+
+      const voos = extrairVoosDoPayloadJs(html);
+      assert.strictEqual(voos.length, 1);
+      const v = voos[0];
+      assert.strictEqual(v.preco, 3490);
+      assert.strictEqual(v.horarioPartida, '00:35');
+      assert.strictEqual(v.horarioChegada, '20:05');
+      assert.strictEqual(v.dataPartida, '2026-11-10');
+      assert.strictEqual(v.dataChegada, '2026-11-11');
+      assert.strictEqual(v.diasExtrasChegada, 1);
+      assert.strictEqual(v.aeronave, 'Boeing 787-8');
+      assert.deepStrictEqual(v.aeronaves, ['Boeing 787-8', 'Boeing 737-800']);
+      assert.deepStrictEqual(v.emissoes, {
+        kg: 580,
+        tipicaKg: 650,
+        variacaoPct: -11
+      });
+      assert.strictEqual(v.aeroportoConexao, 'CMN');
+      assert.strictEqual(v.tempoConexaoMinutos, 1620); // 27h entre 13h do dia 10 e 16h do dia 11
     });
   });
 });

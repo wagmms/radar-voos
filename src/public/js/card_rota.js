@@ -56,14 +56,16 @@ export function renderizarBadgeMeta(rota) {
 
   const precoAlvo = Number(rota.preco_alvo);
   const precoAtual = Number(rota.preco_atual);
+  const moedaCode = (rota.moeda || 'BRL').trim().toUpperCase();
+  const simboloMoeda = moedaCode === 'USD' ? 'US$' : (moedaCode === 'EUR' ? '€' : 'R$');
 
   if (Number.isFinite(precoAtual) && precoAtual > 0 && precoAtual <= precoAlvo) {
     const economia = precoAlvo - precoAtual;
-    const econTexto = economia > 0 ? ` (Economia de R$ ${formatarPreco(economia)})` : ' (No teto)';
-    return `<span class="badge badge-meta badge-meta-batida" data-testid="badge-meta-batida">🎯 Meta Batida • R$ ${formatarPreco(precoAlvo)}${escapeHtml(econTexto)}</span>`;
+    const econTexto = economia > 0 ? ` (Economia de ${simboloMoeda} ${formatarPreco(economia)})` : ' (No teto)';
+    return `<span class="badge badge-meta badge-meta-batida" data-testid="badge-meta-batida">🎯 Meta Batida • ${simboloMoeda} ${formatarPreco(precoAlvo)}${escapeHtml(econTexto)}</span>`;
   }
 
-  return `<span class="badge badge-meta" data-testid="badge-meta">🎯 Meta: R$ ${formatarPreco(precoAlvo)}</span>`;
+  return `<span class="badge badge-meta" data-testid="badge-meta">🎯 Meta: ${simboloMoeda} ${formatarPreco(precoAlvo)}</span>`;
 }
 
 /**
@@ -137,6 +139,11 @@ export function renderizarBadgesFiltros(rota) {
     badges.push('<span class="badge badge-filtro">🧳 Mala despachada</span>');
   }
 
+  const durMax = Number(rota.duracao_max_horas);
+  if (Number.isFinite(durMax) && durMax > 0 && durMax < 900) {
+    badges.push(`<span class="badge badge-filtro" data-testid="badge-duracao-max" title="Filtro ativo: apenas voos com até ${durMax}h de duração total">⏱️ Máx. ${durMax}h</span>`);
+  }
+
   return badges.join(' ');
 }
 
@@ -145,21 +152,29 @@ export function renderizarBadgesFiltros(rota) {
  */
 export function renderizarLinhaHorarios(rota) {
   if (!rota) return '';
-  const partida = rota.horario_partida || (rota.oferta && rota.oferta.horarioPartida);
-  const chegada = rota.horario_chegada || (rota.oferta && rota.oferta.horarioChegada);
-  const voo = rota.numero_voo || (rota.oferta && rota.oferta.numeroVoo);
-  const conexao = rota.tempo_conexao || (rota.oferta && rota.oferta.tempoConexao);
+  const partida = rota.horario_partida || rota.horarioPartida || (rota.oferta && rota.oferta.horarioPartida);
+  const chegada = rota.horario_chegada || rota.horarioChegada || (rota.oferta && rota.oferta.horarioChegada);
+  const voo = rota.numero_voo || rota.numeroVoo || (rota.oferta && rota.oferta.numeroVoo);
+  const conexao = rota.tempo_conexao || rota.tempoConexao || (rota.oferta && rota.oferta.tempoConexao);
+  const diasExtrasRaw = rota.dias_extras_chegada ?? rota.diasExtrasChegada ?? (rota.oferta && rota.oferta.diasExtrasChegada);
+  const diasExtras = Number(diasExtrasRaw);
+  const aeronave = rota.aeronave || (rota.oferta && rota.oferta.aeronave);
 
   if (!partida || !chegada) return '';
 
+  const diasExtrasStr = (Number.isFinite(diasExtras) && diasExtras > 0)
+    ? `<span class="badge-dias-extras" data-testid="badge-dias-extras">+${diasExtras}d</span>`
+    : '';
   const vooStr = voo ? ` • <span class="voo-tag">${escapeHtml(voo)}</span>` : '';
+  const aeronaveStr = aeronave ? ` • <span class="aeronave-tag">✈️ ${escapeHtml(aeronave)}</span>` : '';
   const conexaoStr = conexao ? ` • <span class="conexao-tag">⏱️ Espera: ${escapeHtml(conexao)}</span>` : '';
 
   return `
     <div class="card-horarios" data-testid="card-horarios">
       <span class="horario-icon">🕒</span>
-      <span class="horario-texto">${escapeHtml(partida)} ➔ ${escapeHtml(chegada)}</span>
+      <span class="horario-texto">${escapeHtml(partida)} ➔ ${escapeHtml(chegada)}${diasExtrasStr}</span>
       ${vooStr}
+      ${aeronaveStr}
       ${conexaoStr}
     </div>
   `.trim();
@@ -405,9 +420,11 @@ export function renderizarCardRota(rota) {
   const origem = rota.origem || 'Origem';
   const destino = rota.destino_real || rota.destino || 'Destino';
   const precoAtual = Number(rota.preco_atual);
-  const precoStr = Number.isFinite(precoAtual) && precoAtual > 0 ? `R$ ${formatarPreco(precoAtual)}` : 'Aguardando checagem';
+  const moedaCode = (rota.moeda || 'BRL').trim().toUpperCase();
+  const simboloMoeda = moedaCode === 'USD' ? 'US$' : (moedaCode === 'EUR' ? '€' : 'R$');
+  const precoStr = Number.isFinite(precoAtual) && precoAtual > 0 ? `${simboloMoeda} ${formatarPreco(precoAtual)}` : 'Aguardando checagem';
   const menorHist = Number(rota.menor_preco_historico);
-  const menorHistStr = Number.isFinite(menorHist) && menorHist > 0 ? `Menor: R$ ${formatarPreco(menorHist)}` : '';
+  const menorHistStr = Number.isFinite(menorHist) && menorHist > 0 ? `Menor: ${simboloMoeda} ${formatarPreco(menorHist)}` : '';
   let termometro = rota.termometro || '⚪ Sem dados recentes';
   // Sanitizar contra parênteses vazios gerados por labels ausentes
   termometro = String(termometro).replace(/\s*\(\s*\)/g, '').trim();
@@ -496,7 +513,7 @@ export function renderizarCardRota(rota) {
       ` : ''}
 
       <footer class="rota-card-actions">
-        <a href="${escapeHtml(linkGoogle)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm">
+        <a href="${escapeHtml(linkGoogle)}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" title="${escapeHtml(Number.isFinite(Number(rota.duracao_max_horas)) && Number(rota.duracao_max_horas) > 0 && Number(rota.duracao_max_horas) < 900 ? `Abrir no Google Flights (Filtro ativo de duração máxima ≤ ${rota.duracao_max_horas}h)` : 'Abrir no Google Flights')}">
           ✈️ Google Flights
         </a>
         <button type="button" class="btn btn-secondary btn-sm" data-action="verificar" data-id="${id}">

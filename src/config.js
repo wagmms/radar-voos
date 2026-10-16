@@ -14,11 +14,29 @@ const parsedKeys = rawKeys
   .map(k => k.trim())
   .filter(Boolean);
 
+const ehAmbienteTeste =
+  process.env.NODE_ENV === 'test' ||
+  process.env.TEST === 'true' ||
+  (Array.isArray(process.argv) && process.argv.some(arg => typeof arg === 'string' && (arg.includes('.test.') || arg.includes('/tests/')))) ||
+  (Array.isArray(process.execArgv) && process.execArgv.some(arg => typeof arg === 'string' && arg.startsWith('--test')));
+
+const resolverDbPath = () => {
+  if (ehAmbienteTeste) {
+    // Em teste, nunca permitir o banco de produção radar_voos.sqlite vindo do .env
+    const dbTestEnv = process.env.TEST_DB_PATH || process.env.DB_PATH;
+    if (dbTestEnv && dbTestEnv.includes('test')) {
+      return dbTestEnv;
+    }
+    return './data/radar_voos_test.sqlite';
+  }
+  return process.env.DB_PATH || './data/radar_voos.sqlite';
+};
+
 export const config = {
-  env: process.env.NODE_ENV || 'development',
+  env: process.env.NODE_ENV || (ehAmbienteTeste ? 'test' : 'development'),
   port: parseInt(process.env.PORT || '3333', 10),
   host: process.env.HOST || '0.0.0.0',
-  dbPath: path.resolve(__dirname, '..', process.env.DB_PATH || './data/radar_voos.sqlite'),
+  dbPath: path.resolve(__dirname, '..', resolverDbPath()),
   
   serpApi: {
     keys: parsedKeys.length > 0 ? parsedKeys : [],
