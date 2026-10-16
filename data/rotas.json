@@ -117,14 +117,14 @@
     "codigo_origem": "BHZ",
     "codigo_destino": "BUE",
     "data_ida": "2026-11-20",
-    "data_volta": "2026-11-27",
+    "data_volta": null,
     "duracao_max_horas": 999,
     "preco_alvo": 1950,
     "cabine": "economy",
     "flexibilidade_dias": 0,
     "sem_data": 0,
-    "dias_estadia": 7,
-    "tipo_viagem": "round_trip",
+    "dias_estadia": null,
+    "tipo_viagem": "one_way",
     "ativa": 1
   }
 ]
