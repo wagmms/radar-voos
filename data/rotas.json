@@ -94,21 +94,5 @@
     "dias_estadia": 10,
     "tipo_viagem": "round_trip",
     "ativa": 1
-  },
-  {
-    "origem": "Brasília",
-    "destino": "Miami",
-    "codigo_origem": "BSB",
-    "codigo_destino": "MIA",
-    "data_ida": "2026-12-01",
-    "data_volta": "2026-12-11",
-    "duracao_max_horas": 999,
-    "preco_alvo": 3000,
-    "cabine": "economy",
-    "flexibilidade_dias": 0,
-    "sem_data": 0,
-    "dias_estadia": 10,
-    "tipo_viagem": "round_trip",
-    "ativa": 1
   }
 ]
