@@ -8,12 +8,13 @@ import { renderizarCardRota } from './js/card_rota.js';
 // Estado da aplicação
 const state = {
   rotas: [],
-  carregando: false
+  carregando: false,
+  varrendo: false
 };
 
 // Elementos DOM
 const rotasContainer = document.getElementById('rotas-container');
-const btnSync = document.getElementById('btn-sync');
+const btnVarrerTodas = document.getElementById('btn-varrer-todas') || document.getElementById('btn-sync');
 const btnNovaRota = document.getElementById('btn-nova-rota');
 const modalRota = document.getElementById('modal-rota');
 const modalTitulo = document.getElementById('modal-titulo');
@@ -288,11 +289,83 @@ async function manipularAcaoCard(e) {
   }
 }
 
+/**
+ * Executa a varredura completa sob demanda de todas as rotas monitoradas no Google Flights
+ */
+export async function varrerTodasRotas() {
+  const btn = document.getElementById('btn-varrer-todas') || document.getElementById('btn-sync');
+  if (state.varrendo) return;
+
+  if (!state.rotas || state.rotas.length === 0) {
+    exibirToast('Nenhuma rota monitorada para varrer.', 'info');
+    return;
+  }
+
+  state.varrendo = true;
+  const txtOriginal = btn ? btn.innerHTML : '⚡ Varrer Todos os Voos';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading-spinner"></span> Varrendo voos...';
+  }
+
+  exibirToast('🔍 Iniciando varredura de voos em todas as rotas monitoradas...', 'info', 4500);
+
+  try {
+    const res = await fetch('/api/varredura', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ todas: true })
+    });
+
+    const json = await res.json();
+    if (res.status === 409) {
+      exibirToast(json.erro || 'Uma varredura já está em andamento no servidor.', 'info');
+    } else if (json.ok) {
+      const processadas = json.resultado?.processadas ?? state.rotas.length;
+      exibirToast(`✅ Varredura concluída! ${processadas} ${processadas === 1 ? 'rota atualizada' : 'rotas atualizadas'}.`, 'success');
+      await carregarRotas();
+    } else {
+      exibirToast(json.erro || 'Falha ao executar varredura de voos.', 'error');
+    }
+  } catch (err) {
+    exibirToast(`Erro de conexão ao varrer voos: ${err.message}`, 'error');
+  } finally {
+    state.varrendo = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = txtOriginal;
+    }
+  }
+}
+
+/**
+ * Conecta ao Server-Sent Events (SSE) para atualização em tempo real no Cockpit
+ */
+export function inicializarSseTelemetria() {
+  if (typeof window === 'undefined' || typeof window.EventSource === 'undefined') return;
+  try {
+    const es = new EventSource('/api/stream/telemetria');
+    es.addEventListener('telemetria', (e) => {
+      try {
+        const evento = JSON.parse(e.data);
+        if (['rota_verificada', 'ciclo_concluido', 'nova_rota', 'rota_atualizada', 'rota_removida'].includes(evento.tipo)) {
+          carregarRotas();
+        }
+      } catch (_) {}
+    });
+    es.onerror = () => {
+      // Reconexão automática em caso de instabilidade
+    };
+  } catch (_) {}
+}
+
 // Inicialização de listeners no DOM
 document.addEventListener('DOMContentLoaded', () => {
   carregarRotas();
+  inicializarSseTelemetria();
 
-  if (btnSync) btnSync.addEventListener('click', carregarRotas);
+  const btnVarrer = document.getElementById('btn-varrer-todas') || document.getElementById('btn-sync');
+  if (btnVarrer) btnVarrer.addEventListener('click', varrerTodasRotas);
   if (btnNovaRota) btnNovaRota.addEventListener('click', () => abrirModal());
   if (btnFecharModal) btnFecharModal.addEventListener('click', fecharModal);
   if (btnCancelar) btnCancelar.addEventListener('click', fecharModal);

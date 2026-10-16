@@ -700,6 +700,7 @@ export class FlightScanner {
       const moedaRota = (moedaGlob || rota.moeda || rota.curr || 'BRL').trim().toUpperCase();
       try {
         const res = await FlightScanner.escanearRota(rota, { moeda: moedaRota });
+        telemetryEvents.emitirAtualizacao('rota_verificada', { rotaId: rota.id, resultado: res });
         resultados.push({
           rotaId: rota.id,
           rota: `${rota.origem} ➔ ${rota.destino}`,
