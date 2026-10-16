@@ -452,6 +452,55 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.strictEqual(resCardRota.statusCode, 200);
     assert.ok(resCardRota.body.includes('renderizarCardRota'));
   });
+
+  it('GET / deve servir o botão ⚡ Varrer Todos os Voos e app.js deve conter varrerTodasRotas', async () => {
+    const resIndex = await app.inject({ method: 'GET', url: '/' });
+    assert.strictEqual(resIndex.statusCode, 200);
+    assert.ok(resIndex.body.includes('btn-varrer-todas'));
+    assert.ok(resIndex.body.includes('⚡ Varrer Todos os Voos'));
+
+    const resApp = await app.inject({ method: 'GET', url: '/app.js' });
+    assert.strictEqual(resApp.statusCode, 200);
+    assert.ok(resApp.body.includes('varrerTodasRotas'));
+    assert.ok(resApp.body.includes('/api/varredura'));
+    assert.ok(resApp.body.includes('inicializarSseTelemetria'));
+  });
+
+  it('POST /api/varredura deve disparar ciclo sob demanda e responder com 409 quando ocupado', async () => {
+    const { scheduler } = await import('../src/services/scheduler.js');
+    const originalExecutarCiclo = scheduler.executarCiclo;
+    const originalExecutando = scheduler.executando;
+
+    try {
+      scheduler.executarCiclo = async (todas) => ({ ok: true, processadas: todas ? 5 : 1 });
+      scheduler.executando = false;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/varredura',
+        payload: { todas: true }
+      });
+
+      assert.strictEqual(res.statusCode, 200);
+      const json = res.json();
+      assert.strictEqual(json.ok, true);
+      assert.strictEqual(json.resultado.processadas, 5);
+
+      // Simula colisão / conflito (scheduler ocupado)
+      scheduler.executando = true;
+      const resBusy = await app.inject({
+        method: 'POST',
+        url: '/api/varredura',
+        payload: { todas: true }
+      });
+      assert.strictEqual(resBusy.statusCode, 409);
+      assert.strictEqual(resBusy.json().ok, false);
+      assert.ok(resBusy.json().erro.includes('em execução'));
+    } finally {
+      scheduler.executarCiclo = originalExecutarCiclo;
+      scheduler.executando = originalExecutando;
+    }
+  });
 });
 
 

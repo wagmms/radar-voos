@@ -12,21 +12,20 @@
   - `src/services/providers/scrapling_client.js`: `construirUrlCheapest` com blindagem para rotas nacionais.
   - `src/db.js`: sanitização automática na inicialização para recuperar rotas contaminadas e guardrails em `criar` e `atualizar`.
   - **Suíte de Testes**: 443/443 testes aprovados (100% de sucesso).
-- **Diretriz Prioritária**: Implementar telemetria em tempo real com Server-Sent Events (SSE) e sparkline SVG de histórico no Cockpit PWA.
-- **Última Tarefa Concluída**: Blindagem Doméstica 100% BRL e Eliminação de Distorção Cambial na Rota Rio ➔ Belém via Gemini 4 Argon.
+- **Diretriz Prioritária**: Implementar sparklines SVG de histórico nos cards e visualização ortodrômica de rotas no Cockpit PWA.
+- **Última Tarefa Concluída**: Botão `⚡ Varrer Todos os Voos` no cabeçalho do Cockpit PWA conectado a `/api/varredura`, com feedback de loading, toasts informativos e telemetria reativa em tempo real via SSE.
 
 ---
 
 ## 🎯 Próxima Tarefa em Andamento
-- **Arquivo/Módulo Alvo**: `src/public/js/card_rota.js` & `src/server/routes/monitor_routes.js`
-- **Função/Componente/Seletor**: `renderizarSparklineSvg` e rota `/api/stream/telemetria`
-- **Comportamento Esperado / Critério de Aceite**: Desenhar sparkline em SVG puro para o histórico de preços dos últimos 10 checks na rota e transmitir eventos SSE para atualização em tempo real sem reload manual.
+- **Arquivo/Módulo Alvo**: `src/public/js/card_rota.js`
+- **Função/Componente/Seletor**: `renderizarSparklineSvg`
+- **Comportamento Esperado / Critério de Aceite**: Desenhar sparkline em SVG puro leve para o histórico de preços dos últimos 10 checks no card da rota.
 
 ---
 
 ## 📋 Backlog Prioritário
 - [ ] `src/public/js/card_rota.js` • `renderizarSparklineSvg` • Desenhar sparkline em SVG puro para o histórico de preços dos últimos 10 checks na rota.
-- [ ] `src/server/routes/monitor_routes.js` • Rota `/api/stream/telemetria` • Transmitir eventos SSE em tempo real para atualização automática dos cards no Cockpit PWA sem reload manual.
 - [ ] `src/public/sw.js` • Service Worker Push • Adicionar handler de notificações Web Push nativas para alertar oportunidades e bug fares com o app fechado.
 
 ---

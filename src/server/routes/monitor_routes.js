@@ -57,12 +57,15 @@ export async function monitorRoutes(fastify) {
 
   // Forçar varredura sob demanda
   fastify.post('/api/varredura', async (request, reply) => {
-    const { todas = false, moeda, curr } = request.body || {};
+    const payload = { ...(request.query || {}), ...(request.body || {}) };
+    const todas = payload.todas === true || payload.todas === 'true' || payload.todas === 1 || payload.todas === '1';
+    const moeda = payload.moeda || payload.curr;
+
     if (scheduler.executando) {
       return reply.code(409).send({ ok: false, erro: 'Varredura já está em execução no momento.' });
     }
 
-    const resultado = await scheduler.executarCiclo(Boolean(todas), { moeda: moeda || curr });
+    const resultado = await scheduler.executarCiclo(todas, { moeda });
     telemetryEvents.emitirAtualizacao('ciclo_concluido', { resultado });
     return { ok: true, resultado };
   });

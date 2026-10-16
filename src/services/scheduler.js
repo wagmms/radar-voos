@@ -90,7 +90,7 @@ class Scheduler {
         }
       }
 
-      return { ok: true, processadas };
+      return { ok: true, processadas, resultados: resultadoVarredura.resultados || [] };
     } finally {
       this.executando = false;
     }
