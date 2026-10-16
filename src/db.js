@@ -11,7 +11,8 @@ import {
   extrairDiasEstadia,
   ehSoIda,
   rotaEhSoIda,
-  obterDatasEfetivasRota
+  obterDatasEfetivasRota,
+  ehRotaDomesticaBrasil
 } from './domain/rotas.js';
 
 let dbInstance = null;
@@ -198,7 +199,8 @@ export const rotasRepo = {
     }
 
     const { dataIda, dataVolta, soIda, diasEstadia, semData } = obterDatasEfetivasRota(dados);
-    const moeda = (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
+    const domestica = ehRotaDomesticaBrasil(codigoOrigem, codigoDestino);
+    const moeda = domestica ? 'BRL' : (dados.moeda || dados.curr || 'BRL').trim().toUpperCase();
 
     // Se a rota for Ida e Volta e o link contiver one-way (ou for nulo), regera link round-trip
     let link = dados.link_google_flights;
@@ -279,7 +281,10 @@ export const rotasRepo = {
           ? Math.min(3, Math.max(0, parseInt(dados.flexibilidade_dias, 10) || 0))
           : (rota.dias_flexiveis !== undefined && rota.dias_flexiveis !== null ? rota.dias_flexiveis : Math.min(3, Math.max(0, flexibilidadeDias))));
     const ativa = dados.ativa !== undefined ? (dados.ativa ? 1 : 0) : rota.ativa;
-    const moeda = dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL'));
+    const domestica = ehRotaDomesticaBrasil(codigoOrigem, codigoDestino);
+    const moeda = domestica
+      ? 'BRL'
+      : (dados.moeda !== undefined ? (dados.moeda ? String(dados.moeda).trim().toUpperCase() : 'BRL') : (dados.curr !== undefined ? (dados.curr ? String(dados.curr).trim().toUpperCase() : 'BRL') : (rota.moeda || 'BRL')));
     
     let link = dados.link_google_flights;
     if (!link || (!soIda && link.includes('one-way'))) {
@@ -596,7 +601,9 @@ export const rotasRepo = {
 
     for (const r of rotas) {
       const soIda = rotaEhSoIda(r);
-      if (soIda) continue;
+      const codOrigem = r.codigo_origem || resolverDestino(r.origem);
+      const codDestino = r.codigo_destino || resolverDestino(r.destino);
+      const domestica = ehRotaDomesticaBrasil(codOrigem, codDestino);
 
       let precisaAtualizar = false;
       let novaDataVolta = r.data_volta;
@@ -604,6 +611,36 @@ export const rotasRepo = {
       let novoMenorHistorico = r.menor_preco_historico;
       let novoLink = r.link_google_flights;
       let novoTermometro = r.termometro;
+      let novaMoeda = r.moeda || 'BRL';
+
+      // 0. Correção de contaminação de moeda em rotas domésticas brasileiras
+      const linkMoedaEstrangeira = novoLink && (novoLink.includes('curr=EUR') || novoLink.includes('curr=USD'));
+      if (domestica && (novaMoeda !== 'BRL' || linkMoedaEstrangeira)) {
+        novaMoeda = 'BRL';
+        if (codOrigem && codDestino) {
+          novoLink = gerarLinkGoogleFlights(codOrigem, codDestino, r.data_ida, soIda ? null : novaDataVolta, 'BRL');
+        }
+        novoPrecoAtual = null;
+        novoMenorHistorico = null;
+        novoTermometro = '⚪ Aguardando rechecagem em BRL';
+        precisaAtualizar = true;
+      }
+
+      if (soIda) {
+        if (precisaAtualizar) {
+          db.prepare(`
+            UPDATE rotas SET
+              preco_atual = ?,
+              menor_preco_historico = ?,
+              link_google_flights = ?,
+              termometro = ?,
+              moeda = ?
+            WHERE id = ?
+          `).run(novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, novaMoeda, r.id);
+          totalSanitizadas++;
+        }
+        continue;
+      }
 
       // 1. Se rota de Ida e Volta não tem data_volta válida ISO (YYYY-MM-DD)
       if (!novaDataVolta || !/^\d{4}-\d{2}-\d{2}$/.test(String(novaDataVolta).trim())) {
@@ -615,10 +652,8 @@ export const rotasRepo = {
       // 2. Se o link do Google Flights contiver 'one-way' ou não tiver retorno
       const linkEhOneWay = novoLink && novoLink.includes('one-way');
       if (!novoLink || linkEhOneWay || (!novoLink.includes('returning') && !novoLink.includes('tfs='))) {
-        const codOrigem = r.codigo_origem || resolverDestino(r.origem);
-        const codDestino = r.codigo_destino || resolverDestino(r.destino);
         if (codOrigem && codDestino) {
-          novoLink = gerarLinkGoogleFlights(codOrigem, codDestino, r.data_ida, novaDataVolta, r.moeda || 'BRL');
+          novoLink = gerarLinkGoogleFlights(codOrigem, codDestino, r.data_ida, novaDataVolta, novaMoeda);
           precisaAtualizar = true;
         }
       }
@@ -640,9 +675,10 @@ export const rotasRepo = {
             preco_atual = ?,
             menor_preco_historico = ?,
             link_google_flights = ?,
-            termometro = ?
+            termometro = ?,
+            moeda = ?
           WHERE id = ?
-        `).run(novaDataVolta, novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, r.id);
+        `).run(novaDataVolta, novoPrecoAtual, novoMenorHistorico, novoLink, novoTermometro, novaMoeda, r.id);
         totalSanitizadas++;
       }
     }

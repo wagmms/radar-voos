@@ -505,14 +505,58 @@ export function obterDatasEfetivasRota(rotaOuDados) {
 }
 
 /**
+ * Catálogo canônico de aeroportos e códigos de metrópole do Brasil
+ */
+export const CODIGOS_AEROPORTOS_BRASIL = new Set([
+  // Metrópoles e Hubs regionais
+  'SAO', 'RIO', 'BHZ', 'BSB', 'NEB',
+  // Principais aeroportos
+  'GRU', 'CGH', 'VCP', 'GIG', 'SDU', 'CNF', 'PLU',
+  // Região Norte
+  'BEL', 'MAO', 'MCP', 'PVH', 'RBR', 'BVB', 'PMW', 'STM', 'MAB', 'ATM', 'CZS',
+  // Região Nordeste
+  'SSA', 'REC', 'FOR', 'MCZ', 'NAT', 'BPS', 'JPA', 'AJU', 'SLZ', 'THE', 'IOS', 'JDO', 'CPV', 'PAV', 'FEN',
+  // Região Centro-Oeste
+  'CGB', 'CGR', 'GYN', 'BYO', 'OPS', 'ROO',
+  // Região Sudeste
+  'VIX', 'RAO', 'UDI', 'MOC', 'IPN', 'VAG', 'CFB', 'SJK', 'BAU', 'SJP', 'ARU',
+  // Região Sul
+  'CWB', 'POA', 'FLN', 'IGU', 'NVT', 'JOI', 'XAP', 'CAC', 'MGF', 'LDB', 'PET', 'CXJ', 'BNU', 'RIA'
+]);
+
+/**
+ * Identifica se um código IATA ou termo pertence ao Brasil
+ */
+export function ehAeroportoOuRegiaoBrasil(termoOuCodigo) {
+  if (!termoOuCodigo) return false;
+  const resolvido = resolverCodigoIata(termoOuCodigo) || resolverDestino(termoOuCodigo) || String(termoOuCodigo).trim().toUpperCase();
+  const cod = String(resolvido).trim().toUpperCase();
+  if (CODIGOS_AEROPORTOS_BRASIL.has(cod)) return true;
+  if (cod.includes(',')) {
+    const partes = cod.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    return partes.length > 0 && partes.every(p => CODIGOS_AEROPORTOS_BRASIL.has(p));
+  }
+  return false;
+}
+
+/**
+ * Identifica se a rota é 100% doméstica no Brasil (Origem e Destino no Brasil).
+ * Rotas domésticas devem SEMPRE operar em BRL.
+ */
+export function ehRotaDomesticaBrasil(origem, destino) {
+  return ehAeroportoOuRegiaoBrasil(origem) && ehAeroportoOuRegiaoBrasil(destino);
+}
+
+/**
  * Gera link direto e estruturado para o Google Flights que abre direto no voo / rota
  */
 export function gerarLinkGoogleFlights(origemCod, destinoCod, dataIda, dataVolta, moeda = 'BRL') {
-  const moedaCode = (typeof moeda === 'string' && moeda.trim())
-    ? moeda.trim().toUpperCase()
-    : 'BRL';
   const origemRes = resolverCodigoParaLink(origemCod);
   const destinoRes = resolverCodigoParaLink(destinoCod);
+  const domestica = ehRotaDomesticaBrasil(origemCod, destinoCod) || ehRotaDomesticaBrasil(origemRes, destinoRes);
+  const moedaCode = domestica
+    ? 'BRL'
+    : ((typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL');
 
   const origemParam = encodeURIComponent(origemRes);
   const destinoParam = encodeURIComponent(destinoRes);
@@ -1056,7 +1100,10 @@ export function gerarLinkGoogleFlightsCheapest(
     ? 'EgoIABAAGAAgAigD'
     : construirTfu(nAdultosNorm, nCriancasNorm, nBebesNorm, classeViagem);
 
-  const moedaCode = (typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL';
+  const domestica = ehRotaDomesticaBrasil(origemCod, destinoCod) || ehRotaDomesticaBrasil(origCod, destCod);
+  const moedaCode = domestica
+    ? 'BRL'
+    : ((typeof moeda === 'string' && moeda.trim()) ? moeda.trim().toUpperCase() : 'BRL');
   return `https://www.google.com/travel/flights?hl=pt-BR&gl=BR&curr=${moedaCode}&tfs=${tfs}&tfu=${tfu}`;
 }
 
