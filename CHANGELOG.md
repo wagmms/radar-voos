@@ -4,6 +4,26 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.6.1] - 2026-10-15 — Segunda Rodada de Otimização pelo Gemini 4 Argon: Transações Atômicas SQLite, Ponto Cego Flexível, Blindagem Cambial Multi-Moeda e Resiliência HTTP Telegram
+
+### 🚀 Melhorias de Alta Precisão & Estabilidade Operacional:
+- **Separação de Consulta e Registro de Alerta (`src/db.js` e `src/services/flight_scanner.js`)**:
+  - `alertasRepo.deveDisparar` agora suporta `options.apenasAvaliar = true`, avaliando a oportunidade sem gravar prematuramente em `alertas_disparados`.
+  - O registro físico do disparo (`alertasRepo.registrarDisparo`) é executado exclusivamente após a confirmação de envio no Telegram (`enviado !== false`), eliminando a perda definitiva de alertas em caso de instabilidade de rede ou quando a rota estiver silenciada (`mute24`).
+  - Normalização case-insensitive de `nivelPreco` (suporte pleno a `'low'`, `'LOW'`, `'baixo'`, `'BAIXO'`), corrigindo falsos negativos para rotas sem preço-alvo definido.
+- **Eliminação do Ponto Cego na Janela Flexível (`src/services/flight_scanner.js`)**:
+  - Em rotas com flexibilidade (`diasFlex > 0`), se a data base (`offset = 0`) não encontrar voos nos filtros restritivos (ex: malha restrita de voos diretos em certos dias), o scanner não encerra mais com falso negativo; ele continua a varredura dos dias vizinhos (`±1 a ±3`) e elege o melhor dia alternativo como a melhor oferta da rota.
+- **Transações Atômicas SQLite e Proteção do Z-Score (`src/db.js`)**:
+  - Operações de escrita em `rotasRepo.atualizarResultadoChecagem` envolvidas em bloco transacional atômico `BEGIN IMMEDIATE ... COMMIT` com auto-rollback defensivo contra concorrência e *race conditions*.
+  - Desduplicação de amostras idênticas recentes (< 6 horas) na tabela `historico_precos`: checagens repetidas sem variação tarifária não inflam mais o histórico, preservando a variância real e evitando a explosão artificial do Z-Score.
+- **Blindagem Cambial Multi-Moeda (`src/services/providers/scrapling_client.js`)**:
+  - Conversão cambial precisa em `extrairVoosDoPayloadJs` para `EUR` (6.30), `GBP` (7.40) e `USD` (5.80) para `BRL`, com taxas realistas e customizáveis por variáveis de ambiente, prevenindo disparos espúrios de Bug Fare quando o Google Flights responde em moeda europeia.
+- **Resiliência e Timeouts no Bot Telegram (`src/services/notifier_telegram.js`)**:
+  - Inclusão de `AbortSignal.timeout(10000)` nas chamadas HTTP (`sendMessage` e `answerCallbackQuery`) e `AbortSignal.timeout(35000)` no long polling `getUpdates`.
+  - Tratamento de rate limit (HTTP 429) com limite máximo de 3 tentativas e teto de cooldown de 30 segundos, prevenindo *deadlocks* do processo e recursões infinitas.
+- **Validação Automatizada**:
+  - 443 testes em 59 suítes aprovados com 100% de sucesso no `./validate.sh fast`.
+
 ## [v3.6.0] - 2026-10-15 — Modernização de Scraping e Resiliência pelo Gemini 4 Argon: Links Seguros base64url, Curto-Circuito SerpAPI e Caçador de Bug Fares com Scrapling
 
 ### 🚀 Melhorias de Alta Precisão & Eliminação de Bugs:

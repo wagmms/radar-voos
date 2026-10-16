@@ -251,6 +251,8 @@ export class FlightScanner {
         };
       } else {
         // 2b. Modo Data Fixa / Base
+        const diasFlex = Math.min(3, Math.max(0, parseInt(rota.dias_flexiveis !== undefined ? rota.dias_flexiveis : rota.flexibilidade_dias, 10) || 0));
+
         const resultadoBase = await FlightScanner.buscarOfertas(
           rota.codigo_origem,
           rota.codigo_destino,
@@ -263,12 +265,12 @@ export class FlightScanner {
           filtrosAvancados
         );
 
-        if (!resultadoBase.ok) {
+        if (!resultadoBase.ok && diasFlex === 0) {
           rotasRepo.marcarFalhaChecagem(rota.id, resultadoBase.mensagemErro || 'Falha na checagem');
           return { sucesso: false, erro: resultadoBase.mensagemErro };
         }
 
-        if (!resultadoBase.encontrouVoos) {
+        if (!resultadoBase.encontrouVoos && diasFlex === 0) {
           const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
           rotasRepo.atualizarResultadoChecagem(rota.id, {
             preco: 0,
@@ -285,23 +287,27 @@ export class FlightScanner {
           return { sucesso: true, encontrou: false, mensagem: resultadoBase.mensagem };
         }
 
-        oferta = resultadoBase.oferta;
+        if (resultadoBase.ok && resultadoBase.encontrouVoos && resultadoBase.oferta) {
+          oferta = resultadoBase.oferta;
+        }
 
         // 3. Janela de Datas Flexíveis (±1 a ±3 dias) & Calendário de Preços
-        const diasFlex = Math.min(3, Math.max(0, parseInt(rota.dias_flexiveis !== undefined ? rota.dias_flexiveis : rota.flexibilidade_dias, 10) || 0));
         if (diasFlex > 0) {
           const paresJanela = gerarJanelaDatasFlexiveis(rota.data_ida, rota.data_volta, diasFlex);
+          const ofertasVizinhos = [];
 
-          // Inclui a oferta da data principal (offset === 0) reutilizando a consulta já realizada
-          calendarioPrecos.push({
-            offset: 0,
-            dataIda: rota.data_ida,
-            dataVolta: rota.data_volta || null,
-            preco: oferta.preco,
-            cia: oferta.cia || null,
-            escalas: oferta.escalas ?? 0,
-            horarioPartida: oferta.horarioPartida || null
-          });
+          // Se a data base (offset === 0) retornou voo válido, inclui no calendário
+          if (oferta && oferta.preco > 0) {
+            calendarioPrecos.push({
+              offset: 0,
+              dataIda: rota.data_ida,
+              dataVolta: rota.data_volta || null,
+              preco: oferta.preco,
+              cia: oferta.cia || null,
+              escalas: oferta.escalas ?? 0,
+              horarioPartida: oferta.horarioPartida || null
+            });
+          }
 
           // Varre os offsets vizinhos
           for (const par of paresJanela) {
@@ -320,7 +326,7 @@ export class FlightScanner {
               );
 
               if (resAdj.ok && resAdj.encontrouVoos && resAdj.oferta && resAdj.oferta.preco > 0) {
-                calendarioPrecos.push({
+                const itemCalendario = {
                   offset: par.offset,
                   dataIda: par.dataIda,
                   dataVolta: par.dataVolta || null,
@@ -328,6 +334,11 @@ export class FlightScanner {
                   cia: resAdj.oferta.cia || null,
                   escalas: resAdj.oferta.escalas ?? 0,
                   horarioPartida: resAdj.oferta.horarioPartida || null
+                };
+                calendarioPrecos.push(itemCalendario);
+                ofertasVizinhos.push({
+                  ...itemCalendario,
+                  ofertaCompleta: resAdj.oferta
                 });
               }
             } catch (_) {}
@@ -336,36 +347,85 @@ export class FlightScanner {
           // Ordena por offset crescente
           calendarioPrecos.sort((a, b) => a.offset - b.offset);
 
-          // Identifica data vizinha mais barata que a base (offset === 0)
-          const vizinhos = calendarioPrecos.filter(item => item.offset !== 0);
-          const vizinhosMaisBaratos = vizinhos.filter(item => item.preco < oferta.preco);
-          if (vizinhosMaisBaratos.length > 0) {
-            vizinhosMaisBaratos.sort((a, b) => a.preco - b.preco);
-            const melhorVizinho = vizinhosMaisBaratos[0];
-            const economiaReais = oferta.preco - melhorVizinho.preco;
-            const economiaPercentual = Math.round((economiaReais / oferta.preco) * 100);
+          // Se nem a data base nem os dias vizinhos encontraram voos, finaliza sem voos
+          if (!oferta && ofertasVizinhos.length === 0) {
+            const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
+            rotasRepo.atualizarResultadoChecagem(rota.id, {
+              preco: 0,
+              variacao_texto: '-',
+              termometro: resultadoBase.mensagem || '⚪ Sem voos na janela flexível',
+              custo_destino_texto: '-',
+              detalhes_voo: '-',
+              dica_stopover: '-',
+              link_google_flights: rota.link_google_flights,
+              clima_destino_resumo: clima.ok ? clima.resumo : null,
+              clima_temp_media: clima.ok ? clima.tempMedia : null,
+              melhor_opcao_flexivel: null
+            });
+            return { sucesso: true, encontrou: false, mensagem: resultadoBase.mensagem || 'Sem voos na janela flexível' };
+          }
+
+          // Caso a data base não tenha encontrado voo, elege o melhor vizinho como oferta principal da rota
+          if (!oferta && ofertasVizinhos.length > 0) {
+            ofertasVizinhos.sort((a, b) => a.preco - b.preco);
+            const melhorVizinhoFallback = ofertasVizinhos[0];
+            oferta = melhorVizinhoFallback.ofertaCompleta;
+            dataIdaEfetiva = melhorVizinhoFallback.dataIda;
+            dataVoltaEfetiva = melhorVizinhoFallback.dataVolta;
 
             melhorDataAlternativa = {
-              offset: melhorVizinho.offset,
-              dataIda: melhorVizinho.dataIda,
-              dataVolta: melhorVizinho.dataVolta,
-              preco: melhorVizinho.preco,
-              economiaReais,
-              economiaPercentual,
-              cia: melhorVizinho.cia,
-              escalas: melhorVizinho.escalas,
+              offset: melhorVizinhoFallback.offset,
+              dataIda: melhorVizinhoFallback.dataIda,
+              dataVolta: melhorVizinhoFallback.dataVolta,
+              preco: melhorVizinhoFallback.preco,
+              economiaReais: 0,
+              economiaPercentual: 0,
+              cia: melhorVizinhoFallback.cia,
+              escalas: melhorVizinhoFallback.escalas,
               linkGoogleFlights: null
             };
 
             melhorOpcaoFlexivel = {
-              data_ida: melhorVizinho.dataIda,
-              data_volta: melhorVizinho.dataVolta,
-              preco: melhorVizinho.preco,
-              economia: economiaReais,
-              economiaPct: economiaPercentual,
-              deltaDias: melhorVizinho.offset,
+              data_ida: melhorVizinhoFallback.dataIda,
+              data_volta: melhorVizinhoFallback.dataVolta,
+              preco: melhorVizinhoFallback.preco,
+              economia: 0,
+              economiaPct: 0,
+              deltaDias: melhorVizinhoFallback.offset,
               link: null
             };
+          } else {
+            // Identifica data vizinha mais barata que a base (offset === 0)
+            const vizinhos = calendarioPrecos.filter(item => item.offset !== 0);
+            const vizinhosMaisBaratos = vizinhos.filter(item => item.preco < oferta.preco);
+            if (vizinhosMaisBaratos.length > 0) {
+              vizinhosMaisBaratos.sort((a, b) => a.preco - b.preco);
+              const melhorVizinho = vizinhosMaisBaratos[0];
+              const economiaReais = oferta.preco - melhorVizinho.preco;
+              const economiaPercentual = Math.round((economiaReais / oferta.preco) * 100);
+
+              melhorDataAlternativa = {
+                offset: melhorVizinho.offset,
+                dataIda: melhorVizinho.dataIda,
+                dataVolta: melhorVizinho.dataVolta,
+                preco: melhorVizinho.preco,
+                economiaReais,
+                economiaPercentual,
+                cia: melhorVizinho.cia,
+                escalas: melhorVizinho.escalas,
+                linkGoogleFlights: null
+              };
+
+              melhorOpcaoFlexivel = {
+                data_ida: melhorVizinho.dataIda,
+                data_volta: melhorVizinho.dataVolta,
+                preco: melhorVizinho.preco,
+                economia: economiaReais,
+                economiaPct: economiaPercentual,
+                deltaDias: melhorVizinho.offset,
+                link: null
+              };
+            }
           }
         }
       }
@@ -509,61 +569,71 @@ export class FlightScanner {
       : `${rota.codigo_origem}_${rota.codigo_destino}_${dataIdaEfetiva}_${dataVoltaEfetiva || 'SO_IDA'}`;
     const ehRecorde = !rota.menor_preco_historico || oferta.preco < rota.menor_preco_historico;
 
-    const decisaoAlerta = alertasRepo.deveDisparar(
-      chaveAlerta,
-      oferta.preco,
-      precoAnterior,
-      rota.preco_alvo,
-      ehRecorde,
-      oferta.nivelPreco,
-      variacao.pct,
-      {
-        zScore: analiseDelta.zScore,
-        deltaMediaPct: analiseDelta.quedaPct,
-        classificacaoDelta: analiseBug.ehBugFare ? 'BUG_FARE' : analiseDelta.categoria,
-        statsPreco
-      }
-    );
+      const nivelInsightRaw = String(oferta.priceInsights?.nivel || oferta.nivelPreco || '').trim().toLowerCase();
+      const nivelPrecoEfetivo = (nivelInsightRaw === 'baixo' || nivelInsightRaw === 'low')
+        ? 'LOW'
+        : (oferta.nivelPreco || null);
 
-    if (!decisaoAlerta.deve && decisaoAlerta.motivo === 'oscilacao_normal_mercado_info') {
-      console.log(`🔇 [Zero Ruído / proactive-agent] ${rota.origem} ➔ ${rota.destino}: R$ ${oferta.preco.toFixed(2)} classificado como INFO (oscilação normal). Alerta suprimido.`);
-    }
-
-    const rotaSilenciada = rotasRepo.estaSilenciada(rotaAtualizada);
-
-    if (decisaoAlerta.deve && !rotaSilenciada && !analiseBug.ehBugFare) {
-      await notifierTelegram.enviarAlertaOportunidade({
-        rotaId: rota.id,
-        origem: rota.origem,
-        destinoReal: oferta.destinoReal,
-        dataIda: dataIdaEfetiva,
-        dataVolta: dataVoltaEfetiva,
-        preco: oferta.preco,
-        variacaoTexto: variacao.texto,
+      const decisaoAlerta = alertasRepo.deveDisparar(
+        chaveAlerta,
+        oferta.preco,
+        precoAnterior,
+        rota.preco_alvo,
         ehRecorde,
-        custoInfo,
-        duracaoHoras: oferta.duracaoHoras,
-        detalhes: oferta.detalhes,
-        dicaStopover: oferta.dicaStopover,
-        link: linkCanonicoRota || oferta.link,
-        clima: clima.ok ? clima : null,
-        semData: rota.sem_data === 1,
-        labelJanela: melhorOpcaoFlexivel?.label,
-        precoAlvo: rota.preco_alvo,
-        horarioPartida: oferta.horarioPartida || null,
-        horarioChegada: oferta.horarioChegada || null,
-        numeroVoo: oferta.numeroVoo || null,
-        tempoConexao: oferta.tempoConexao || null,
-        escalas: oferta.escalas ?? null,
-        topOfertas: oferta.topOfertas || null,
-        melhorOpcaoDiretaOuRapida: oferta.melhorOpcaoDiretaOuRapida || null,
-        priceInsights: oferta.priceInsights || null,
-        melhorDataAlternativa: melhorDataAlternativa || null,
-        rankingDestinosRegionais: rankingDestinosRegionais.length > 0 ? rankingDestinosRegionais : null,
-        destinoVencedorIata: destinoVencedorIata || null,
-        destinoVencedorNome: destinoVencedorNome || null
-      });
-    }
+        nivelPrecoEfetivo,
+        variacao.pct,
+        {
+          apenasAvaliar: true,
+          zScore: analiseDelta.zScore,
+          deltaMediaPct: analiseDelta.quedaPct,
+          classificacaoDelta: analiseBug.ehBugFare ? 'BUG_FARE' : analiseDelta.categoria,
+          statsPreco
+        }
+      );
+
+      if (!decisaoAlerta.deve && decisaoAlerta.motivo === 'oscilacao_normal_mercado_info') {
+        console.log(`🔇 [Zero Ruído / proactive-agent] ${rota.origem} ➔ ${rota.destino}: R$ ${oferta.preco.toFixed(2)} classificado como INFO (oscilação normal). Alerta suprimido.`);
+      }
+
+      const rotaSilenciada = rotasRepo.estaSilenciada(rotaAtualizada);
+
+      if (decisaoAlerta.deve && !rotaSilenciada && !analiseBug.ehBugFare) {
+        const enviado = await notifierTelegram.enviarAlertaOportunidade({
+          rotaId: rota.id,
+          origem: rota.origem,
+          destinoReal: oferta.destinoReal,
+          dataIda: dataIdaEfetiva,
+          dataVolta: dataVoltaEfetiva,
+          preco: oferta.preco,
+          variacaoTexto: variacao.texto,
+          ehRecorde,
+          custoInfo,
+          duracaoHoras: oferta.duracaoHoras,
+          detalhes: oferta.detalhes,
+          dicaStopover: oferta.dicaStopover,
+          link: linkCanonicoRota || oferta.link,
+          clima: clima.ok ? clima : null,
+          semData: rota.sem_data === 1,
+          labelJanela: melhorOpcaoFlexivel?.label,
+          precoAlvo: rota.preco_alvo,
+          horarioPartida: oferta.horarioPartida || null,
+          horarioChegada: oferta.horarioChegada || null,
+          numeroVoo: oferta.numeroVoo || null,
+          tempoConexao: oferta.tempoConexao || null,
+          escalas: oferta.escalas ?? null,
+          topOfertas: oferta.topOfertas || null,
+          melhorOpcaoDiretaOuRapida: oferta.melhorOpcaoDiretaOuRapida || null,
+          priceInsights: oferta.priceInsights || null,
+          melhorDataAlternativa: melhorDataAlternativa || null,
+          rankingDestinosRegionais: rankingDestinosRegionais.length > 0 ? rankingDestinosRegionais : null,
+          destinoVencedorIata: destinoVencedorIata || null,
+          destinoVencedorNome: destinoVencedorNome || null
+        });
+
+        if (enviado !== false) {
+          alertasRepo.registrarDisparo(chaveAlerta, oferta.preco, decisaoAlerta.tipo || 'OPORTUNIDADE');
+        }
+      }
 
     // 6. Milhas descontinuadas em prol de economia real em dinheiro
     return {

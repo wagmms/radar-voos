@@ -771,13 +771,20 @@ export function extrairVoosDoPayloadJs(html) {
         if (!precoBruto) continue;
 
         const taxaUsd = Number(process.env.USD_BRL_RATE) || 5.80;
+        const taxaEur = Number(process.env.EUR_BRL_RATE) || 6.30;
+        const taxaGbp = Number(process.env.GBP_BRL_RATE) || 7.40;
+        const mapaTaxasParaBrl = { USD: taxaUsd, EUR: taxaEur, GBP: taxaGbp, BRL: 1 };
+
         let moedaDetectada = (fare && typeof fare[0] === 'string' && fare[0].trim()) ? fare[0].trim().toUpperCase() : null;
-        if (!moedaDetectada && typeof flight[0] === 'string' && flight[0].toUpperCase() === 'USD') {
-          moedaDetectada = 'USD';
+        if (!moedaDetectada && typeof flight[0] === 'string') {
+          const f0Upper = flight[0].toUpperCase();
+          if (mapaTaxasParaBrl[f0Upper]) moedaDetectada = f0Upper;
         }
 
-        const ehUsd = moedaDetectada === 'USD';
-        const preco = ehUsd ? Math.round(precoBruto * taxaUsd) : precoBruto;
+        const moedaOrig = (moedaDetectada || 'BRL').toUpperCase();
+        const fatorConversao = mapaTaxasParaBrl[moedaOrig] || 1;
+        const ehUsd = moedaOrig === 'USD';
+        const preco = Math.round(precoBruto * fatorConversao);
         if (preco < 80 || preco > 60000) continue;
 
         // Companhia aérea: flight[1] (array de nomes de cias) ou código do flight[0]

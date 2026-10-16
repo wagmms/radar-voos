@@ -42,7 +42,7 @@ class NotifierTelegram {
     this.onVerificarRotaCallback = fn;
   }
 
-  async enviarMensagem(textoHtml, urlBotao = null, textoBotao = '✈️ Ver voos', forcarSilencioso = false, inlineKeyboard = null) {
+  async enviarMensagem(textoHtml, urlBotao = null, textoBotao = '✈️ Ver voos', forcarSilencioso = false, inlineKeyboard = null, tentativa = 1) {
     if (!this.token || !this.chatId) {
       console.warn('Telegram não configurado (sem token ou chatId)');
       return false;
@@ -70,15 +70,20 @@ class NotifierTelegram {
       const res = await fetch(`${this.baseUrl}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10000)
       });
       const data = await res.json();
 
       if (data && data.error_code === 429) {
-        const retryAfter = (data.parameters && data.parameters.retry_after) || 5;
-        console.warn(`[Telegram FloodWait] Aguardando ${retryAfter}s devido a rate limit.`);
+        if (tentativa >= 3) {
+          console.warn(`[Telegram FloodWait] Limite de 3 tentativas atingido. Abortando mensagem.`);
+          return false;
+        }
+        const retryAfter = Math.min((data.parameters && data.parameters.retry_after) || 5, 30);
+        console.warn(`[Telegram FloodWait] Aguardando ${retryAfter}s devido a rate limit (tentativa ${tentativa}/3).`);
         await new Promise(r => setTimeout(r, retryAfter * 1000));
-        return this.enviarMensagem(textoHtml, urlBotao, textoBotao, forcarSilencioso, inlineKeyboard);
+        return this.enviarMensagem(textoHtml, urlBotao, textoBotao, forcarSilencioso, inlineKeyboard, tentativa + 1);
       }
 
       return Boolean(data.ok);
@@ -97,7 +102,8 @@ class NotifierTelegram {
           callback_query_id: callbackQueryId,
           text: textoToast,
           show_alert: showAlert
-        })
+        }),
+        signal: AbortSignal.timeout(10000)
       });
     } catch (err) {
       console.error('Erro ao responder callback query:', err.message);
@@ -410,7 +416,7 @@ class NotifierTelegram {
       while (this.pollingAtivo) {
         try {
           const url = `${this.baseUrl}/getUpdates?offset=${this.ultimoUpdateId + 1}&timeout=20`;
-          const res = await fetch(url);
+          const res = await fetch(url, { signal: AbortSignal.timeout(35000) });
           const data = await res.json();
 
           if (data.ok && Array.isArray(data.result)) {

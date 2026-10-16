@@ -1,19 +1,19 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.6.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.6.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 Modernização de Scraping e Resiliência via Gemini 4 Argon concluída com 100% de aprovação (443/443 testes passando no `./validate.sh fast`). Links do Google Flights protegidos com RFC 4648 §5 base64url e resolução de hubs físicos, curto-circuito da SerpAPI preservando 100% da cota mensal, parser SSR `script.ds:1` robusto e Caçador de Bug Fares integrado ao Scrapling.
+- **Estado Geral**: 🟢 Segunda Rodada de Otimização via Gemini 4 Argon concluída com 100% de aprovação (443/443 testes passando no `./validate.sh fast`). Transações atômicas `BEGIN IMMEDIATE` no SQLite, eliminação do ponto cego na janela flexível, separação cirúrgica entre avaliação e gravação física de alertas no Telegram, blindagem cambial multi-moeda (EUR, USD, GBP) e resiliência a rate limit com AbortSignal.
 - **Camadas Entregues & Verificadas**:
-  - `src/domain/rotas.js`: migração de `gerarTfs` e `construirTfu` para RFC 4648 §5 base64url (`-`, `_`), resolução canônica de hubs físicos (`resolverHubFisico`) evitando injeção de nomes regionais no Protobuf, e link canônico Cheapest com token canônico `EgoIABAAGAAgAigD`.
-  - `src/services/providers/provider_manager.js`: curto-circuito em `FlightProviderManager` quando o scraping gratuito obtém ofertas válidas com preço, isolando a SerpAPI estritamente como failover de contingência (zero desperdício de cota).
-  - `src/services/providers/scrapling_client.js`: parser resiliente para `script.ds:1` com `extrairArrayPayloadDs1`, extração de ofertas Cheapest em slots alternativos de `k[1]`, detecção de aeroportos e companhia aérea nos trechos, e eliminação de regex que capturava `$100` minificado.
-  - `src/services/bug_fare_hunter.js`: migrado para `ScraplingProvider` com suporte a TLS Impersonation via `primp`, corredores continentais mapeados para IATAs reais e captura de cia aérea e destino real nos cards.
+  - `src/db.js`: `alertasRepo.deveDisparar` com suporte a `options.apenasAvaliar` e normalização case-insensitive de `nivelPreco`; transações imediatas e deduplicação de histórico de preços idênticos (< 6h) em `rotasRepo.atualizarResultadoChecagem` para preservar o Z-Score.
+  - `src/services/flight_scanner.js`: varredura de dias flexíveis vizinhos mesmo se a data central falhar nos filtros; persistência do disparo em `alertas_disparados` delegada para após confirmação HTTP do Telegram, prevenindo perda silenciosa de oportunidades.
+  - `src/services/providers/scrapling_client.js`: conversão de moedas estrangeiras (EUR, USD, GBP) para BRL em `extrairVoosDoPayloadJs`, eliminando disparos espúrios de Bug Fare por descompasso cambial.
+  - `src/services/notifier_telegram.js`: inclusão de timeouts com `AbortSignal.timeout(10000)` e limitação estrita de 3 retries em HTTP 429 com teto de 30s.
   - **Suíte de Testes**: 443/443 testes aprovados (100% de sucesso).
 - **Diretriz Prioritária**: Implementar telemetria em tempo real com Server-Sent Events (SSE) e sparkline SVG de histórico no Cockpit PWA.
-- **Última Tarefa Concluída**: Modernização de Scraping e Resiliência pelo Gemini 4 Argon: Links Seguros base64url, Curto-Circuito SerpAPI e Caçador de Bug Fares com Scrapling.
+- **Última Tarefa Concluída**: Segunda Rodada de Otimização pelo Gemini 4 Argon: Transações Atômicas SQLite, Ponto Cego Flexível, Blindagem Cambial Multi-Moeda e Resiliência HTTP Telegram.
 
 ---
 

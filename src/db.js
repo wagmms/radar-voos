@@ -416,42 +416,69 @@ export const rotasRepo = {
       WHERE id = ?
     `);
 
-    stmt.run(
-      dataIdaNova,
-      dataVoltaNova,
-      preco ?? null,
-      menorHistorico ?? null,
-      resultado.variacao_texto ?? null,
-      resultado.termometro ?? null,
-      resultado.custo_destino_texto ?? null,
-      resultado.detalhes_voo ?? null,
-      resultado.dica_stopover ?? null,
-      linkNovo,
-      resultado.destino_real ?? resultado.destinoReal ?? null,
-      resultado.clima_destino_resumo ?? null,
-      resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
-      melhorFlexivelStr,
-      moedaNova,
-      topOfertasStr ?? null,
-      melhorDiretaStr ?? null,
-      horarioPartida ?? null,
-      horarioChegada ?? null,
-      numeroVoo ?? null,
-      tempoConexao ?? null,
-      calendarioPrecosStr ?? null,
-      melhorDataAlternativaStr ?? null,
-      priceInsightsStr ?? null,
-      rankingRegionaisStr ?? null,
-      agora,
-      id
-    );
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      stmt.run(
+        dataIdaNova,
+        dataVoltaNova,
+        preco ?? null,
+        menorHistorico ?? null,
+        resultado.variacao_texto ?? null,
+        resultado.termometro ?? null,
+        resultado.custo_destino_texto ?? null,
+        resultado.detalhes_voo ?? null,
+        resultado.dica_stopover ?? null,
+        linkNovo,
+        resultado.destino_real ?? resultado.destinoReal ?? null,
+        resultado.clima_destino_resumo ?? null,
+        resultado.clima_temp_media !== undefined ? resultado.clima_temp_media : null,
+        melhorFlexivelStr,
+        moedaNova,
+        topOfertasStr ?? null,
+        melhorDiretaStr ?? null,
+        horarioPartida ?? null,
+        horarioChegada ?? null,
+        numeroVoo ?? null,
+        tempoConexao ?? null,
+        calendarioPrecosStr ?? null,
+        melhorDataAlternativaStr ?? null,
+        priceInsightsStr ?? null,
+        rankingRegionaisStr ?? null,
+        agora,
+        id
+      );
 
-    // Salvar no histórico para séries temporais e gráficos
-    if (preco && preco > 0) {
-      db.prepare(`
-        INSERT INTO historico_precos (rota_id, preco, termometro, data_checagem)
-        VALUES (?, ?, ?, ?)
-      `).run(id, preco, resultado.termometro ?? null, agora);
+      // Salvar no histórico para séries temporais e gráficos (deduplicando amostras idênticas < 6h para preservar Z-Score)
+      if (preco && preco > 0) {
+        const ultimoHist = db.prepare(`
+          SELECT preco, data_checagem
+          FROM historico_precos
+          WHERE rota_id = ?
+          ORDER BY id DESC
+          LIMIT 1
+        `).get(id);
+
+        let deveInserirHistorico = true;
+        if (ultimoHist && Number(ultimoHist.preco) === Number(preco) && ultimoHist.data_checagem) {
+          const tsUltimo = new Date(ultimoHist.data_checagem).getTime();
+          const tsAgora = new Date(agora).getTime();
+          if (Number.isFinite(tsUltimo) && (tsAgora - tsUltimo) < 6 * 3600 * 1000) {
+            deveInserirHistorico = false;
+          }
+        }
+
+        if (deveInserirHistorico) {
+          db.prepare(`
+            INSERT INTO historico_precos (rota_id, preco, termometro, data_checagem)
+            VALUES (?, ?, ?, ?)
+          `).run(id, preco, resultado.termometro ?? null, agora);
+        }
+      }
+
+      db.exec('COMMIT');
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch (_) {}
+      throw err;
     }
 
     return rotasRepo.buscarPorId(id);
@@ -723,6 +750,10 @@ export const alertasRepo = {
       return { deve: false, motivo: 'acima_preco_alvo' };
     }
 
+    // Normalização case-insensitive de nivelPreco (suporta 'low', 'LOW', 'baixo', 'BAIXO')
+    const nivelNorm = String(nivelPreco || '').trim().toUpperCase();
+    const ehNivelBaixo = nivelNorm === 'LOW' || nivelNorm === 'BAIXO';
+
     // 2b. SUPRESSÃO DE RUÍDO & DETECÇÃO DE DELTA (proactive-agent):
     const cruzouMetaAbaixo = temPrecoAlvo && precoAnterior > precoAlvo && precoAtual <= precoAlvo;
     const ehOportunidadeDelta = options.classificacaoDelta === 'OPORTUNIDADE' ||
@@ -732,13 +763,13 @@ export const alertasRepo = {
     // Se NÃO tem preço alvo definido pelo usuário:
     // Só pode alertar se for uma oportunidade comprovada:
     // - Oportunidade estatística (Z-Score <= -1.5 ou queda >= 30% da média móvel)
-    // - OU nível LOW do Google Flights E queda expressiva
+    // - OU nível LOW/BAIXO do Google Flights E queda expressiva
     if (!temPrecoAlvo) {
       if (options.classificacaoDelta === 'INFO' && !ehOportunidadeDelta) {
         return { deve: false, motivo: 'oscilacao_normal_mercado_info' };
       }
 
-      if (!ehOportunidadeDelta && (nivelPreco !== 'LOW' || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
+      if (!ehOportunidadeDelta && (!ehNivelBaixo || pctVariacao > -config.radar.gatilhoQuedaRelampagoPct)) {
         return { deve: false, motivo: 'sem_meta_e_fora_dos_criterios_estritos' };
       }
     }
@@ -798,10 +829,12 @@ export const alertasRepo = {
 
     if (!deveAlertar) return { deve: false, motivo: 'nenhum_gatilho_atingido' };
 
-    db.prepare(`
-      INSERT INTO alertas_disparados (chave_alerta, preco, tipo, disparado_em)
-      VALUES (?, ?, ?, ?)
-    `).run(chaveAlerta, precoAtual, tipoAlerta, agora.toISOString());
+    if (!options.apenasAvaliar) {
+      db.prepare(`
+        INSERT INTO alertas_disparados (chave_alerta, preco, tipo, disparado_em)
+        VALUES (?, ?, ?, ?)
+      `).run(chaveAlerta, precoAtual, tipoAlerta, agora.toISOString());
+    }
 
     return { deve: true, tipo: tipoAlerta };
   },
