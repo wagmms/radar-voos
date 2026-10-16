@@ -535,6 +535,20 @@ export class FlightScanner {
     }
     const termometroFlex = labelFlex ? `🔥 Menor Preço Flexível (${labelFlex})` : '🔥 Menor Preço Flexível';
 
+    let opcaoDiretaSaneada = oferta.melhorOpcaoDiretaOuRapida || null;
+    if (opcaoDiretaSaneada) {
+      const precoOpcao = Number(opcaoDiretaSaneada.preco);
+      const vooPrincipalJaDireto = Number(oferta.escalas ?? 0) === 0;
+      if (!Number.isFinite(precoOpcao) || precoOpcao <= Number(oferta.preco) || vooPrincipalJaDireto) {
+        opcaoDiretaSaneada = null;
+      } else {
+        opcaoDiretaSaneada = {
+          ...opcaoDiretaSaneada,
+          diferencaPreco: Math.round(precoOpcao - Number(oferta.preco))
+        };
+      }
+    }
+
     const rotaAtualizada = rotasRepo.atualizarResultadoChecagem(rota.id, {
       data_ida: rota.sem_data === 1 ? dataIdaEfetiva : undefined,
       data_volta: rota.sem_data === 1 ? dataVoltaEfetiva : undefined,
@@ -557,7 +571,7 @@ export class FlightScanner {
       numero_voo: oferta.numeroVoo || null,
       tempo_conexao: oferta.tempoConexao || null,
       top_ofertas: oferta.topOfertas || null,
-      melhor_opcao_direta_rapida: oferta.melhorOpcaoDiretaOuRapida || null,
+      melhor_opcao_direta_rapida: opcaoDiretaSaneada,
       calendario_precos: calendarioPrecos.length > 0 ? calendarioPrecos : null,
       melhor_data_alternativa: melhorDataAlternativa,
       price_insights: oferta.priceInsights || null,

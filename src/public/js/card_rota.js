@@ -189,7 +189,27 @@ export function renderizarTradeOff(rota) {
   if (!opcao || typeof opcao !== 'object') return '';
 
   const preco = Number(opcao.preco) || 0;
-  const difPreco = opcao.diferencaPreco !== undefined ? Number(opcao.diferencaPreco) : 0;
+  const precoAtual = Number(rota.preco_atual);
+  if (!Number.isFinite(preco) || preco <= 0) return '';
+
+  // Blindagem defensiva: se o preço atual estiver disponível, valida se o trade-off faz sentido
+  if (Number.isFinite(precoAtual) && precoAtual > 0) {
+    // 1. A opção direta deve ser mais cara que o voo atual com escalas (trade-off de pagar mais por rapidez)
+    if (preco <= precoAtual) return '';
+
+    // 2. Valida se a diferença bate com o preço atual (tolerância de R$ 10 para evitar snapshots órfãos de outras coletas)
+    const diffReal = preco - precoAtual;
+    const diffSalva = opcao.diferencaPreco !== undefined ? Number(opcao.diferencaPreco) : diffReal;
+    if (Math.abs(diffReal - diffSalva) > 10) return '';
+  }
+
+  // 3. Se os detalhes do voo atual indicarem que já é direto, não exibe trade-off de opção direta
+  const detalhesStr = String(rota.detalhes_voo || '').toLowerCase();
+  if (detalhesStr.includes('direto') || detalhesStr.includes('nonstop') || detalhesStr.includes('sem escalas')) {
+    return '';
+  }
+
+  const difPreco = (Number.isFinite(precoAtual) && precoAtual > 0) ? (preco - precoAtual) : (opcao.diferencaPreco !== undefined ? Number(opcao.diferencaPreco) : 0);
   const econHoras = opcao.economiaHoras !== undefined ? Number(opcao.economiaHoras) : 0;
   const difTexto = difPreco >= 0 ? `+R$ ${formatarPreco(difPreco)}` : `-R$ ${formatarPreco(Math.abs(difPreco))}`;
 
