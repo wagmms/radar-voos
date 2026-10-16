@@ -14,6 +14,19 @@ export function escapeHtml(texto) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Remove jargões internos de coletores (ex: "Scrapling Cheapest") para não poluir a UI
+ */
+export function sanitizarTextoTecnico(texto) {
+  if (texto === null || texto === undefined) return '';
+  return String(texto)
+    .replace(/\bscrapling\s*cheapest\b/gi, '')
+    .replace(/\bscrapling\b/gi, '')
+    .replace(/\s*\(\s*\)/g, '')
+    .replace(/^[•\-\s]+|[•\-\s]+$/g, '')
+    .trim();
+}
+
 export function formatarPreco(valor, moeda = 'BRL') {
   const num = Number(valor);
   if (!Number.isFinite(num)) return '—';
@@ -154,13 +167,16 @@ export function renderizarLinhaHorarios(rota) {
   if (!rota) return '';
   const partida = rota.horario_partida || rota.horarioPartida || (rota.oferta && rota.oferta.horarioPartida);
   const chegada = rota.horario_chegada || rota.horarioChegada || (rota.oferta && rota.oferta.horarioChegada);
-  const voo = rota.numero_voo || rota.numeroVoo || (rota.oferta && rota.oferta.numeroVoo);
+  const vooRaw = rota.numero_voo || rota.numeroVoo || (rota.oferta && rota.oferta.numeroVoo);
   const conexao = rota.tempo_conexao || rota.tempoConexao || (rota.oferta && rota.oferta.tempoConexao);
   const diasExtrasRaw = rota.dias_extras_chegada ?? rota.diasExtrasChegada ?? (rota.oferta && rota.oferta.diasExtrasChegada);
   const diasExtras = Number(diasExtrasRaw);
-  const aeronave = rota.aeronave || (rota.oferta && rota.oferta.aeronave);
+  const aeronaveRaw = rota.aeronave || (rota.oferta && rota.oferta.aeronave);
 
   if (!partida || !chegada) return '';
+
+  const voo = sanitizarTextoTecnico(vooRaw);
+  const aeronave = sanitizarTextoTecnico(aeronaveRaw);
 
   const diasExtrasStr = (Number.isFinite(diasExtras) && diasExtras > 0)
     ? `<span class="badge-dias-extras" data-testid="badge-dias-extras">+${diasExtras}d</span>`
@@ -279,7 +295,7 @@ export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = nul
   const minPreco = Math.min(...precos);
   const maxPreco = Math.max(...precos);
 
-  const barWidth = 38;
+  const barWidth = 40;
   const gap = 12;
   const paddingX = 14;
   const topPadding = 24;
@@ -308,7 +324,7 @@ export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = nul
     const x = paddingX + index * (barWidth + gap);
     const y = topPadding + (maxBarHeight - barHeight);
 
-    let fillColor = 'rgba(148, 163, 184, 0.35)';
+    let fillColor = 'rgba(148, 163, 184, 0.28)';
     let precoColor = '#94a3b8';
     if (ehMenor) {
       fillColor = '#10b981';
@@ -325,7 +341,7 @@ export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = nul
       <g class="grafico-coluna" data-offset="${offset}">
         <title>${escapeHtml(dataFmt)} (${offsetStr}): ${precoFmt}</title>
         <text x="${x + barWidth / 2}" y="${y - 6}" text-anchor="middle" font-size="10" font-weight="700" fill="${precoColor}">${precoFmt}</text>
-        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="3" fill="${fillColor}" />
+        <rect x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="4" fill="${fillColor}" />
         <text x="${x + barWidth / 2}" y="${topPadding + maxBarHeight + 16}" text-anchor="middle" font-size="11" font-weight="600" fill="#e2e8f0">${escapeHtml(dataFmt)}</text>
         <text x="${x + barWidth / 2}" y="${topPadding + maxBarHeight + 28}" text-anchor="middle" font-size="9" font-weight="500" fill="${ehBase ? '#38bdf8' : '#64748b'}">${offsetStr}</text>
       </g>
@@ -357,14 +373,14 @@ export function renderizarRankingDestinosRegionais(rankingDestinosRegionais) {
   }
 
   const vencedor = rankingDestinosRegionais[0];
-  const nomeVencedor = escapeHtml(vencedor.nomeCidade || vencedor.destinoIata || 'Destino');
+  const nomeVencedor = escapeHtml(sanitizarTextoTecnico(vencedor.nomeCidade || vencedor.destinoIata || 'Destino'));
   const iataVencedor = escapeHtml(vencedor.destinoIata || '');
   const precoVencedor = formatarPreco(vencedor.preco);
 
   const topDestinos = rankingDestinosRegionais.slice(0, 5);
   const itensHtml = topDestinos.map((item, index) => {
     const posicao = index + 1;
-    const nome = escapeHtml(item.nomeCidade || item.destinoIata || '');
+    const nome = escapeHtml(sanitizarTextoTecnico(item.nomeCidade || item.destinoIata || ''));
     const iata = escapeHtml(item.destinoIata || '');
     const preco = formatarPreco(item.preco);
     const ehVencedor = index === 0;
@@ -440,14 +456,19 @@ export function renderizarCardRota(rota) {
   const origem = rota.origem || 'Origem';
   const destino = rota.destino_real || rota.destino || 'Destino';
   const precoAtual = Number(rota.preco_atual);
+  const precoAlvo = Number(rota.preco_alvo);
+  const bateuMeta = Number.isFinite(precoAtual) && precoAtual > 0 && Number.isFinite(precoAlvo) && precoAlvo > 0 && precoAtual <= precoAlvo;
+
   const moedaCode = (rota.moeda || 'BRL').trim().toUpperCase();
   const simboloMoeda = moedaCode === 'USD' ? 'US$' : (moedaCode === 'EUR' ? '€' : 'R$');
   const precoStr = Number.isFinite(precoAtual) && precoAtual > 0 ? `${simboloMoeda} ${formatarPreco(precoAtual)}` : 'Aguardando checagem';
   const menorHist = Number(rota.menor_preco_historico);
   const menorHistStr = Number.isFinite(menorHist) && menorHist > 0 ? `Menor: ${simboloMoeda} ${formatarPreco(menorHist)}` : '';
-  let termometro = rota.termometro || '⚪ Sem dados recentes';
-  // Sanitizar contra parênteses vazios gerados por labels ausentes
-  termometro = String(termometro).replace(/\s*\(\s*\)/g, '').trim();
+
+  let termometro = sanitizarTextoTecnico(rota.termometro || '⚪ Sem dados recentes');
+  if (!termometro) {
+    termometro = '⚪ Sem dados recentes';
+  }
 
   const priceInsights = rota.price_insights || rota.priceInsights;
   const melhorDataAlt = rota.melhor_data_alternativa || rota.melhorDataAlternativa;
@@ -495,9 +516,10 @@ export function renderizarCardRota(rota) {
 
   const linkGoogle = rota.link_google_flights || '#';
   const silenciada = rota.esta_silenciada ? '<span class="badge badge-silenciada">🔕 Silenciada</span>' : '';
+  const custoDestinoLimpo = sanitizarTextoTecnico(rota.custo_destino_texto);
 
   return `
-    <article class="rota-card" data-id="${id}" data-testid="rota-card-${id}">
+    <article class="rota-card${bateuMeta ? ' rota-card-oportunidade' : ''}" data-id="${id}" data-testid="rota-card-${id}">
       <header class="rota-card-header">
         <div class="rota-trajeto">
           <h3 class="rota-titulo">${escapeHtml(origem)} <span class="rota-seta">➔</span> ${escapeHtml(destino)}</h3>
@@ -526,9 +548,9 @@ export function renderizarCardRota(rota) {
       ${blocoRankingRegional}
       ${graficoCalendario}
 
-      ${rota.custo_destino_texto && rota.custo_destino_texto !== '-' ? `
+      ${custoDestinoLimpo && custoDestinoLimpo !== '-' ? `
         <div class="rota-custo-destino">
-          🏨 ${escapeHtml(rota.custo_destino_texto)}
+          🏨 ${escapeHtml(custoDestinoLimpo)}
         </div>
       ` : ''}
 
