@@ -78,5 +78,21 @@
     "dias_estadia": 14,
     "tipo_viagem": "round_trip",
     "ativa": 1
+  },
+  {
+    "origem": "Rio de Janeiro",
+    "destino": "Europa",
+    "codigo_origem": "RIO",
+    "codigo_destino": "EUR",
+    "data_ida": "2026-11-10",
+    "data_volta": "2026-11-25",
+    "duracao_max_horas": 999,
+    "preco_alvo": 3900,
+    "cabine": "economy",
+    "flexibilidade_dias": 0,
+    "sem_data": 1,
+    "dias_estadia": 15,
+    "tipo_viagem": "round_trip",
+    "ativa": 1
   }
 ]
