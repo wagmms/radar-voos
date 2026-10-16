@@ -185,7 +185,7 @@
     "duracao_max_horas": 16,
     "preco_alvo": 3800,
     "cabine": "economy",
-    "flexibilidade_dias": 0,
+    "flexibilidade_dias": 3,
     "sem_data": 0,
     "dias_estadia": 10,
     "tipo_viagem": "round_trip",
