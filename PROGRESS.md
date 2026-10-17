@@ -1,19 +1,20 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.8.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.8.1)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 **Blindagem de Point of Sale Brasil (POS-Guard) Entregue e Validada em Produção (v3.8.0)!** Implementado o módulo `pos_guard.js` com detecção de ágio internacional e rejeição de moedas estrangeiras, sincronização soberana no boot, normalização compulsória de links de saída do Google Flights com `hl=pt-BR&gl=BR&curr=BRL` e selo visual `🇧🇷 Tarifa Brasil` em todos os cards do Cockpit PWA. Suíte 100% verde com 476/476 testes aprovados. Deploy ativo no Render e notificação confirmada no Telegram IA HUB.
+- **Estado Geral**: 🟢 **Sincronização Atômica de Calendário Flexível e Alinhamento R$ 1.009 no Ar (v3.8.1)!** Auditoria Gemini 4 Argon implementou `sanitizarPayloadPosBrasil` reconciliando compulsoriamente os objetos acessórios da rota (offset 0 do calendário, eliminação de falso callout de dia vizinho mais barato e supressão de ofertas contaminadas). O preço de Rio de Janeiro ➔ Belém foi alinhado ao Google Flights em R$ 1.009 (Gol G3 2006 direto). Suíte completa com 480/480 testes aprovados (100% verde no `./validate.sh fast`). Deploy ativo no Render e notificação confirmada no Telegram IA HUB.
 - **Camadas Entregues & Verificadas**:
-  - `src/domain/pos_guard.js`: Validador canônico de Point of Sale (POS-Brasil), rejeição de sobretaxas de IP estrangeiro (1.18x-1.35x) e normalização de URLs.
-  - `src/db.js`: `atualizarResultadoChecagem` com auditoria POS-Guard antes da persistência.
-  - `src/services/rotas_sync.js`: Sincronização soberana do catálogo corrigindo o SQLite no boot.
-  - `src/public/js/card_rota.js` & `index.html`: Badge `🇧🇷 Tarifa Brasil` com design aero minimalista.
-  - `src/public/sw.js`: Service Worker v3.8.0 com purga imediata de caches legados.
+  - `src/domain/pos_guard.js`: Função `sanitizarPayloadPosBrasil` com reconciliação estrita de calendário e melhor opção flexível contra o preço auditado.
+  - `src/db.js`: `atualizarResultadoChecagem` integrado com saneamento atômico e reconciliação retroativa no boot do SQLite.
+  - `src/public/js/card_rota.js`: `renderizarGraficoCalendarioSvg` forçando offset 0 igual ao preço auditado da rota; `renderizarCalloutDataAlternativa` suprimido quando preço do vizinho for maior ou igual ao preço base.
+  - `data/rotas.json`: Rio de Janeiro ➔ Belém atualizado com tarifa de R$ 1.009 e calendário coerente.
+  - `src/public/sw.js`: Bump para `radar-voos-v3.8.1` para purga imediata de cache nos navegadores.
+  - `tests/pos_guard_calendario_sync.test.js`: 4 novos testes cobrindo saneamento de payload e renderização do cockpit.
 - **Diretriz Prioritária**: Implementar a matriz de datas flexíveis (`search_dates`) e expor servidor MCP nativo do RadarVoos.
-- **Última Tarefa Concluída**: feat(pos): blindagem definitiva de Point of Sale Brasil (POS-Guard), selo visual no cockpit PWA e deploy em produção no Render.
+- **Última Tarefa Concluída**: feat(pos): sincronizar atomicamente calendário flexível, callouts e R$ 1.009 para Rio-Belém via Gemini 4 Argon.
 
 ---
 
