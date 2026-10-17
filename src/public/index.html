@@ -858,6 +858,107 @@
       border-color: rgba(56, 189, 248, 0.3);
     }
 
+    /* Card e Bloco do Modo Flexível */
+    .flex-mode-card {
+      padding: 10px 14px;
+      background: rgba(56, 189, 248, 0.04);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .flex-mode-card:hover {
+      background: rgba(56, 189, 248, 0.08);
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+    .flex-mode-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .flex-mode-title {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .flex-mode-sub {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.25;
+    }
+
+    .form-section-flex {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin-bottom: 14px;
+      animation: fadeIn 0.15s ease;
+    }
+
+    .input-estadia-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      max-width: 160px;
+    }
+    .input-estadia-wrapper .form-control {
+      font-size: 1.05rem;
+      font-weight: 700;
+      text-align: center;
+    }
+    .unidade-texto {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .pills-atalhos-dias {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .btn-pill-dias {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--card-border);
+      color: var(--text-secondary);
+      border-radius: var(--radius-xs);
+      padding: 4px 10px;
+      font-size: 0.73rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .btn-pill-dias:hover {
+      background: rgba(56, 189, 248, 0.12);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: var(--primary);
+    }
+    .btn-pill-dias.active {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: var(--primary);
+      color: #ffffff;
+    }
+
+    .form-help-text {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      margin-top: 8px;
+      line-height: 1.35;
+    }
+    .form-help-text strong {
+      color: var(--primary);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
     .modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -961,12 +1062,42 @@
         </div>
 
         <div class="form-group">
-          <label class="form-check">
+          <label class="form-check flex-mode-card" for="campo-sem-data">
             <input type="checkbox" id="campo-sem-data">
-            <span>🗓️ Modo Flexível Sem Data (menor preço nos próximos meses)</span>
+            <div class="flex-mode-info">
+              <span class="flex-mode-title">🗓️ Modo Flexível Sem Data Fixa</span>
+              <span class="flex-mode-sub">O radar busca automaticamente o menor preço nos próximos meses</span>
+            </div>
           </label>
         </div>
 
+        <!-- Bloco Exclusivo do Modo Flexível -->
+        <div id="bloco-modo-flexivel" class="form-section-flex" style="display: none;">
+          <div id="grupo-flex-estadia" class="form-group" style="margin-bottom: 0;">
+            <label for="campo-dias-estadia">⏱️ Duração da Viagem no Destino (dias) *</label>
+            <div class="input-estadia-wrapper">
+              <input type="number" id="campo-dias-estadia" class="form-control" min="1" max="180" value="10" placeholder="10">
+              <span class="unidade-texto">dias</span>
+            </div>
+            <div class="pills-atalhos-dias" id="pills-atalhos-dias" role="group" aria-label="Atalhos de duração da viagem">
+              <button type="button" class="btn-pill-dias" data-dias="7">7 dias</button>
+              <button type="button" class="btn-pill-dias active" data-dias="10">10 dias</button>
+              <button type="button" class="btn-pill-dias" data-dias="14">14 dias (2 sem)</button>
+              <button type="button" class="btn-pill-dias" data-dias="21">21 dias (3 sem)</button>
+              <button type="button" class="btn-pill-dias" data-dias="30">30 dias (1 mês)</button>
+            </div>
+            <p class="form-help-text" id="ajuda-flex-estadia">
+              💡 O radar varrerá os próximos meses buscando a menor tarifa de ida e volta para uma viagem de <strong id="texto-dias-estadia-preview">10 dias</strong>.
+            </p>
+          </div>
+          <div id="grupo-flex-so-ida" class="form-group" style="display: none; margin-bottom: 0;">
+            <p class="form-help-text">
+              💡 Modo <strong>Apenas Ida Flexível</strong> ativo: o radar varrerá os próximos meses para encontrar o menor preço de só ida, sem exigir data nem estadia.
+            </p>
+          </div>
+        </div>
+
+        <!-- Bloco Exclusivo de Data Fixa -->
         <div id="datas-container" class="form-row">
           <div class="form-group" id="grupo-data-ida">
             <label for="campo-data-ida">Data de Ida *</label>

@@ -29,6 +29,13 @@ const campoId = document.getElementById('rota-id');
 const campoOrigem = document.getElementById('campo-origem');
 const campoDestino = document.getElementById('campo-destino');
 const campoSemData = document.getElementById('campo-sem-data');
+const blocoModoFlexivel = document.getElementById('bloco-modo-flexivel');
+const grupoFlexEstadia = document.getElementById('grupo-flex-estadia');
+const grupoFlexSoIda = document.getElementById('grupo-flex-so-ida');
+const campoDiasEstadia = document.getElementById('campo-dias-estadia');
+const textoDiasEstadiaPreview = document.getElementById('texto-dias-estadia-preview');
+const pillsAtalhosDias = document.getElementById('pills-atalhos-dias');
+
 const datasContainer = document.getElementById('datas-container');
 const campoDataIda = document.getElementById('campo-data-ida');
 const campoDataVolta = document.getElementById('campo-data-volta');
@@ -44,6 +51,64 @@ const labelTipoSoIda = document.getElementById('label-tipo-so-ida');
 const grupoDataVolta = document.getElementById('grupo-data-volta');
 
 /**
+ * Sincroniza dinamicamente a visibilidade e obrigatoriedade dos campos
+ * de acordo com o Modo Flexível (Sem Data) e o Tipo de Viagem (Só Ida vs Ida e Volta)
+ */
+export function sincronizarCamposFormulario() {
+  const ehSemData = Boolean(campoSemData && campoSemData.checked);
+  const ehSoIda = Boolean(tipoSoIda && tipoSoIda.checked);
+
+  if (ehSemData) {
+    // 1. Modo Flexível Sem Data: Oculta campos de datas fixas e seletor de janela flexível
+    if (datasContainer) datasContainer.style.display = 'none';
+    if (grupoDiasFlexiveis) grupoDiasFlexiveis.style.display = 'none';
+    if (campoDataIda) campoDataIda.removeAttribute('required');
+    if (blocoModoFlexivel) blocoModoFlexivel.style.display = 'block';
+
+    if (ehSoIda) {
+      if (grupoFlexEstadia) grupoFlexEstadia.style.display = 'none';
+      if (grupoFlexSoIda) grupoFlexSoIda.style.display = 'block';
+    } else {
+      if (grupoFlexEstadia) grupoFlexEstadia.style.display = 'block';
+      if (grupoFlexSoIda) grupoFlexSoIda.style.display = 'none';
+
+      const diasVal = campoDiasEstadia ? parseInt(campoDiasEstadia.value, 10) : 10;
+      const dias = (Number.isFinite(diasVal) && diasVal > 0) ? diasVal : 10;
+      if (textoDiasEstadiaPreview) textoDiasEstadiaPreview.textContent = `${dias} dias`;
+
+      if (pillsAtalhosDias) {
+        pillsAtalhosDias.querySelectorAll('.btn-pill-dias').forEach(btn => {
+          const btnDias = parseInt(btn.dataset.dias, 10);
+          btn.classList.toggle('active', btnDias === dias);
+        });
+      }
+    }
+  } else {
+    // 2. Modo Data Fixa: Exibe datas de calendário e janela flexível
+    if (blocoModoFlexivel) blocoModoFlexivel.style.display = 'none';
+    if (datasContainer) datasContainer.style.display = 'grid';
+    if (grupoDiasFlexiveis) grupoDiasFlexiveis.style.display = 'block';
+    if (campoDataIda) campoDataIda.setAttribute('required', 'true');
+
+    if (grupoDataVolta) {
+      if (ehSoIda) {
+        grupoDataVolta.style.opacity = '0.35';
+        if (campoDataVolta) {
+          campoDataVolta.disabled = true;
+          campoDataVolta.placeholder = 'Não se aplica (Só Ida)';
+        }
+      } else {
+        grupoDataVolta.style.opacity = '1';
+        if (campoDataVolta) {
+          campoDataVolta.disabled = false;
+          campoDataVolta.placeholder = 'Ex: 2026-11-20 ou 10';
+        }
+      }
+    }
+  }
+}
+
+/**
  * Atualiza o estado visual e os campos dependentes do Tipo de Viagem (Só Ida vs Ida e Volta)
  */
 export function atualizarSelecaoTipoViagem(tipo = 'round_trip') {
@@ -54,21 +119,7 @@ export function atualizarSelecaoTipoViagem(tipo = 'round_trip') {
   if (labelTipoSoIda) labelTipoSoIda.classList.toggle('active', ehSoIda);
   if (labelTipoIdaVolta) labelTipoIdaVolta.classList.toggle('active', !ehSoIda);
 
-  if (grupoDataVolta) {
-    if (ehSoIda) {
-      grupoDataVolta.style.opacity = '0.35';
-      if (campoDataVolta) {
-        campoDataVolta.disabled = true;
-        campoDataVolta.placeholder = 'Não se aplica (Só Ida)';
-      }
-    } else {
-      grupoDataVolta.style.opacity = '1';
-      if (campoDataVolta) {
-        campoDataVolta.disabled = false;
-        campoDataVolta.placeholder = 'Ex: 2026-11-20 ou 10';
-      }
-    }
-  }
+  sincronizarCamposFormulario();
 }
 
 /**
@@ -154,9 +205,24 @@ export function abrirModal(rota = null) {
     campoId.value = rota.id;
     campoOrigem.value = rota.origem || '';
     campoDestino.value = rota.destino || '';
-    campoSemData.checked = Boolean(rota.sem_data);
-    campoDataIda.value = rota.data_ida || '';
-    campoDataVolta.value = rota.data_volta || '';
+    const ehSemData = Boolean(rota.sem_data);
+    campoSemData.checked = ehSemData;
+
+    // Preserva a quantidade de dias de estadia configurada pelo usuário (ex: 14 dias)
+    const diasEstadiaSalvo = (rota.dias_estadia && Number(rota.dias_estadia) > 0)
+      ? Number(rota.dias_estadia)
+      : 10;
+    if (campoDiasEstadia) campoDiasEstadia.value = String(diasEstadiaSalvo);
+
+    if (ehSemData) {
+      // No modo flexível sem data, NUNCA expõe datas pontuais do scanner no formulário
+      campoDataIda.value = '';
+      campoDataVolta.value = '';
+    } else {
+      campoDataIda.value = rota.data_ida || '';
+      campoDataVolta.value = rota.data_volta || '';
+    }
+
     campoPrecoAlvo.value = rota.preco_alvo !== null && rota.preco_alvo !== undefined ? rota.preco_alvo : '';
 
     // Armadilha de falsy evitada: max_stops === 0 deve selecionar '0' no select
@@ -182,6 +248,9 @@ export function abrirModal(rota = null) {
     modalTitulo.textContent = 'Nova Rota Monitorada';
     campoId.value = '';
     campoSemData.checked = false;
+    if (campoDiasEstadia) campoDiasEstadia.value = '10';
+    campoDataIda.value = '';
+    campoDataVolta.value = '';
     campoMaxStops.value = '';
     campoCarryOnBags.checked = false;
     if (campoDiasFlexiveis) {
@@ -190,7 +259,7 @@ export function abrirModal(rota = null) {
     atualizarSelecaoTipoViagem('round_trip');
   }
 
-  alternarCamposData(campoSemData.checked);
+  sincronizarCamposFormulario();
   modalRota.classList.remove('hidden');
 }
 
@@ -200,17 +269,7 @@ export function fecharModal() {
 }
 
 function alternarCamposData(semData) {
-  if (semData) {
-    campoDataIda.removeAttribute('required');
-    datasContainer.style.opacity = '0.5';
-    if (campoDiasFlexiveis) campoDiasFlexiveis.disabled = true;
-    if (grupoDiasFlexiveis) grupoDiasFlexiveis.style.opacity = '0.5';
-  } else {
-    campoDataIda.setAttribute('required', 'true');
-    datasContainer.style.opacity = '1';
-    if (campoDiasFlexiveis) campoDiasFlexiveis.disabled = false;
-    if (grupoDiasFlexiveis) grupoDiasFlexiveis.style.opacity = '1';
-  }
+  sincronizarCamposFormulario();
 }
 
 /**
@@ -222,13 +281,36 @@ export async function salvarRota(event) {
   const id = campoId.value ? parseInt(campoId.value, 10) : null;
   const origem = campoOrigem.value.trim();
   const destino = campoDestino.value.trim();
-  const semData = campoSemData.checked;
-  const dataIda = campoDataIda.value.trim();
-  const dataVolta = campoDataVolta.value.trim();
+  const semData = campoSemData ? campoSemData.checked : false;
 
   const ehSoIda = tipoSoIda ? tipoSoIda.checked : false;
   const tipoViagem = ehSoIda ? 'one_way' : 'round_trip';
-  const dataVoltaEfetiva = ehSoIda ? null : (dataVolta || null);
+
+  let dataIda = null;
+  let dataVolta = null;
+  let diasEstadia = null;
+
+  if (semData) {
+    // No Modo Flexível: Não há datas fixas. A duração da viagem é obtida do campo dedicado.
+    dataIda = null;
+    dataVolta = null;
+    if (!ehSoIda) {
+      const diasNum = campoDiasEstadia ? parseInt(campoDiasEstadia.value, 10) : 10;
+      diasEstadia = (Number.isFinite(diasNum) && diasNum > 0) ? diasNum : 10;
+    }
+  } else {
+    dataIda = campoDataIda.value.trim() || null;
+    if (!ehSoIda) {
+      const voltaStr = campoDataVolta.value.trim();
+      dataVolta = voltaStr || null;
+      const matchDias = voltaStr.match(/^(\d+)(?:\s*(?:dias?|d|\(dias?\)|noites?|n))?$/i);
+      if (matchDias) {
+        diasEstadia = parseInt(matchDias[1], 10);
+      } else if (campoDiasEstadia && campoDiasEstadia.value) {
+        diasEstadia = parseInt(campoDiasEstadia.value, 10) || 10;
+      }
+    }
+  }
 
   // Armadilha de falsy evitada: parse seguro de valores numéricos
   const precoAlvoVal = campoPrecoAlvo.value.trim();
@@ -239,7 +321,7 @@ export async function salvarRota(event) {
 
   const carryOnBags = campoCarryOnBags.checked ? 1 : 0;
 
-  const diasFlexVal = campoDiasFlexiveis ? campoDiasFlexiveis.value.trim() : '0';
+  const diasFlexVal = (campoDiasFlexiveis && !semData) ? campoDiasFlexiveis.value.trim() : '0';
   const diasFlexiveis = diasFlexVal !== '' && !isNaN(Number(diasFlexVal))
     ? Math.min(3, Math.max(0, parseInt(diasFlexVal, 10)))
     : 0;
@@ -250,8 +332,9 @@ export async function salvarRota(event) {
     tipo_viagem: tipoViagem,
     tipo: tipoViagem,
     sem_data: semData ? 1 : 0,
-    data_ida: dataIda || null,
-    data_volta: dataVoltaEfetiva,
+    data_ida: dataIda,
+    data_volta: dataVolta,
+    dias_estadia: diasEstadia,
     preco_alvo: precoAlvo,
     max_stops: maxStops,
     carry_on_bags: carryOnBags,
@@ -422,6 +505,30 @@ document.addEventListener('DOMContentLoaded', () => {
   if (tipoIdaVolta) tipoIdaVolta.addEventListener('change', () => atualizarSelecaoTipoViagem('round_trip'));
   if (tipoSoIda) tipoSoIda.addEventListener('change', () => atualizarSelecaoTipoViagem('one_way'));
   if (campoSemData) campoSemData.addEventListener('change', (e) => alternarCamposData(e.target.checked));
+  if (campoDiasEstadia) {
+    campoDiasEstadia.addEventListener('input', () => {
+      const val = parseInt(campoDiasEstadia.value, 10);
+      const dias = (Number.isFinite(val) && val > 0) ? val : 10;
+      if (textoDiasEstadiaPreview) textoDiasEstadiaPreview.textContent = `${dias} dias`;
+      if (pillsAtalhosDias) {
+        pillsAtalhosDias.querySelectorAll('.btn-pill-dias').forEach(btn => {
+          btn.classList.toggle('active', parseInt(btn.dataset.dias, 10) === dias);
+        });
+      }
+    });
+  }
+  if (pillsAtalhosDias) {
+    pillsAtalhosDias.addEventListener('click', (e) => {
+      const btn = e.target.closest('.btn-pill-dias');
+      if (!btn) return;
+      const dias = parseInt(btn.dataset.dias, 10);
+      if (Number.isFinite(dias) && dias > 0 && campoDiasEstadia) {
+        campoDiasEstadia.value = String(dias);
+        if (textoDiasEstadiaPreview) textoDiasEstadiaPreview.textContent = `${dias} dias`;
+        pillsAtalhosDias.querySelectorAll('.btn-pill-dias').forEach(b => b.classList.toggle('active', b === btn));
+      }
+    });
+  }
   if (formRota) formRota.addEventListener('submit', salvarRota);
   if (rotasContainer) rotasContainer.addEventListener('click', manipularAcaoCard);
 

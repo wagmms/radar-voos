@@ -4,6 +4,21 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.9.3] - 2026-10-17 — Redesign do Modo Flexível: Eliminação de Datas Aleatórias e Persistência Sagrada de Dias de Estadia
+
+### 🚀 Melhorias de UX & Correções Arquiteturais:
+- **Redesign Anti-UI-Slop do Modo Flexível (`src/public/index.html` e `src/public/app.js`)**:
+  - Eliminação de datas fixas confusas quando `Modo Flexível Sem Data` está ativo: os campos "Data de Ida *" e "Data de Volta" são totalmente ocultados, prevenindo que o usuário veja datas de varredura pré-preenchidas como se fossem datas escolhidas por ele.
+  - Adicionado bloco dedicado para o Modo Flexível com campo numérico destacado de **"Duração da Viagem (dias de estadia)"** e pills de atalho rápido em 1 toque: `[ 7 dias ] [ 10 dias ] [ 14 dias ] [ 21 dias ] [ 30 dias ]`.
+  - Explicação contextual inteligente em tempo real para Ida e Volta (varredura pelo menor preço para X dias) e Apenas Ida (menor preço de só ida nos próximos meses sem exigir estadia).
+- **Persistência Estrita dos Dias de Estadia (`src/server/routes/rotas_routes.js` e `src/services/flight_scanner.js`)**:
+  - Correção na rota POST e PUT `/api/rotas`: aceitação explícita de `body.dias_estadia` com prioridade máxima. Se o usuário definir 14 dias, o valor é gravado no SQLite e NUNCA mais reseta para 10 dias.
+  - Blindagem do `flight_scanner.js`: o scanner utiliza compulsoriamente `rota.dias_estadia` com prioridade sobre qualquer fallback e nunca sobrescreve a configuração da rota com strings de calendário que degradavam a contagem de dias.
+- **Service Worker (`src/public/sw.js`)**:
+  - Bump de versão do cache para `radar-voos-v3.9.3` com purga garantida de cache nos navegadores e PWA.
+- **Testes Automatizados (`tests/routes.test.js`)**:
+  - Adicionado teste específico de persistência de `dias_estadia` em POST e PUT. Suíte 100% verde com 488/488 testes aprovados.
+
 ## [v3.9.2] - 2026-10-17 — Super-Clusters SAO Exclusivos e Sincronização Estelar de Menor Preço Comprovado no Cockpit
 
 ### 🚀 Melhorias de Engenharia & Correções Cirúrgicas:

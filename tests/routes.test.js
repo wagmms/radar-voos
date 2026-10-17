@@ -233,6 +233,54 @@ describe('Servidor Fastify: Endpoints REST', () => {
     assert.strictEqual(json.rota.duracao_max_horas, 12);
   });
 
+  it('POST e PUT /api/rotas devem suportar e persistir dias_estadia explicitamente (ex: 14 dias) no modo flexível sem resetar para 10', async () => {
+    // 1. Cria rota flexível com 14 dias de estadia
+    const resPost = await app.inject({
+      method: 'POST',
+      url: '/api/rotas',
+      payload: {
+        origem: 'São Paulo',
+        destino: 'Paris',
+        sem_data: 1,
+        dias_estadia: 14,
+        preco_alvo: 4000
+      }
+    });
+
+    assert.strictEqual(resPost.statusCode, 201);
+    const rotaCriada = resPost.json().rota;
+    assert.strictEqual(rotaCriada.sem_data, 1);
+    assert.strictEqual(rotaCriada.dias_estadia, 14, 'dias_estadia deve ser exatamente 14');
+
+    // 2. PUT atualizando apenas outro campo (ex: preco_alvo) garantindo que dias_estadia NÃO reseta para 10
+    const resPut1 = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${rotaCriada.id}`,
+      payload: {
+        preco_alvo: 3800
+      }
+    });
+    assert.strictEqual(resPut1.statusCode, 200);
+    assert.strictEqual(resPut1.json().rota.dias_estadia, 14, 'dias_estadia deve continuar 14 após atualização parcial');
+
+    // 3. PUT atualizando dias_estadia explicitamente para 21 dias
+    const resPut2 = await app.inject({
+      method: 'PUT',
+      url: `/api/rotas/${rotaCriada.id}`,
+      payload: {
+        dias_estadia: 21
+      }
+    });
+    assert.strictEqual(resPut2.statusCode, 200);
+    assert.strictEqual(resPut2.json().rota.dias_estadia, 21, 'dias_estadia deve atualizar para 21');
+
+    // 4. GET /api/rotas deve confirmar 21 dias no banco
+    const resGet = await app.inject({ method: 'GET', url: '/api/rotas' });
+    const rotaConsultada = resGet.json().rotas.find(r => r.id === rotaCriada.id);
+    assert.ok(rotaConsultada);
+    assert.strictEqual(rotaConsultada.dias_estadia, 21, 'GET deve retornar dias_estadia 21 intacto');
+  });
+
   it('POST e PUT /api/rotas devem suportar e persistir tipo_viagem ("one_way" vs "round_trip")', async () => {
     // 1. Cria rota com tipo_viagem: 'one_way'
     const resPost = await app.inject({
