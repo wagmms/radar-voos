@@ -120,3 +120,190 @@ export function auditarTarifaBrasil(candidato, rotaBaseline = null) {
     posBadge: '🇧🇷 Tarifa Brasil'
   };
 }
+
+function parseJsonSeNecessario(valor) {
+  if (valor === null || valor === undefined) return null;
+  if (typeof valor === 'object') return valor;
+  if (typeof valor === 'string') {
+    try {
+      return JSON.parse(valor);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Reconcilia e sanea todo o payload de uma coleta (calendário flexível, dia vizinho mais barato,
+ * top ofertas, trade-off e variação) contra o preço efetivo brasileiro auditado pelo POS-Guard.
+ * Impede que cotações barradas (ex: R$ 1.281 vs R$ 1.009) poluam o gráfico ou gerem falsos alertas de economia.
+ *
+ * @param {Object} resultado - Payload bruto da checagem
+ * @param {Object} [rotaBaseline=null] - Estado atual da rota no banco
+ * @param {Object} [auditoria=null] - Resultado de auditarTarifaBrasil
+ * @returns {Object} Payload saneado e matematicamente consistente com precoEfetivo
+ */
+export function sanitizarPayloadPosBrasil(resultado = {}, rotaBaseline = null, auditoria = null) {
+  const precoBruto = Number(resultado.preco !== undefined ? resultado.preco : resultado.preco_atual);
+  const audit = auditoria || auditarTarifaBrasil({
+    preco: precoBruto,
+    moeda: resultado.moeda || 'BRL',
+    detalhes: resultado.detalhes_voo || '',
+    provedor: resultado.provedor || ''
+  }, rotaBaseline);
+
+  const precoEfetivo = audit.valido
+    ? Number(audit.precoFinal)
+    : Number(rotaBaseline?.preco_atual || precoBruto || 0);
+
+  const teveIntervencaoPos = Boolean(audit.ajustado || !audit.valido);
+
+  // 1. Saneamento do Calendário de Preços (offset 0 SEMPRE igual ao precoEfetivo)
+  const rawCalendario = resultado.calendario_precos !== undefined
+    ? resultado.calendario_precos
+    : (resultado.calendarioPrecos !== undefined ? resultado.calendarioPrecos : rotaBaseline?.calendario_precos);
+  const calendarioParsed = parseJsonSeNecessario(rawCalendario);
+
+  let calendarioSaneado = null;
+  if (Array.isArray(calendarioParsed)) {
+    calendarioSaneado = calendarioParsed.map(item => {
+      if (!item || typeof item !== 'object') return item;
+      const offset = Number(item.offset) || 0;
+      if (offset === 0 && precoEfetivo > 0) {
+        return {
+          ...item,
+          preco: precoEfetivo,
+          linkGoogleFlights: item.linkGoogleFlights
+            ? enforceGoogleFlightsBrUrl(item.linkGoogleFlights)
+            : item.linkGoogleFlights
+        };
+      }
+      return item;
+    });
+  }
+
+  // 2. Recálculo estrito da Melhor Data Alternativa (Dia Vizinho) contra o precoEfetivo real
+  const rawMelhorDataAlt = resultado.melhor_data_alternativa !== undefined
+    ? resultado.melhor_data_alternativa
+    : (resultado.melhorDataAlternativa !== undefined ? resultado.melhorDataAlternativa : rotaBaseline?.melhor_data_alternativa);
+  const melhorDataParsed = parseJsonSeNecessario(rawMelhorDataAlt);
+
+  let candidatoVizinho = null;
+  if (Array.isArray(calendarioSaneado) && calendarioSaneado.length > 0) {
+    const vizinhosValidos = calendarioSaneado.filter(
+      item => item && Number(item.offset) !== 0 && Number.isFinite(Number(item.preco)) && Number(item.preco) > 0
+    );
+    if (vizinhosValidos.length > 0) {
+      candidatoVizinho = vizinhosValidos.reduce((menor, atual) =>
+        Number(atual.preco) < Number(menor.preco) ? atual : menor
+      );
+    }
+  } else if (melhorDataParsed && typeof melhorDataParsed === 'object' && Number(melhorDataParsed.offset) !== 0) {
+    candidatoVizinho = melhorDataParsed;
+  }
+
+  let melhorDataAlternativaSaneada = null;
+  if (candidatoVizinho && precoEfetivo > 0 && Number(candidatoVizinho.preco) < precoEfetivo) {
+    const precoVizinho = Math.round(Number(candidatoVizinho.preco));
+    const economiaReais = Math.round(precoEfetivo - precoVizinho);
+    const economiaPercentual = Math.round((economiaReais / precoEfetivo) * 100);
+    melhorDataAlternativaSaneada = {
+      ...(melhorDataParsed && typeof melhorDataParsed === 'object' ? melhorDataParsed : {}),
+      ...candidatoVizinho,
+      preco: precoVizinho,
+      economiaReais,
+      economiaPercentual,
+      linkGoogleFlights: enforceGoogleFlightsBrUrl(
+        candidatoVizinho.linkGoogleFlights || candidatoVizinho.link_google_flights ||
+        melhorDataParsed?.linkGoogleFlights || melhorDataParsed?.link_google_flights
+      )
+    };
+  }
+
+  // 3. Saneamento de melhor_opcao_flexivel (nunca pode sugerir tarifa >= precoEfetivo)
+  const rawMelhorFlex = resultado.melhor_opcao_flexivel !== undefined
+    ? resultado.melhor_opcao_flexivel
+    : rotaBaseline?.melhor_opcao_flexivel;
+  const melhorFlexParsed = parseJsonSeNecessario(rawMelhorFlex);
+  let melhorOpcaoFlexivelSaneada = null;
+
+  if (melhorDataAlternativaSaneada) {
+    melhorOpcaoFlexivelSaneada = melhorFlexParsed && Number(melhorFlexParsed.preco) < precoEfetivo
+      ? {
+          ...melhorFlexParsed,
+          preco: melhorDataAlternativaSaneada.preco,
+          economiaReais: melhorDataAlternativaSaneada.economiaReais,
+          economiaPercentual: melhorDataAlternativaSaneada.economiaPercentual
+        }
+      : melhorDataAlternativaSaneada;
+  } else if (melhorFlexParsed && typeof melhorFlexParsed === 'object') {
+    const precoFlex = Number(melhorFlexParsed.preco);
+    if (Number.isFinite(precoFlex) && precoFlex > 0 && precoFlex < precoEfetivo) {
+      melhorOpcaoFlexivelSaneada = {
+        ...melhorFlexParsed,
+        economiaReais: Math.round(precoEfetivo - precoFlex),
+        economiaPercentual: Math.round(((precoEfetivo - precoFlex) / precoEfetivo) * 100)
+      };
+    } else {
+      melhorOpcaoFlexivelSaneada = null;
+    }
+  }
+
+  // 4. Saneamento de Variação, Termômetro, Top Ofertas e Trade-off quando houve bloqueio de ágio POS
+  let variacaoTexto = resultado.variacao_texto ?? rotaBaseline?.variacao_texto ?? null;
+  let termometro = resultado.termometro ?? rotaBaseline?.termometro ?? null;
+  let detalhesVoo = resultado.detalhes_voo ?? rotaBaseline?.detalhes_voo ?? null;
+  let topOfertas = resultado.top_ofertas ?? resultado.topOfertas ?? rotaBaseline?.top_ofertas ?? null;
+  let melhorDireta = resultado.melhor_opcao_direta_rapida ?? resultado.melhorOpcaoDiretaOuRapida ?? rotaBaseline?.melhor_opcao_direta_rapida ?? null;
+
+  if (teveIntervencaoPos) {
+    const precoAnterior = Number(rotaBaseline?.preco_atual);
+    if (Number.isFinite(precoAnterior) && precoAnterior > 0 && precoEfetivo === Math.round(precoAnterior)) {
+      variacaoTexto = '= Estável (🇧🇷 Tarifa BR)';
+    }
+
+    const precoAlvo = Number(rotaBaseline?.preco_alvo);
+    if (Number.isFinite(precoAlvo) && precoAlvo > 0 && precoEfetivo <= precoAlvo) {
+      if (!termometro || String(termometro).includes('Acima') || String(termometro).includes('🔴')) {
+        termometro = rotaBaseline?.termometro && !String(rotaBaseline.termometro).includes('Acima')
+          ? rotaBaseline.termometro
+          : '🟢 Abaixo da meta!';
+      }
+    }
+
+    if (rotaBaseline?.detalhes_voo) {
+      detalhesVoo = rotaBaseline.detalhes_voo;
+    }
+
+    topOfertas = rotaBaseline?.top_ofertas ?? null;
+    melhorDireta = rotaBaseline?.melhor_opcao_direta_rapida ?? null;
+  }
+
+  // Valida se a opção direta/rápida ainda faz sentido frente ao precoEfetivo
+  const melhorDiretaParsed = parseJsonSeNecessario(melhorDireta);
+  if (melhorDiretaParsed && typeof melhorDiretaParsed === 'object' && precoEfetivo > 0) {
+    const precoDireta = Number(melhorDiretaParsed.preco);
+    if (!Number.isFinite(precoDireta) || precoDireta <= precoEfetivo) {
+      melhorDireta = null;
+    } else {
+      melhorDireta = {
+        ...melhorDiretaParsed,
+        diferencaPreco: Math.round(precoDireta - precoEfetivo)
+      };
+    }
+  }
+
+  return {
+    auditoria: audit,
+    precoEfetivo,
+    calendario_precos: calendarioSaneado,
+    melhor_data_alternativa: melhorDataAlternativaSaneada,
+    melhor_opcao_flexivel: melhorOpcaoFlexivelSaneada,
+    variacao_texto: variacaoTexto,
+    termometro,
+    detalhes_voo: detalhesVoo,
+    top_ofertas: topOfertas,
+    melhor_opcao_direta_rapida: melhorDireta
+  };
+}

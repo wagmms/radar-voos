@@ -249,25 +249,56 @@ export function renderizarTradeOff(rota) {
   `.trim();
 }
 
+function parseJsonCampo(valor) {
+  if (!valor) return null;
+  if (typeof valor === 'object') return valor;
+  if (typeof valor === 'string') {
+    try {
+      return JSON.parse(valor);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /**
  * Renderiza callout de melhor data alternativa vizinha quando há economia comprovada
+ * Blindado contra falsos positivos: nunca exibe se o dia vizinho for >= precoBase real da rota.
  */
-export function renderizarCalloutDataAlternativa(melhorDataAlternativa) {
-  if (!melhorDataAlternativa || typeof melhorDataAlternativa !== 'object') return '';
+export function renderizarCalloutDataAlternativa(melhorDataAlternativa, precoBase = null) {
+  const dadosAlt = parseJsonCampo(melhorDataAlternativa);
+  if (!dadosAlt || typeof dadosAlt !== 'object') return '';
 
-  const econReais = Number(melhorDataAlternativa.economiaReais ?? melhorDataAlternativa.economia_reais);
+  const precoVizinho = Number(dadosAlt.preco);
+  if (!Number.isFinite(precoVizinho) || precoVizinho <= 0) return '';
+
+  const baseNum = Number(precoBase);
+  const temPrecoBase = Number.isFinite(baseNum) && baseNum > 0;
+
+  // Regra de ouro: se temos o preço base real da rota e o dia vizinho é >= preço base, suprime imediatamente
+  if (temPrecoBase && precoVizinho >= baseNum) {
+    return '';
+  }
+
+  const econReais = temPrecoBase
+    ? Math.round(baseNum - precoVizinho)
+    : Number(dadosAlt.economiaReais ?? dadosAlt.economia_reais);
+
   if (!Number.isFinite(econReais) || econReais <= 0) return '';
 
-  const offset = Number(melhorDataAlternativa.offset) || 0;
+  const econPct = temPrecoBase
+    ? Math.round((econReais / baseNum) * 100)
+    : Number(dadosAlt.economiaPercentual ?? dadosAlt.economia_percentual);
+
+  const offset = Number(dadosAlt.offset) || 0;
   const offsetStr = offset > 0 ? `+${offset}d` : `${offset}d`;
-  const dataIda = melhorDataAlternativa.dataIda ?? melhorDataAlternativa.data_ida;
-  const dataVolta = melhorDataAlternativa.dataVolta ?? melhorDataAlternativa.data_volta;
+  const dataIda = dadosAlt.dataIda ?? dadosAlt.data_ida;
+  const dataVolta = dadosAlt.dataVolta ?? dadosAlt.data_volta;
   const dataIdaFmt = formatarDiaMes(dataIda);
   const dataVoltaFmt = dataVolta ? ` ➔ ${formatarDiaMes(dataVolta)}` : '';
-  const preco = Number(melhorDataAlternativa.preco);
-  const econPct = Number(melhorDataAlternativa.economiaPercentual ?? melhorDataAlternativa.economia_percentual);
 
-  const link = melhorDataAlternativa.linkGoogleFlights ?? melhorDataAlternativa.link_google_flights;
+  const link = dadosAlt.linkGoogleFlights ?? dadosAlt.link_google_flights;
   const temLinkSeguro = ehUrlSegura(link);
 
   const linkHtml = temLinkSeguro
@@ -281,7 +312,7 @@ export function renderizarCalloutDataAlternativa(melhorDataAlternativa) {
         <span class="data-alternativa-economia">-R$ ${formatarPreco(econReais)}${Number.isFinite(econPct) && econPct > 0 ? ` (-${econPct}%)` : ''}</span>
       </div>
       <div class="data-alternativa-corpo">
-        <span>📅 <strong>${escapeHtml(dataIdaFmt)}${escapeHtml(dataVoltaFmt)}</strong> por <strong>R$ ${formatarPreco(preco)}</strong></span>
+        <span>📅 <strong>${escapeHtml(dataIdaFmt)}${escapeHtml(dataVoltaFmt)}</strong> por <strong>R$ ${formatarPreco(precoVizinho)}</strong></span>
         ${linkHtml}
       </div>
     </div>
@@ -290,12 +321,26 @@ export function renderizarCalloutDataAlternativa(melhorDataAlternativa) {
 
 /**
  * Renderiza gráfico SVG responsivo e acessível da janela flexível de datas
- * Imune a divisão por zero (maxPreco === minPreco) e sanitizado contra NaN
+ * Sincroniza compulsoriamente o offset 0 (Base) com o precoBase auditado da rota.
+ * Imune a divisão por zero (maxPreco === minPreco) e sanitizado contra NaN.
  */
 export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = null) {
-  if (!Array.isArray(calendarioPrecos)) return '';
+  const lista = parseJsonCampo(calendarioPrecos);
+  if (!Array.isArray(lista)) return '';
 
-  const itensValidos = calendarioPrecos.filter(item => item && Number(item.preco) > 0);
+  const baseNum = Number(precoBase);
+  const temPrecoBase = Number.isFinite(baseNum) && baseNum > 0;
+
+  const itensValidos = lista
+    .filter(item => item && Number(item.preco) > 0)
+    .map(item => {
+      const offset = Number(item.offset) || 0;
+      if (offset === 0 && temPrecoBase) {
+        return { ...item, preco: baseNum };
+      }
+      return item;
+    });
+
   if (itensValidos.length < 2) return '';
 
   const precos = itensValidos.map(item => Number(item.preco));
@@ -490,7 +535,7 @@ export function renderizarCardRota(rota) {
   const badgesFiltros = renderizarBadgesFiltros(rota);
   const linhaHorarios = renderizarLinhaHorarios(rota);
   const blocoTradeOff = renderizarTradeOff(rota);
-  const calloutDataAlt = renderizarCalloutDataAlternativa(melhorDataAlt);
+  const calloutDataAlt = renderizarCalloutDataAlternativa(melhorDataAlt, precoAtual);
   const blocoRankingRegional = renderizarRankingDestinosRegionais(rankingRegionais);
   const graficoCalendario = renderizarGraficoCalendarioSvg(calendario, precoAtual);
 
