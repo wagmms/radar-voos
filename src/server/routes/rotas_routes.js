@@ -200,13 +200,18 @@ export async function rotasRoutes(fastify) {
       });
     }
 
-    const diasEstadiaEfetivo = extrairDiasEstadia(dias_estadia || data_volta, 10);
-    const soIda = rotaEhSoIda({
+    const diasEstadiaParam = body.dias_estadia !== undefined ? body.dias_estadia : body.diasEstadia;
+    const diasEstadiaEfetivo = (diasEstadiaParam !== undefined && diasEstadiaParam !== null && diasEstadiaParam !== '' && !isNaN(Number(diasEstadiaParam)))
+      ? Math.max(1, Math.min(180, parseInt(diasEstadiaParam, 10)))
+      : extrairDiasEstadia(data_volta, 10);
+
+    const ehExplicitoSoIda = body.tipo === 'one_way' || body.tipo_viagem === 'one_way' || (typeof data_volta === 'string' && ehSoIda(data_volta));
+    const soIda = ehExplicitoSoIda ? true : rotaEhSoIda({
       tipo: body.tipo,
       tipo_viagem: body.tipo_viagem,
-      data_volta,
+      data_volta: ehSemData ? (diasEstadiaEfetivo ? String(diasEstadiaEfetivo) : data_volta) : data_volta,
       sem_data: ehSemData,
-      dias_estadia: dias_estadia !== undefined ? dias_estadia : (data_volta && /\d/.test(data_volta) ? diasEstadiaEfetivo : null)
+      dias_estadia: ehExplicitoSoIda ? null : diasEstadiaEfetivo
     });
 
     let voltaCalculada = null;
@@ -234,7 +239,7 @@ export async function rotasRoutes(fastify) {
     const novaRota = rotasRepo.criar({
       origem,
       destino,
-      data_ida: data_ida || null,
+      data_ida: ehSemData ? null : (data_ida || null),
       data_volta: ehSemData ? (soIda ? 'Só Ida' : `${diasEstadiaEfetivo}`) : (voltaCalculada || data_volta),
       duracao_max_horas: parseFloat(duracao_max_horas) || 999,
       preco_alvo: parseFloat(preco_alvo) || null,
@@ -285,13 +290,21 @@ export async function rotasRoutes(fastify) {
       }
     }
 
-    const soIda = rotaEhSoIda({
-      ...rota,
-      ...body,
-      sem_data: ehSemData,
-      data_volta: body.data_volta,
-      dias_estadia: body.dias_estadia !== undefined ? body.dias_estadia : (body.tipo === 'one_way' || ehSoIda(body.data_volta) ? null : rota.dias_estadia)
-    });
+    const diasEstadiaParam = body.dias_estadia !== undefined ? body.dias_estadia : body.diasEstadia;
+    const diasEstadiaNovo = (diasEstadiaParam !== undefined && diasEstadiaParam !== null && diasEstadiaParam !== '' && !isNaN(Number(diasEstadiaParam)))
+      ? Math.max(1, Math.min(180, parseInt(diasEstadiaParam, 10)))
+      : (body.data_volta && /\d/.test(body.data_volta) ? extrairDiasEstadia(body.data_volta, rota.dias_estadia || 10) : rota.dias_estadia);
+
+    const ehExplicitoSoIda = body.tipo === 'one_way' || body.tipo_viagem === 'one_way' || (typeof body.data_volta === 'string' && ehSoIda(body.data_volta));
+    const soIda = ehExplicitoSoIda ? true : (
+      (body.tipo === 'round_trip' || body.tipo_viagem === 'round_trip' || (diasEstadiaNovo && diasEstadiaNovo > 0)) ? false : rotaEhSoIda({
+        ...rota,
+        ...body,
+        sem_data: ehSemData,
+        data_volta: ehSemData ? (diasEstadiaNovo ? String(diasEstadiaNovo) : body.data_volta) : body.data_volta,
+        dias_estadia: ehExplicitoSoIda ? null : diasEstadiaNovo
+      })
+    );
 
     const parseNumParam = (val) => (val !== undefined && val !== null && val !== '' && !isNaN(Number(val)) ? Number(val) : null);
     const temMaxStops = body.max_stops !== undefined || body.maxStops !== undefined;
@@ -310,8 +323,9 @@ export async function rotasRoutes(fastify) {
       ...body,
       tipo: soIda ? 'one_way' : 'round_trip',
       tipo_viagem: soIda ? 'one_way' : 'round_trip',
-      data_volta: soIda ? null : body.data_volta,
-      dias_estadia: soIda ? null : (body.dias_estadia !== undefined ? extrairDiasEstadia(body.dias_estadia, 10) : rota.dias_estadia),
+      data_ida: ehSemData ? (body.data_ida || null) : (body.data_ida !== undefined ? body.data_ida : rota.data_ida),
+      data_volta: soIda ? null : (ehSemData ? (body.data_volta || `${diasEstadiaNovo || 10}`) : (body.data_volta !== undefined ? body.data_volta : rota.data_volta)),
+      dias_estadia: soIda ? null : diasEstadiaNovo,
       sem_data: body.sem_data !== undefined ? (ehSemData ? 1 : 0) : undefined,
       ...(temMaxStops ? { max_stops: maxStops } : {}),
       ...(temCarryOn ? { carry_on_bags: carryOnBags } : {}),

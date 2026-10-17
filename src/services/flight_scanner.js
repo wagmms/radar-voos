@@ -240,7 +240,7 @@ export class FlightScanner {
       } else if (rota.sem_data === 1) {
         const janelas = gerarJanelasExploracaoSemData({
           dataBase: dataIdaEfetiva,
-          diasEstadia: datasEfetivas.diasEstadia || 10,
+          diasEstadia: (rota.dias_estadia && Number(rota.dias_estadia) > 0) ? Number(rota.dias_estadia) : (datasEfetivas.diasEstadia || 10),
           qtdAmostras: 4,
           soIda: ehSoIda
         });

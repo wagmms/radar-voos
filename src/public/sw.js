@@ -1,4 +1,4 @@
-const CACHE_NAME = 'radar-voos-v3.9.2';
+const CACHE_NAME = 'radar-voos-v3.9.3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

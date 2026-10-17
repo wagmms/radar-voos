@@ -1,19 +1,20 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.9.2)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.9.3)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 **Super-Clusters SAO e Destaque Estelar do Menor Preço Entregues e Validados (v3.9.2)!** Todos os 8 Super-Clusters continentais multi-IATA foram migrados exclusivamente para a origem São Paulo (`SAO`), eliminando rotas com saída do Rio de Janeiro. No frontend, o componente `card_rota.js` foi blindado para calcular `menorPrecoEfetivo = Math.min(precoAtual, menorHist)`, assegurando que o menor preço comprovado (ex: Madri R$ 3.579 e Lima R$ 954) seja o número estelar gigante em destaque e sincronizado com o 1º colocado do ranking regional, com supressão de dias vizinhos mais caros e fallback defensivo `Último check: R$ ...`. Suíte 100% verde com **487/487 testes aprovados** no `./validate.sh fast`.
+- **Estado Geral**: 🟢 **Redesign do Modo Flexível e Duração de Viagem em Dias Entregues (v3.9.3)!** O modo flexível foi reformulado: campos de datas fixas (`Data de Ida` e `Data de Volta`) e seletor `±dias` são completamente ocultados quando o modo flexível está ativo, eliminando confusões e datas aleatórias/fantasmas no formulário. Adicionado bloco dedicado com input numérico de **Duração da Viagem no Destino (dias)** com pills de atalho direto (7, 10, 14, 21, 30 dias). No backend (`rotas_routes.js`) e no scanner (`flight_scanner.js`), `dias_estadia` agora é persistido compulsoriamente no SQLite e respeitado com prioridade máxima, sem mais resetar para 10 dias. Suíte 100% verde com **488/488 testes aprovados** no `./validate.sh fast`.
 - **Camadas Entregues & Verificadas**:
-  - `src/services/bug_fare_hunter.js`: 8 Super-Clusters multi-IATA com `origem: 'SAO'`.
-  - `src/public/js/card_rota.js`: Cálculo de `menorPrecoEfetivo`, `precoDestaque` no ranking regional e callout de dias alternativos.
-  - `src/db.js`: Reconciliação retroativa no boot para Madri (R$ 3.579) e Lima (R$ 954).
-  - `src/public/sw.js`: Versão de cache atualizada para `radar-voos-v3.9.2`.
-  - `tests/card_rota.test.js`: Cobertura automatizada para ranking sincronizado e menor preço estelar.
+  - `src/public/index.html`: Novo design do bloco flexível Aero Dark com input de estadia e pills de atalho.
+  - `src/public/app.js`: Sincronização dinâmica de formulário, limpeza de datas fantasmas e salvamento de `dias_estadia`.
+  - `src/server/routes/rotas_routes.js`: Extração e persistência estrita de `dias_estadia` no POST e PUT.
+  - `src/services/flight_scanner.js`: Scanner prioriza `rota.dias_estadia` para janelas de ida e volta.
+  - `src/public/sw.js`: Bump para `radar-voos-v3.9.3`.
+  - `tests/routes.test.js`: Teste automatizado de persistência de `dias_estadia` (14 e 21 dias).
 - **Diretriz Prioritária**: Implementar a matriz de datas flexíveis (`search_dates`) e expor servidor MCP nativo do RadarVoos.
-- **Última Tarefa Concluída**: feat(cockpit): super-clusters SAO exclusivos e menor preco historico comprovado em destaque estelar.
+- **Última Tarefa Concluída**: feat(cockpit): redesign do modo flexivel com duracao em dias e eliminacao de datas aleatorias.
 
 ---
 
