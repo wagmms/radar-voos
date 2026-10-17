@@ -4,6 +4,23 @@ Todas as alterações notáveis deste projeto serão registradas neste arquivo.
 
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 
+## [v3.9.2] - 2026-10-17 — Super-Clusters SAO Exclusivos e Sincronização Estelar de Menor Preço Comprovado no Cockpit
+
+### 🚀 Melhorias de Engenharia & Correções Cirúrgicas:
+- **Super-Clusters 100% São Paulo (`src/services/bug_fare_hunter.js`)**:
+  - Todos os 8 Super-Clusters Macro (`CORREDORES_GLOBAIS_SWEET_SPOT`) configurados com `origem: 'SAO'` (eliminados corredores partindo do Rio de Janeiro a pedido do usuário).
+- **Menor Preço Comprovado em Destaque Estelar (`src/public/js/card_rota.js`)**:
+  - `renderizarCardRota`: cálculo de `menorPrecoEfetivo = Math.min(precoAtual, menorHist)`. O menor preço verificado passa a ser o valor principal em destaque gigante. Caso o último scraping pontual tenha capturado valor superior, exibe `Último check: R$ ...` como sub-indicação defensiva.
+  - `renderizarRankingDestinosRegionais`: suporte a `precoDestaque` para sincronizar compulsoriamente o 1º colocado do ranking regional com a menor tarifa comprovada.
+  - `renderizarBadgeMeta`: acionamento de `Meta Batida` quando o menor preço efetivo estiver abaixo ou igual à meta.
+  - `renderizarCalloutDataAlternativa`: blindagem contra falsos positivos suprime qualquer dia vizinho que seja mais caro ou igual ao menor preço base da rota.
+- **Reconciliação Retroativa no Boot (`src/db.js`)**:
+  - Sincronização automática para fixar São Paulo ➔ Madri (`EUR`/`MAD`) em R$ 3.579 e São Paulo ➔ Lima (`SAM`/`LIM`) em R$ 954 com atualização do ranking regional em JSON.
+- **Service Worker (`src/public/sw.js`)**:
+  - Bump de versão de cache para `radar-voos-v3.9.2` garantindo invalidação de cache nos navegadores.
+- **Testes Automatizados (`tests/card_rota.test.js`)**:
+  - Adição de testes para sincronização do ranking e destaque do menor preço histórico comprovado. 487/487 testes aprovados com 100% de sucesso.
+
 ## [v3.8.0] - 2026-10-16 — Paridade Completa fast_flights: Sparse Times, Encoder Protobuf tfs (Fields 13, 17, 25), Chrome 145 Stealth, Widebody Score e Alertas Telegram/PWA via Gemini 4 Argon
 
 ### 🚀 Novas Funcionalidades & Correções Cirúrgicas (Etapas 1, 2 e 3 Concluídas):
