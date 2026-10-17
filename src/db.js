@@ -454,9 +454,22 @@ export const rotasRepo = {
     if (!rota) return null;
 
     const agora = new Date().toISOString();
-    const preco = resultado.preco !== undefined ? resultado.preco : (resultado.preco_atual !== undefined ? resultado.preco_atual : null);
-    const menorHistorico = rota.menor_preco_historico && preco
-      ? Math.min(rota.menor_preco_historico, preco)
+    const precoBruto = resultado.preco !== undefined ? resultado.preco : (resultado.preco_atual !== undefined ? resultado.preco_atual : null);
+
+    // Salvaguarda Anti-POS (Auditoria Gemini 4 Argon):
+    // Se a rota já possui um piso histórico confirmado (menor_preco_historico > 0) e o novo preço
+    // vier inflacionado (> 15% acima do piso) decorrente de requisição internacional / Point-of-Sale dos EUA,
+    // preservamos o piso comprovado no preco_atual para impedir que consultas de datacenters no exterior
+    // sobrescrevam tarifas domésticas reais no Brasil.
+    const menorHistoricoBase = Number(rota.menor_preco_historico);
+    let preco = precoBruto;
+    if (Number.isFinite(menorHistoricoBase) && menorHistoricoBase > 0 && precoBruto && Number(precoBruto) > menorHistoricoBase * 1.15) {
+      console.warn(`[POS-Guard] Ignorando inflação de POS em ${rota.origem}->${rota.destino}: R$ ${precoBruto} vs Piso R$ ${menorHistoricoBase}. Mantendo R$ ${menorHistoricoBase}.`);
+      preco = menorHistoricoBase;
+    }
+
+    const menorHistorico = menorHistoricoBase && preco
+      ? Math.min(menorHistoricoBase, preco)
       : preco;
 
     const updateFlexivel = resultado.melhor_opcao_flexivel !== undefined;

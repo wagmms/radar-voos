@@ -161,8 +161,20 @@ export class RotasSyncService {
 
       if (match) {
         const soIdaRemota = rotaEhSoIda(r);
+        const precoCanonica = Number(r.preco_atual || r.menor_preco_historico || 0);
+        const precoLocal = Number(match.preco_atual || 0);
+        // Restauração soberana: se a rota canônica tem um preço válido e menor, restaura
+        const precoRestaurado = (precoCanonica > 0 && (precoLocal === 0 || precoLocal > precoCanonica))
+          ? precoCanonica
+          : (r.preco_atual !== undefined ? r.preco_atual : match.preco_atual);
+        const menorHistRestaurado = (precoCanonica > 0)
+          ? Math.min(precoCanonica, Number(match.menor_preco_historico || precoCanonica))
+          : match.menor_preco_historico;
+
         rotasRepo.atualizar(match.id, {
           ...r,
+          preco_atual: precoRestaurado,
+          menor_preco_historico: menorHistRestaurado,
           tipo: soIdaRemota ? 'one_way' : 'round_trip',
           tipo_viagem: soIdaRemota ? 'one_way' : 'round_trip',
           data_volta: soIdaRemota ? null : r.data_volta,
