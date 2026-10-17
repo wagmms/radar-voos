@@ -41,6 +41,46 @@ export function calcularMilhasRota() {
   return null;
 }
 
+/**
+ * Executor concorrente com limite defensivo e espaçamento escalonado (stagger).
+ * Otimiza o tempo de varredura multi-hub e datas flexíveis sem gerar picos na rede.
+ *
+ * @template T, R
+ * @param {T[]} itens
+ * @param {(item: T, index: number) => Promise<R>} workerFn
+ * @param {Object} [opcoes]
+ * @param {number} [opcoes.limite=2] - Máximo de execuções simultâneas
+ * @param {number} [opcoes.staggerMs=300] - Intervalo entre o disparo de novos workers
+ * @returns {Promise<R[]>}
+ */
+export async function executarComConcorrenciaLimitada(itens, workerFn, { limite = 2, staggerMs = 300 } = {}) {
+  if (!Array.isArray(itens) || itens.length === 0) return [];
+  const resultados = new Array(itens.length);
+  const fila = itens.map((item, index) => ({ item, index }));
+
+  const executarWorker = async () => {
+    while (fila.length > 0) {
+      const tarefa = fila.shift();
+      try {
+        resultados[tarefa.index] = await workerFn(tarefa.item, tarefa.index);
+      } catch (err) {
+        resultados[tarefa.index] = null;
+      }
+    }
+  };
+
+  const totalWorkers = Math.min(limite, itens.length);
+  const workers = [];
+  for (let w = 0; w < totalWorkers; w++) {
+    if (w > 0 && staggerMs > 0) {
+      await new Promise(r => setTimeout(r, staggerMs));
+    }
+    workers.push(executarWorker());
+  }
+
+  await Promise.all(workers);
+  return resultados;
+}
 
 export class FlightScanner {
   /**
@@ -121,10 +161,10 @@ export class FlightScanner {
       let destinoVencedorIata = null;
       let destinoVencedorNome = null;
 
-      // 2. Modo Exploração Multi-Hub por Região/Continente
+      // 2. Modo Exploração Multi-Hub por Região/Continente (Concorrência N=2 com Stagger)
       if (ehRegional) {
         let menorOfertaRegional = null;
-        for (const hubIata of hubsDestino) {
+        const respostasHubs = await executarComConcorrenciaLimitada(hubsDestino, async (hubIata) => {
           try {
             const resHub = await FlightScanner.buscarOfertas(
               origemBusca,
@@ -137,33 +177,41 @@ export class FlightScanner {
               moedaEfetiva,
               filtrosAvancados
             );
-            if (resHub.ok && resHub.encontrouVoos && resHub.oferta && resHub.oferta.preco > 0) {
-              const nomeCidade = NOMES_CIDADES_IATA[hubIata] || resHub.oferta.destinoReal || hubIata;
-              const linkHub = (dataIdaEfetiva && hubIata)
-                ? (gerarLinkGoogleFlightsCheapest(origemBusca, hubIata, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
-                   || gerarLinkGoogleFlights(origemBusca, hubIata, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
-                : resHub.oferta.link;
+            return { hubIata, resHub };
+          } catch (_) {
+            return null;
+          }
+        }, { limite: 2, staggerMs: 300 });
 
-              const item = {
-                destinoIata: hubIata,
+        for (const itemHub of respostasHubs) {
+          if (!itemHub?.resHub) continue;
+          const { hubIata, resHub } = itemHub;
+          if (resHub.ok && resHub.encontrouVoos && resHub.oferta && resHub.oferta.preco > 0) {
+            const nomeCidade = NOMES_CIDADES_IATA[hubIata] || resHub.oferta.destinoReal || hubIata;
+            const linkHub = (dataIdaEfetiva && hubIata)
+              ? (gerarLinkGoogleFlightsCheapest(origemBusca, hubIata, dataIdaEfetiva, dataVoltaEfetiva, rota.duracao_max_horas, 1, 0, rota.cabine || 'economy', moedaEfetiva, filtrosAvancados)
+                 || gerarLinkGoogleFlights(origemBusca, hubIata, dataIdaEfetiva, dataVoltaEfetiva, moedaEfetiva))
+              : resHub.oferta.link;
+
+            const item = {
+              destinoIata: hubIata,
+              nomeCidade,
+              preco: resHub.oferta.preco,
+              cia: resHub.oferta.cia || null,
+              escalas: resHub.oferta.escalas ?? 0,
+              duracaoTexto: resHub.oferta.detalhes || `${resHub.oferta.duracaoHoras?.toFixed(1)}h`,
+              horarioPartida: resHub.oferta.horarioPartida || null,
+              linkGoogleFlights: linkHub
+            };
+            rankingDestinosRegionais.push(item);
+            if (!menorOfertaRegional || resHub.oferta.preco < menorOfertaRegional.oferta.preco) {
+              menorOfertaRegional = {
+                hubIata,
                 nomeCidade,
-                preco: resHub.oferta.preco,
-                cia: resHub.oferta.cia || null,
-                escalas: resHub.oferta.escalas ?? 0,
-                duracaoTexto: resHub.oferta.detalhes || `${resHub.oferta.duracaoHoras?.toFixed(1)}h`,
-                horarioPartida: resHub.oferta.horarioPartida || null,
-                linkGoogleFlights: linkHub
+                oferta: resHub.oferta
               };
-              rankingDestinosRegionais.push(item);
-              if (!menorOfertaRegional || resHub.oferta.preco < menorOfertaRegional.oferta.preco) {
-                menorOfertaRegional = {
-                  hubIata,
-                  nomeCidade,
-                  oferta: resHub.oferta
-                };
-              }
             }
-          } catch (_) {}
+          }
         }
 
         if (rankingDestinosRegionais.length === 0) {
@@ -197,8 +245,7 @@ export class FlightScanner {
           soIda: ehSoIda
         });
 
-        const resultadosAmostras = [];
-        for (const j of janelas) {
+        const respostasJanelas = await executarComConcorrenciaLimitada(janelas, async (j) => {
           try {
             const res = await FlightScanner.buscarOfertas(
               rota.codigo_origem,
@@ -212,13 +259,16 @@ export class FlightScanner {
               filtrosAvancados
             );
             if (res.ok && res.encontrouVoos && res.oferta && res.oferta.preco > 0) {
-              resultadosAmostras.push({
+              return {
                 ...j,
                 oferta: res.oferta
-              });
+              };
             }
           } catch (_) {}
-        }
+          return null;
+        }, { limite: 2, staggerMs: 300 });
+
+        const resultadosAmostras = respostasJanelas.filter(Boolean);
 
         if (resultadosAmostras.length === 0) {
           const clima = await climaPromise.catch(() => ({ ok: false, resumo: 'Clima indisponível' }));
@@ -317,9 +367,9 @@ export class FlightScanner {
             });
           }
 
-          // Varre os offsets vizinhos
-          for (const par of paresJanela) {
-            if (par.offset === 0) continue;
+          // Varre os offsets vizinhos com concorrência controlada (N=2 com stagger de 250ms)
+          const vizinhosParaBuscar = paresJanela.filter(p => p.offset !== 0);
+          const respostasVizinhos = await executarComConcorrenciaLimitada(vizinhosParaBuscar, async (par) => {
             try {
               const resAdj = await FlightScanner.buscarOfertas(
                 rota.codigo_origem,
@@ -343,13 +393,22 @@ export class FlightScanner {
                   escalas: resAdj.oferta.escalas ?? 0,
                   horarioPartida: resAdj.oferta.horarioPartida || null
                 };
-                calendarioPrecos.push(itemCalendario);
-                ofertasVizinhos.push({
-                  ...itemCalendario,
+                return {
+                  itemCalendario,
                   ofertaCompleta: resAdj.oferta
-                });
+                };
               }
             } catch (_) {}
+            return null;
+          }, { limite: 2, staggerMs: 250 });
+
+          for (const item of respostasVizinhos) {
+            if (!item) continue;
+            calendarioPrecos.push(item.itemCalendario);
+            ofertasVizinhos.push({
+              ...item.itemCalendario,
+              ofertaCompleta: item.ofertaCompleta
+            });
           }
 
           // Ordena por offset crescente

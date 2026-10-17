@@ -52,7 +52,7 @@ export const config = {
 
   radar: {
     gatilhoQuedaRelampagoPct: parseFloat(process.env.GATILHO_QUEDA_RELAMPAGO_PCT || '15'),
-    scanIntervalMinutes: parseInt(process.env.SCAN_INTERVAL_MINUTES || '60', 10)
+    scanIntervalMinutes: parseInt(process.env.SCAN_INTERVAL_MINUTES || '8', 10)
   },
 
   github: {

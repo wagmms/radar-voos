@@ -18,41 +18,45 @@ export const ARQUIVO_WORKING_BUFFER_PADRAO = path.resolve(__dirname, '../../data
  * Utiliza códigos IATA reais (incluindo listas multi-aeroporto para varreduras continentais) compatíveis com o Protobuf tfs.
  */
 export const CORREDORES_GLOBAIS_SWEET_SPOT = [
-  // Europa (Piso Econômica R$ 1.950 ida/volta)
-  { origem: 'SAO', destino: 'LIS,MAD,CDG,FCO,AMS', labelDestino: 'Europa (Geral)', regiao: 'EUROPA', diasEstadia: 12 },
+  // --- 8 SUPER-CLUSTERS MACRO (Varredura Continental de Alta Densidade) ---
+  // 1. Europa Principal (SAO -> LIS, MAD, CDG, FCO, AMS, FRA)
+  { origem: 'SAO', destino: 'LIS,MAD,CDG,FCO,AMS,FRA', labelDestino: 'Europa (Super-Cluster)', regiao: 'EUROPA', diasEstadia: 11 },
+  // 2. Estados Unidos (SAO -> MIA, MCO, JFK, LAX, ORD)
+  { origem: 'SAO', destino: 'MIA,MCO,JFK,LAX,ORD', labelDestino: 'EUA (Super-Cluster)', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
+  // 3. América do Sul (SAO -> BUE, SCL, LIM, MVD, BOG)
+  { origem: 'SAO', destino: 'BUE,SCL,LIM,MVD,BOG', labelDestino: 'América do Sul (Super-Cluster)', regiao: 'AMERICA_SUL', diasEstadia: 6 },
+  // 4. Caribe & América Central (SAO -> CUN, PUJ, PTY, SJO)
+  { origem: 'SAO', destino: 'CUN,PUJ,PTY,SJO', labelDestino: 'Caribe & Central (Super-Cluster)', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
+  // 5. Rio ➔ Europa (RIO -> LIS, MAD, CDG, FCO, OPO)
+  { origem: 'RIO', destino: 'LIS,MAD,CDG,FCO,OPO', labelDestino: 'Rio ➔ Europa (Super-Cluster)', regiao: 'EUROPA', diasEstadia: 11 },
+  // 6. Rio ➔ EUA (RIO -> MIA, MCO, JFK)
+  { origem: 'RIO', destino: 'MIA,MCO,JFK', labelDestino: 'Rio ➔ EUA (Super-Cluster)', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
+  // 7. Oriente Médio & Hubs Globais (SAO -> DXB, DOH, IST, CAI)
+  { origem: 'SAO', destino: 'DXB,DOH,IST,CAI', labelDestino: 'Oriente Médio (Super-Cluster)', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
+  // 8. Ásia & Oceania (SAO -> TYO, BKK, SIN, ICN)
+  { origem: 'SAO', destino: 'TYO,BKK,SIN,ICN', labelDestino: 'Ásia (Super-Cluster)', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
+
+  // --- CORREDORES CIRÚRGICOS ESPECÍFICOS & SWEET SPOTS HISTÓRICOS ---
   { origem: 'SAO', destino: 'LIS', labelDestino: 'Lisboa', regiao: 'EUROPA', diasEstadia: 10 },
   { origem: 'SAO', destino: 'MAD', labelDestino: 'Madrid', regiao: 'EUROPA', diasEstadia: 10 },
   { origem: 'SAO', destino: 'PAR', labelDestino: 'Paris', regiao: 'EUROPA', diasEstadia: 12 },
   { origem: 'SAO', destino: 'ROM', labelDestino: 'Roma', regiao: 'EUROPA', diasEstadia: 11 },
   { origem: 'RIO', destino: 'LIS', labelDestino: 'Lisboa', regiao: 'EUROPA', diasEstadia: 10 },
   { origem: 'RIO', destino: 'PAR', labelDestino: 'Paris', regiao: 'EUROPA', diasEstadia: 12 },
-
-  // América do Norte (Piso Econômica R$ 1.700 ida/volta)
-  { origem: 'SAO', destino: 'MIA,MCO,JFK,LAX', labelDestino: 'Estados Unidos (Geral)', regiao: 'AMERICA_NORTE', diasEstadia: 10 },
   { origem: 'SAO', destino: 'MIA', labelDestino: 'Miami', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
   { origem: 'SAO', destino: 'MCO', labelDestino: 'Orlando', regiao: 'AMERICA_NORTE', diasEstadia: 10 },
   { origem: 'SAO', destino: 'NYC', labelDestino: 'Nova York', regiao: 'AMERICA_NORTE', diasEstadia: 8 },
   { origem: 'RIO', destino: 'MIA', labelDestino: 'Miami', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
-
-  // Caribe & América Central (Piso Econômica R$ 1.300 ida/volta)
   { origem: 'SAO', destino: 'CUN', labelDestino: 'Cancún', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
   { origem: 'SAO', destino: 'PUJ', labelDestino: 'Punta Cana', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
   { origem: 'BSB', destino: 'CUN', labelDestino: 'Cancún', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
-
-  // América do Sul (Piso Econômica R$ 850 ida/volta)
-  { origem: 'SAO', destino: 'BUE,SCL,LIM,MVD', labelDestino: 'América do Sul (Geral)', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   { origem: 'SAO', destino: 'BUE', labelDestino: 'Buenos Aires', regiao: 'AMERICA_SUL', diasEstadia: 5 },
   { origem: 'SAO', destino: 'SCL', labelDestino: 'Santiago', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   { origem: 'SAO', destino: 'MVD', labelDestino: 'Montevidéu', regiao: 'AMERICA_SUL', diasEstadia: 4 },
   { origem: 'RIO', destino: 'BUE', labelDestino: 'Buenos Aires', regiao: 'AMERICA_SUL', diasEstadia: 5 },
-
-  // Ásia & Oriente Médio (Pisos R$ 2.800 a R$ 3.000)
-  { origem: 'SAO', destino: 'TYO,BKK,SIN,DXB', labelDestino: 'Ásia (Geral)', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
   { origem: 'SAO', destino: 'DXB', labelDestino: 'Dubai', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   { origem: 'SAO', destino: 'DOH', labelDestino: 'Doha', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   { origem: 'SAO', destino: 'TYO', labelDestino: 'Tóquio', regiao: 'ASIA_OCEANIA', diasEstadia: 15 },
-
-  // Doméstico Nacional (Piso Econômica R$ 250 ida/volta)
   { origem: 'SAO', destino: 'SSA', labelDestino: 'Salvador', regiao: 'DOMESTICO', diasEstadia: 5 },
   { origem: 'SAO', destino: 'REC', labelDestino: 'Recife', regiao: 'DOMESTICO', diasEstadia: 6 },
   { origem: 'SAO', destino: 'FOR', labelDestino: 'Fortaleza', regiao: 'DOMESTICO', diasEstadia: 6 },
