@@ -1,19 +1,19 @@
-# 🚀 Progresso do Projeto: Radar de Voos (v3.9.0)
+# 🚀 Progresso do Projeto: Radar de Voos (v3.9.2)
 
 > 📁 Histórico completo arquivado em [CHANGELOG.md](CHANGELOG.md)
 
 ---
 
 ## 📌 Status Atual
-- **Estado Geral**: 🟢 **Arquitetura de Detecção Ultrarrápida Entregue e Validada em Produção (v3.9.0)!** Implementado o agendador multi-tier com 3 pistas desacopladas (Feeds RSS a cada 3 min, Scanner LRU em micro-lotes a cada 8 min e Hunter de corredores a cada 15 min), 8 Super-Clusters continentais multi-IATA cobrindo mais de 35 aeroportos mundiais com rotação de 30 min (queda drástica de 27h para 30 min) e executor com concorrência controlada $N=2$ e stagger defensivo (300ms) reduzindo o tempo de resposta em rotas flexíveis em ~45%. Suíte 100% verde com **485/485 testes aprovados** no `./validate.sh fast`. Deploy ativo no Render e notificação confirmada no Telegram IA HUB.
+- **Estado Geral**: 🟢 **Super-Clusters SAO e Destaque Estelar do Menor Preço Entregues e Validados (v3.9.2)!** Todos os 8 Super-Clusters continentais multi-IATA foram migrados exclusivamente para a origem São Paulo (`SAO`), eliminando rotas com saída do Rio de Janeiro. No frontend, o componente `card_rota.js` foi blindado para calcular `menorPrecoEfetivo = Math.min(precoAtual, menorHist)`, assegurando que o menor preço comprovado (ex: Madri R$ 3.579 e Lima R$ 954) seja o número estelar gigante em destaque e sincronizado com o 1º colocado do ranking regional, com supressão de dias vizinhos mais caros e fallback defensivo `Último check: R$ ...`. Suíte 100% verde com **487/487 testes aprovados** no `./validate.sh fast`.
 - **Camadas Entregues & Verificadas**:
-  - `src/services/scheduler.js`: Agendador com 3 timers independentes e flags de concorrência (`executandoFeeds`, `executandoHunter`, `executandoScanner`), eliminando filas bloqueantes.
-  - `src/config.js` & `.env`: `SCAN_INTERVAL_MINUTES` calibrado para 8 min com suporte a `FEEDS_INTERVAL_MINUTES` (3 min) e `HUNTER_INTERVAL_MINUTES` (15 min).
-  - `src/services/bug_fare_hunter.js`: 8 Super-Clusters Macro cobrindo Europa, EUA, América do Sul, Caribe, Ásia e Oriente Médio.
-  - `src/services/flight_scanner.js`: Função utilitária `executarComConcorrenciaLimitada` ($N=2$ com stagger) integrada nas buscas de `hubsDestino`, `janelas` (`sem_data`) e `paresJanela` (`diasFlex`).
-  - `tests/scheduler_performance.test.js`: 5 testes automatizados cobrindo paralelismo, tolerância a falhas e gerenciamento de timers.
+  - `src/services/bug_fare_hunter.js`: 8 Super-Clusters multi-IATA com `origem: 'SAO'`.
+  - `src/public/js/card_rota.js`: Cálculo de `menorPrecoEfetivo`, `precoDestaque` no ranking regional e callout de dias alternativos.
+  - `src/db.js`: Reconciliação retroativa no boot para Madri (R$ 3.579) e Lima (R$ 954).
+  - `src/public/sw.js`: Versão de cache atualizada para `radar-voos-v3.9.2`.
+  - `tests/card_rota.test.js`: Cobertura automatizada para ranking sincronizado e menor preço estelar.
 - **Diretriz Prioritária**: Implementar a matriz de datas flexíveis (`search_dates`) e expor servidor MCP nativo do RadarVoos.
-- **Última Tarefa Concluída**: feat(speed): arquitetura multi-tier, super-clusters multi-iata e concorrência N=2 para detecção ultrarrápida.
+- **Última Tarefa Concluída**: feat(cockpit): super-clusters SAO exclusivos e menor preco historico comprovado em destaque estelar.
 
 ---
 

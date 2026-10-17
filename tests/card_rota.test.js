@@ -507,6 +507,39 @@ describe('Cockpit PWA: Módulo Card de Rota (card_rota.js)', () => {
       assert.ok(cardHtml.includes('data-testid="ranking-destinos-regionais"'), 'Card deve renderizar ranking de destinos');
       assert.ok(cardHtml.includes('Lisboa (LIS)'));
     });
+
+    it('deve sincronizar o preço do vencedor com precoDestaque se precoDestaque for menor', () => {
+      const ranking = [
+        { destinoIata: 'MAD', nomeCidade: 'Madri', preco: 3600, linkGoogleFlights: 'https://flights.google.com/mad' },
+        { destinoIata: 'LIS', nomeCidade: 'Lisboa', preco: 3800, linkGoogleFlights: 'https://flights.google.com/lis' }
+      ];
+
+      const html = renderizarRankingDestinosRegionais(ranking, 3579);
+      assert.ok(html.includes('Madri (MAD)'), 'Deve conter vencedor Madri');
+      assert.ok(html.includes('R$ 3.579'), 'Preço do vencedor deve estar alinhado com precoDestaque');
+      assert.ok(!html.includes('R$ 3.600'), 'Não deve exibir o valor inflacionado de R$ 3.600 no ranking');
+    });
+
+    it('renderizarCardRota: deve destacar menor preço comprovado quando preco_atual for mais alto', () => {
+      const rotaMadri = {
+        id: 77,
+        origem: 'São Paulo',
+        destino: 'Europa (Madri)',
+        preco_atual: 3600,
+        menor_preco_historico: 3579,
+        ranking_destinos_regionais: [
+          { destinoIata: 'MAD', nomeCidade: 'Madri', preco: 3600 }
+        ]
+      };
+
+      const html = renderizarCardRota(rotaMadri);
+      // Preço em destaque principal deve ser 3.579
+      assert.ok(html.includes('<span class="preco-valor">R$ 3.579</span>'), 'Valor principal em destaque estelar deve ser R$ 3.579');
+      // Sub-indicação informativa deve registrar o último check de 3.600
+      assert.ok(html.includes('Último check: R$ 3.600'), 'Deve exibir badge com o último check');
+      // O ranking regional deve estar alinhado a 3.579
+      assert.ok(html.includes('por <strong>R$ 3.579</strong>'), 'Ranking regional deve exibir R$ 3.579');
+    });
   });
 
   describe('Correções de Produção: Subtítulo Ida e Volta e Prevenção de () vazio', () => {

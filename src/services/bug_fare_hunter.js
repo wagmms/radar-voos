@@ -18,19 +18,19 @@ export const ARQUIVO_WORKING_BUFFER_PADRAO = path.resolve(__dirname, '../../data
  * Utiliza códigos IATA reais (incluindo listas multi-aeroporto para varreduras continentais) compatíveis com o Protobuf tfs.
  */
 export const CORREDORES_GLOBAIS_SWEET_SPOT = [
-  // --- 8 SUPER-CLUSTERS MACRO (Varredura Continental de Alta Densidade) ---
+  // --- 8 SUPER-CLUSTERS MACRO (Varredura Continental de Alta Densidade - Origem SAO) ---
   // 1. Europa Principal (SAO -> LIS, MAD, CDG, FCO, AMS, FRA)
   { origem: 'SAO', destino: 'LIS,MAD,CDG,FCO,AMS,FRA', labelDestino: 'Europa (Super-Cluster)', regiao: 'EUROPA', diasEstadia: 11 },
-  // 2. Estados Unidos (SAO -> MIA, MCO, JFK, LAX, ORD)
+  // 2. Estados Unidos Principal (SAO -> MIA, MCO, JFK, LAX, ORD)
   { origem: 'SAO', destino: 'MIA,MCO,JFK,LAX,ORD', labelDestino: 'EUA (Super-Cluster)', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
   // 3. América do Sul (SAO -> BUE, SCL, LIM, MVD, BOG)
   { origem: 'SAO', destino: 'BUE,SCL,LIM,MVD,BOG', labelDestino: 'América do Sul (Super-Cluster)', regiao: 'AMERICA_SUL', diasEstadia: 6 },
   // 4. Caribe & América Central (SAO -> CUN, PUJ, PTY, SJO)
   { origem: 'SAO', destino: 'CUN,PUJ,PTY,SJO', labelDestino: 'Caribe & Central (Super-Cluster)', regiao: 'CARIBE_AMERICA_CENTRAL', diasEstadia: 7 },
-  // 5. Rio ➔ Europa (RIO -> LIS, MAD, CDG, FCO, OPO)
-  { origem: 'RIO', destino: 'LIS,MAD,CDG,FCO,OPO', labelDestino: 'Rio ➔ Europa (Super-Cluster)', regiao: 'EUROPA', diasEstadia: 11 },
-  // 6. Rio ➔ EUA (RIO -> MIA, MCO, JFK)
-  { origem: 'RIO', destino: 'MIA,MCO,JFK', labelDestino: 'Rio ➔ EUA (Super-Cluster)', regiao: 'AMERICA_NORTE', diasEstadia: 9 },
+  // 5. Europa Ocidental & Reino Unido (SAO -> LHR, BCN, MXP, OPO, ZRH)
+  { origem: 'SAO', destino: 'LHR,BCN,MXP,OPO,ZRH', labelDestino: 'Europa II (Super-Cluster)', regiao: 'EUROPA', diasEstadia: 11 },
+  // 6. América do Norte & Costa Oeste/Canadá (SAO -> SFO, LAS, BOS, IAD, YYZ)
+  { origem: 'SAO', destino: 'SFO,LAS,BOS,IAD,YYZ', labelDestino: 'EUA & Canadá (Super-Cluster)', regiao: 'AMERICA_NORTE', diasEstadia: 10 },
   // 7. Oriente Médio & Hubs Globais (SAO -> DXB, DOH, IST, CAI)
   { origem: 'SAO', destino: 'DXB,DOH,IST,CAI', labelDestino: 'Oriente Médio (Super-Cluster)', regiao: 'ORIENTE_MEDIO', diasEstadia: 10 },
   // 8. Ásia & Oceania (SAO -> TYO, BKK, SIN, ICN)

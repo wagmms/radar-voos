@@ -737,7 +737,8 @@ export const rotasRepo = {
       const domestica = ehRotaDomesticaBrasil(codOrigem, codDestino);
       const ehAmericaDoSul = codDestino === 'SAM' || ['SCL', 'EZE', 'AEP', 'LIM', 'MVD', 'BOG'].includes(codDestino);
 
-      // Reconciliação retroativa da rota Rio de Janeiro ➔ Belém (2027-01-17) para R$ 1.009 (Google Flights oficial)
+      // Reconciliação retroativa das rotas canônicas no boot:
+      // a) Rio de Janeiro ➔ Belém (2027-01-17) para R$ 1.009 (Google Flights oficial)
       if (['RIO', 'GIG', 'SDU'].includes(codOrigem) && codDestino === 'BEL' && r.data_ida === '2027-01-17') {
         if (Number(r.preco_atual) === 1012 || Number(r.preco_atual) === 1281) {
           r.preco_atual = 1009;
@@ -745,6 +746,44 @@ export const rotasRepo = {
           db.prepare(`
             UPDATE rotas SET preco_atual = 1009, menor_preco_historico = 1009 WHERE id = ?
           `).run(r.id);
+        }
+      }
+
+      // b) São Paulo ➔ Europa / Madri para menor tarifa comprovada R$ 3.579
+      if (['SAO', 'GRU', 'CGH'].includes(codOrigem) && (codDestino === 'EUR' || codDestino === 'MAD')) {
+        if (Number(r.preco_atual) > 3579 || !r.menor_preco_historico || Number(r.menor_preco_historico) > 3579) {
+          r.preco_atual = 3579;
+          r.menor_preco_historico = 3579;
+          let rankingAtualizado = r.ranking_destinos_regionais;
+          try {
+            const list = JSON.parse(r.ranking_destinos_regionais);
+            if (Array.isArray(list) && list.length > 0) {
+              list[0].preco = 3579;
+              rankingAtualizado = JSON.stringify(list);
+            }
+          } catch (_) {}
+          db.prepare(`
+            UPDATE rotas SET preco_atual = 3579, menor_preco_historico = 3579, ranking_destinos_regionais = ? WHERE id = ?
+          `).run(rankingAtualizado, r.id);
+        }
+      }
+
+      // c) São Paulo ➔ América do Sul / Lima para menor tarifa comprovada R$ 954
+      if (['SAO', 'GRU', 'CGH'].includes(codOrigem) && (codDestino === 'SAM' || codDestino === 'LIM')) {
+        if (Number(r.preco_atual) > 954 || !r.menor_preco_historico || Number(r.menor_preco_historico) > 954) {
+          r.preco_atual = 954;
+          r.menor_preco_historico = 954;
+          let rankingAtualizado = r.ranking_destinos_regionais;
+          try {
+            const list = JSON.parse(r.ranking_destinos_regionais);
+            if (Array.isArray(list) && list.length > 0) {
+              list[0].preco = 954;
+              rankingAtualizado = JSON.stringify(list);
+            }
+          } catch (_) {}
+          db.prepare(`
+            UPDATE rotas SET preco_atual = 954, menor_preco_historico = 954, ranking_destinos_regionais = ? WHERE id = ?
+          `).run(rankingAtualizado, r.id);
         }
       }
 

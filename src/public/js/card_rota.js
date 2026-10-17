@@ -69,11 +69,14 @@ export function renderizarBadgeMeta(rota) {
 
   const precoAlvo = Number(rota.preco_alvo);
   const precoAtual = Number(rota.preco_atual);
+  const menorHist = Number(rota.menor_preco_historico);
+  const precosValidos = [precoAtual, menorHist].filter(p => Number.isFinite(p) && p > 0);
+  const menorPrecoEfetivo = precosValidos.length > 0 ? Math.min(...precosValidos) : precoAtual;
   const moedaCode = (rota.moeda || 'BRL').trim().toUpperCase();
   const simboloMoeda = moedaCode === 'USD' ? 'US$' : (moedaCode === 'EUR' ? '€' : 'R$');
 
-  if (Number.isFinite(precoAtual) && precoAtual > 0 && precoAtual <= precoAlvo) {
-    const economia = precoAlvo - precoAtual;
+  if (Number.isFinite(menorPrecoEfetivo) && menorPrecoEfetivo > 0 && menorPrecoEfetivo <= precoAlvo) {
+    const economia = precoAlvo - menorPrecoEfetivo;
     const econTexto = economia > 0 ? ` (Economia de ${simboloMoeda} ${formatarPreco(economia)})` : ' (No teto)';
     return `<span class="badge badge-meta badge-meta-batida" data-testid="badge-meta-batida">🎯 Meta Batida • ${simboloMoeda} ${formatarPreco(precoAlvo)}${escapeHtml(econTexto)}</span>`;
   }
@@ -281,15 +284,15 @@ export function renderizarCalloutDataAlternativa(melhorDataAlternativa, precoBas
     return '';
   }
 
-  const econReais = temPrecoBase
-    ? Math.round(baseNum - precoVizinho)
-    : Number(dadosAlt.economiaReais ?? dadosAlt.economia_reais);
+  const econReais = (Number.isFinite(Number(dadosAlt.economiaReais ?? dadosAlt.economia_reais)) && Number(dadosAlt.economiaReais ?? dadosAlt.economia_reais) > 0)
+    ? Number(dadosAlt.economiaReais ?? dadosAlt.economia_reais)
+    : (temPrecoBase ? Math.round(baseNum - precoVizinho) : 0);
 
   if (!Number.isFinite(econReais) || econReais <= 0) return '';
 
-  const econPct = temPrecoBase
-    ? Math.round((econReais / baseNum) * 100)
-    : Number(dadosAlt.economiaPercentual ?? dadosAlt.economia_percentual);
+  const econPct = (Number.isFinite(Number(dadosAlt.economiaPercentual ?? dadosAlt.economia_percentual)) && Number(dadosAlt.economiaPercentual ?? dadosAlt.economia_percentual) > 0)
+    ? Number(dadosAlt.economiaPercentual ?? dadosAlt.economia_percentual)
+    : (temPrecoBase ? Math.round((econReais / baseNum) * 100) : 0);
 
   const offset = Number(dadosAlt.offset) || 0;
   const offsetStr = offset > 0 ? `+${offset}d` : `${offset}d`;
@@ -419,17 +422,25 @@ export function renderizarGraficoCalendarioSvg(calendarioPrecos, precoBase = nul
  * @param {Array<{ destinoIata: string, nomeCidade: string, preco: number, cia?: string, linkGoogleFlights?: string }>} rankingDestinosRegionais
  * @returns {string} Fragmento HTML seguro
  */
-export function renderizarRankingDestinosRegionais(rankingDestinosRegionais) {
+export function renderizarRankingDestinosRegionais(rankingDestinosRegionais, precoDestaque = null) {
   if (!Array.isArray(rankingDestinosRegionais) || rankingDestinosRegionais.length === 0) {
     return '';
   }
 
-  const vencedor = rankingDestinosRegionais[0];
+  const lista = rankingDestinosRegionais.map(item => ({ ...item }));
+  const destaqueNum = Number(precoDestaque);
+  if (Number.isFinite(destaqueNum) && destaqueNum > 0 && lista.length > 0) {
+    if (Number(lista[0].preco) > destaqueNum) {
+      lista[0].preco = destaqueNum;
+    }
+  }
+
+  const vencedor = lista[0];
   const nomeVencedor = escapeHtml(sanitizarTextoTecnico(vencedor.nomeCidade || vencedor.destinoIata || 'Destino'));
   const iataVencedor = escapeHtml(vencedor.destinoIata || '');
   const precoVencedor = formatarPreco(vencedor.preco);
 
-  const topDestinos = rankingDestinosRegionais.slice(0, 5);
+  const topDestinos = lista.slice(0, 5);
   const itensHtml = topDestinos.map((item, index) => {
     const posicao = index + 1;
     const nome = escapeHtml(sanitizarTextoTecnico(item.nomeCidade || item.destinoIata || ''));
@@ -509,13 +520,24 @@ export function renderizarCardRota(rota) {
   const destino = rota.destino_real || rota.destino || 'Destino';
   const precoAtual = Number(rota.preco_atual);
   const precoAlvo = Number(rota.preco_alvo);
-  const bateuMeta = Number.isFinite(precoAtual) && precoAtual > 0 && Number.isFinite(precoAlvo) && precoAlvo > 0 && precoAtual <= precoAlvo;
+  const menorHist = Number(rota.menor_preco_historico);
+
+  const precosValidos = [precoAtual, menorHist].filter(p => Number.isFinite(p) && p > 0);
+  const menorPrecoEfetivo = precosValidos.length > 0 ? Math.min(...precosValidos) : 0;
+  const precoDestaque = menorPrecoEfetivo > 0 ? menorPrecoEfetivo : precoAtual;
+
+  const bateuMeta = Number.isFinite(precoDestaque) && precoDestaque > 0 && Number.isFinite(precoAlvo) && precoAlvo > 0 && precoDestaque <= precoAlvo;
 
   const moedaCode = (rota.moeda || 'BRL').trim().toUpperCase();
   const simboloMoeda = moedaCode === 'USD' ? 'US$' : (moedaCode === 'EUR' ? '€' : 'R$');
-  const precoStr = Number.isFinite(precoAtual) && precoAtual > 0 ? `${simboloMoeda} ${formatarPreco(precoAtual)}` : 'Aguardando checagem';
-  const menorHist = Number(rota.menor_preco_historico);
-  const menorHistStr = Number.isFinite(menorHist) && menorHist > 0 ? `Menor: ${simboloMoeda} ${formatarPreco(menorHist)}` : '';
+  const precoStr = Number.isFinite(precoDestaque) && precoDestaque > 0 ? `${simboloMoeda} ${formatarPreco(precoDestaque)}` : 'Aguardando checagem';
+
+  let menorHistStr = '';
+  if (Number.isFinite(precoAtual) && precoAtual > precoDestaque) {
+    menorHistStr = `Menor: ${simboloMoeda} ${formatarPreco(precoDestaque)} (Último check: ${simboloMoeda} ${formatarPreco(precoAtual)})`;
+  } else if (Number.isFinite(menorHist) && menorHist > 0) {
+    menorHistStr = `Menor: ${simboloMoeda} ${formatarPreco(menorHist)}`;
+  }
 
   let termometro = sanitizarTextoTecnico(rota.termometro || '⚪ Sem dados recentes');
   if (!termometro) {
@@ -535,9 +557,9 @@ export function renderizarCardRota(rota) {
   const badgesFiltros = renderizarBadgesFiltros(rota);
   const linhaHorarios = renderizarLinhaHorarios(rota);
   const blocoTradeOff = renderizarTradeOff(rota);
-  const calloutDataAlt = renderizarCalloutDataAlternativa(melhorDataAlt, precoAtual);
-  const blocoRankingRegional = renderizarRankingDestinosRegionais(rankingRegionais);
-  const graficoCalendario = renderizarGraficoCalendarioSvg(calendario, precoAtual);
+  const calloutDataAlt = renderizarCalloutDataAlternativa(melhorDataAlt, precoDestaque);
+  const blocoRankingRegional = renderizarRankingDestinosRegionais(rankingRegionais, precoDestaque);
+  const graficoCalendario = renderizarGraficoCalendarioSvg(calendario, precoDestaque);
 
   const soIdaVisual = ehRotaSoIdaVisual(rota);
   const diasEstadiaVisual = Number(rota.dias_estadia) || 10;
