@@ -15,6 +15,7 @@ import {
   ehRotaDomesticaBrasil,
   ehAeroportoOuRegiaoBrasil
 } from './domain/rotas.js';
+import { auditarTarifaBrasil, enforceGoogleFlightsBrUrl } from './domain/pos_guard.js';
 
 let dbInstance = null;
 
@@ -456,19 +457,22 @@ export const rotasRepo = {
     const agora = new Date().toISOString();
     const precoBruto = resultado.preco !== undefined ? resultado.preco : (resultado.preco_atual !== undefined ? resultado.preco_atual : null);
 
-    // Salvaguarda Anti-POS (Auditoria Gemini 4 Argon):
-    // Se a rota já possui um piso histórico confirmado (menor_preco_historico > 0) e o novo preço
-    // vier inflacionado (> 15% acima do piso) decorrente de requisição internacional / Point-of-Sale dos EUA,
-    // preservamos o piso comprovado no preco_atual para impedir que consultas de datacenters no exterior
-    // sobrescrevam tarifas domésticas reais no Brasil.
-    const menorHistoricoBase = Number(rota.menor_preco_historico);
-    let preco = precoBruto;
-    if (Number.isFinite(menorHistoricoBase) && menorHistoricoBase > 0 && precoBruto && Number(precoBruto) > menorHistoricoBase * 1.15) {
-      console.warn(`[POS-Guard] Ignorando inflação de POS em ${rota.origem}->${rota.destino}: R$ ${precoBruto} vs Piso R$ ${menorHistoricoBase}. Mantendo R$ ${menorHistoricoBase}.`);
-      preco = menorHistoricoBase;
+    // Auditoria Oficial POS Brasil (Auditoria Gemini 4 Argon):
+    // Audita a tarifa e rejeita contaminação de Point-of-Sale internacional (US vs BR)
+    const auditoria = auditarTarifaBrasil({
+      preco: precoBruto,
+      moeda: resultado.moeda || 'BRL',
+      detalhes: resultado.detalhes_voo || '',
+      provedor: resultado.provedor || ''
+    }, rota);
+
+    let preco = auditoria.valido ? auditoria.precoFinal : (rota.preco_atual || precoBruto);
+    if (auditoria.ajustado && auditoria.motivo) {
+      console.warn(`[POS-Guard] ${rota.origem}->${rota.destino}: ${auditoria.motivo}`);
     }
 
-    const menorHistorico = menorHistoricoBase && preco
+    const menorHistoricoBase = Number(rota.menor_preco_historico);
+    const menorHistorico = Number.isFinite(menorHistoricoBase) && menorHistoricoBase > 0 && preco
       ? Math.min(menorHistoricoBase, preco)
       : preco;
 
@@ -481,8 +485,9 @@ export const rotasRepo = {
 
     const dataIdaNova = resultado.data_ida || rota.data_ida;
     const dataVoltaNova = resultado.data_volta !== undefined ? resultado.data_volta : rota.data_volta;
-    const linkNovo = resultado.link_google_flights || rota.link_google_flights;
-    const moedaNova = resultado.moeda ? String(resultado.moeda).trim().toUpperCase() : null;
+    const linkBase = resultado.link_google_flights || rota.link_google_flights;
+    const linkNovo = enforceGoogleFlightsBrUrl(linkBase);
+    const moedaNova = 'BRL';
 
     const serializarJsonSeguro = (val, atual) => {
       if (val === undefined) return atual;

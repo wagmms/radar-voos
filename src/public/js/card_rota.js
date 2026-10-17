@@ -126,6 +126,13 @@ export function renderizarBadgeJanelaFlex(diasFlex) {
 }
 
 /**
+ * Renderiza o selo oficial de Point of Sale Brasil (BRL)
+ */
+export function renderizarBadgePosBrasil() {
+  return '<span class="badge badge-pos-br" data-testid="badge-pos-br" title="Tarifa oficial brasileira em Reais (BRL) • Point of Sale Brasil">🇧🇷 Tarifa Brasil</span>';
+}
+
+/**
  * Renderiza badges de filtros ativos fast-flights (paradas, bagagem)
  */
 export function renderizarBadgesFiltros(rota) {
@@ -476,6 +483,7 @@ export function renderizarCardRota(rota) {
   const diasFlex = rota.dias_flexiveis ?? rota.diasFlexiveis ?? 0;
   const rankingRegionais = rota.ranking_destinos_regionais || rota.rankingDestinosRegionais;
 
+  const badgePosBr = renderizarBadgePosBrasil();
   const badgeMeta = renderizarBadgeMeta(rota);
   const badgeTermometro = renderizarBadgeTermometro(priceInsights);
   const badgeJanelaFlex = renderizarBadgeJanelaFlex(diasFlex);
@@ -514,7 +522,11 @@ export function renderizarCardRota(rota) {
     }
   }
 
-  const linkGoogle = rota.link_google_flights || '#';
+  let linkGoogle = rota.link_google_flights || '#';
+  if (linkGoogle && linkGoogle !== '#' && !linkGoogle.includes('gl=BR')) {
+    linkGoogle += (linkGoogle.includes('?') ? '&' : '?') + 'hl=pt-BR&gl=BR&curr=BRL';
+  }
+
   const silenciada = rota.esta_silenciada ? '<span class="badge badge-silenciada">🔕 Silenciada</span>' : '';
   const custoDestinoLimpo = sanitizarTextoTecnico(rota.custo_destino_texto);
 
@@ -527,6 +539,7 @@ export function renderizarCardRota(rota) {
         </div>
         <div class="rota-badges-top">
           ${silenciada}
+          ${badgePosBr}
           ${badgeMeta}
           ${badgeTermometro}
           ${badgeJanelaFlex}
